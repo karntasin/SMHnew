@@ -1,0 +1,98 @@
+﻿[
+    {
+        "Method":  "GET",
+        "Endpoint":  "/documents/templates",
+        "Description":  "List all templates (Index)",
+        "Status":  200,
+        "Result":  "PASS",
+        "Response":  "\u003c!DOCTYPE html\u003e\n\u003chtml class=\"h-full\" lang=\"en-US\" dir=\"ltr\"\u003e\n  \u003chead\u003e\n    \u003cmeta charset=\"utf-8\"\u003e\n   "
+    },
+    {
+        "Method":  "GET",
+        "Endpoint":  "/documents/templates?category=เธซเธเธฑเธเธชเธทเธญเธ เธฒเธขเธเธญเธ",
+        "Description":  "Filter templates by category",
+        "Status":  200,
+        "Result":  "PASS",
+        "Response":  "\u003c!DOCTYPE html\u003e\n\u003chtml class=\"h-full\" lang=\"en-US\" dir=\"ltr\"\u003e\n  \u003chead\u003e\n    \u003cmeta charset=\"utf-8\"\u003e\n   "
+    },
+    {
+        "Method":  "GET",
+        "Endpoint":  "/documents/templates?search=เธเธณเธชเธฑเนเธ",
+        "Description":  "Search templates",
+        "Status":  200,
+        "Result":  "PASS",
+        "Response":  "\u003c!DOCTYPE html\u003e\n\u003chtml class=\"h-full\" lang=\"en-US\" dir=\"ltr\"\u003e\n  \u003chead\u003e\n    \u003cmeta charset=\"utf-8\"\u003e\n   "
+    },
+    {
+        "Method":  "GET",
+        "Endpoint":  "/documents/templates/create",
+        "Description":  "Show create template form",
+        "Status":  200,
+        "Result":  "PASS",
+        "Response":  "\u003c!DOCTYPE html\u003e\n\u003chtml class=\"h-full\" lang=\"en-US\" dir=\"ltr\"\u003e\n  \u003chead\u003e\n    \u003cmeta charset=\"utf-8\"\u003e\n   "
+    },
+    {
+        "Method":  "GET",
+        "Endpoint":  "/documents/templates/1",
+        "Description":  "Show template details (ID: 1)",
+        "Status":  200,
+        "Result":  "PASS",
+        "Response":  "\u003c!DOCTYPE html\u003e\n\u003chtml class=\"h-full\" lang=\"en-US\" dir=\"ltr\"\u003e\n  \u003chead\u003e\n    \u003cmeta charset=\"utf-8\"\u003e\n   "
+    },
+    {
+        "Method":  "GET",
+        "Endpoint":  "/documents/templates/1/edit",
+        "Description":  "Show edit template form (ID: 1)",
+        "Status":  200,
+        "Result":  "PASS",
+        "Response":  "\u003c!DOCTYPE html\u003e\n\u003chtml class=\"h-full\" lang=\"en-US\" dir=\"ltr\"\u003e\n  \u003chead\u003e\n    \u003cmeta charset=\"utf-8\"\u003e\n   "
+    },
+    {
+        "Method":  "GET",
+        "Endpoint":  "/documents/drafts",
+        "Description":  "List all drafts (Index)",
+        "Status":  200,
+        "Result":  "PASS",
+        "Response":  "\u003c!DOCTYPE html\u003e\n\u003chtml class=\"h-full\" lang=\"en-US\" dir=\"ltr\"\u003e\n  \u003chead\u003e\n    \u003cmeta charset=\"utf-8\"\u003e\n   "
+    },
+    {
+        "Method":  "GET",
+        "Endpoint":  "/documents/drafts?status=draft",
+        "Description":  "Filter drafts by status=draft",
+        "Status":  200,
+        "Result":  "PASS",
+        "Response":  "\u003c!DOCTYPE html\u003e\n\u003chtml class=\"h-full\" lang=\"en-US\" dir=\"ltr\"\u003e\n  \u003chead\u003e\n    \u003cmeta charset=\"utf-8\"\u003e\n   "
+    },
+    {
+        "Method":  "GET",
+        "Endpoint":  "/documents/drafts?status=pending_approval",
+        "Description":  "Filter drafts by status=pending_approval",
+        "Status":  200,
+        "Result":  "PASS",
+        "Response":  "\u003c!DOCTYPE html\u003e\n\u003chtml class=\"h-full\" lang=\"en-US\" dir=\"ltr\"\u003e\n  \u003chead\u003e\n    \u003cmeta charset=\"utf-8\"\u003e\n   "
+    },
+    {
+        "Method":  "GET",
+        "Endpoint":  "/documents/drafts?search=test",
+        "Description":  "Search drafts",
+        "Status":  200,
+        "Result":  "PASS",
+        "Response":  "\u003c!DOCTYPE html\u003e\n\u003chtml class=\"h-full\" lang=\"en-US\" dir=\"ltr\"\u003e\n  \u003chead\u003e\n    \u003cmeta charset=\"utf-8\"\u003e\n   "
+    },
+    {
+        "Method":  "GET",
+        "Endpoint":  "/documents/drafts/create",
+        "Description":  "Show create draft form",
+        "Status":  200,
+        "Result":  "PASS",
+        "Response":  "\u003c!DOCTYPE html\u003e\n\u003chtml class=\"h-full\" lang=\"en-US\" dir=\"ltr\"\u003e\n  \u003chead\u003e\n    \u003cmeta charset=\"utf-8\"\u003e\n   "
+    },
+    {
+        "Method":  "GET",
+        "Endpoint":  "/documents/drafts/template/1",
+        "Description":  "Select template for new draft",
+        "Status":  200,
+        "Result":  "PASS",
+        "Response":  "\u003c!DOCTYPE html\u003e\n\u003chtml class=\"h-full\" lang=\"en-US\" dir=\"ltr\"\u003e\n  \u003chead\u003e\n    \u003cmeta charset=\"utf-8\"\u003e\n   "
+    }
+]

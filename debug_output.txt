@@ -1,0 +1,145 @@
+﻿=== DETAILED MENU BUILD TEST ===
+
+Menu: Dashboard (ID: 4)
+  Route: '/dashboard' | Has Route: YES
+  Children: 0 | Has Children: NO
+  Will Show: YES
+
+Menu: เธเธฅเธฑเธเน€เธญเธเธชเธฒเธฃเธเธธเธ“เธ เธฒเธ (ID: 1)
+  Route: '/quality-docs' | Has Route: YES
+  Children: 0 | Has Children: NO
+  Will Show: YES
+
+  Menu: เธเธญเธเธซเนเธญเธเธเธฃเธฐเธเธธเธก (ID: 3)
+    Route: '/administration/rooms' | Has Route: YES
+    Children: 0 | Has Children: NO
+    Will Show: YES
+
+    Menu: Dashboard (ID: 30)
+      Route: '/maintenance/dashboard' | Has Route: YES
+      Children: 0 | Has Children: NO
+      Will Show: YES
+
+    Menu: เธฃเธฒเธขเธเธฒเธฃเนเธเนเธเธเนเธญเธก (ID: 31)
+      Route: '/maintenance/requests' | Has Route: YES
+      Children: 0 | Has Children: NO
+      Will Show: YES
+
+    Menu: เนเธเนเธเธเนเธญเธกเนเธซเธกเน (ID: 32)
+      Route: '/maintenance/requests/create' | Has Route: YES
+      Children: 0 | Has Children: NO
+      Will Show: YES
+
+    Menu: เธเธฒเธเธเธญเธเธเธฑเธ (ID: 33)
+      Route: '/maintenance/requests/my' | Has Route: YES
+      Children: 0 | Has Children: NO
+      Will Show: YES
+
+    Menu: เธ•เธฑเนเธเธเนเธฒ (ID: 34)
+      Route: '/maintenance/settings' | Has Route: YES
+      Children: 0 | Has Children: NO
+      Will Show: YES
+
+  Menu: เธฃเธฐเธเธเนเธเนเธเธเนเธญเธก (ID: 29)
+    Route: '' | Has Route: NO
+    Children: 5 | Has Children: YES
+    Will Show: YES
+
+    Menu: Dashboard (ID: 36)
+      Route: '/vehicle/dashboard' | Has Route: YES
+      Children: 0 | Has Children: NO
+      Will Show: YES
+
+    Menu: เธฃเธฒเธขเธเธฒเธฃเธเธญเธเธฃเธ– (ID: 37)
+      Route: '/vehicle/bookings' | Has Route: YES
+      Children: 0 | Has Children: NO
+      Will Show: YES
+
+    Menu: เธเธญเธเธฃเธ–เนเธซเธกเน (ID: 38)
+      Route: '/vehicle/bookings/create' | Has Route: YES
+      Children: 0 | Has Children: NO
+      Will Show: YES
+
+    Menu: เธเธฒเธฃเธเธญเธเธเธญเธเธเธฑเธ (ID: 39)
+      Route: '/vehicle/bookings/my' | Has Route: YES
+      Children: 0 | Has Children: NO
+      Will Show: YES
+
+    Menu: เธเธฑเธ”เธเธฒเธฃเธฃเธ– (ID: 40)
+      Route: '/vehicle/vehicles' | Has Route: YES
+      Children: 0 | Has Children: NO
+      Will Show: YES
+
+    Menu: เธ•เธฑเนเธเธเนเธฒ (ID: 41)
+      Route: '/vehicle/settings' | Has Route: YES
+      Children: 0 | Has Children: NO
+      Will Show: YES
+
+  Menu: เธฃเธฐเธเธเธเธญเนเธเนเธฃเธ– (ID: 35)
+    Route: '' | Has Route: NO
+    Children: 6 | Has Children: YES
+    Will Show: YES
+
+    Menu: Dashboard (ID: 43)
+      Route: '/documents/dashboard' | Has Route: YES
+      Children: 0 | Has Children: NO
+      Will Show: YES
+
+    Menu: เธเธณเน€เธเนเธฒเธซเธเธฑเธเธชเธทเธญเธ เธฒเธขเธเธญเธ (ID: 49)
+      Route: '/documents/import' | Has Route: YES
+      Children: 0 | Has Children: NO
+      Will Show: YES
+
+    Menu: เธฅเธเธฃเธฑเธเธซเธเธฑเธเธชเธทเธญ (ID: 45)
+      Route: '/documents/receive' | Has Route: YES
+      Children: 0 | Has Children: NO
+      Will Show: YES
+
+    Menu: เธซเธเธฑเธเธชเธทเธญเธ—เธฑเนเธเธซเธกเธ” (ID: 44)
+      Route: '/documents' | Has Route: YES
+      Children: 0 | Has Children: NO
+      Will Show: YES
+
+    Menu: เธซเธเธฑเธเธชเธทเธญเธฃเธญเธญเธเธธเธกเธฑเธ•เธด (ID: 46)
+      Route: '/documents?scope=approval' | Has Route: YES
+      Children: 0 | Has Children: NO
+      Will Show: YES
+
+    Menu: เธ•เธฑเนเธเธเนเธฒ (ID: 47)
+      Route: '/documents/settings' | Has Route: YES
+      Children: 0 | Has Children: NO
+      Will Show: YES
+
+  Menu: เธฃเธฑเธเธชเนเธเธซเธเธฑเธเธชเธทเธญ (ID: 48)
+    Route: '#' | Has Route: YES
+    Children: 6 | Has Children: YES
+    Will Show: YES
+
+  Menu: เธฃเนเธฒเธเธซเธเธฑเธเธชเธทเธญ (ID: 50)
+    Route: '/documents/drafts' | Has Route: YES
+    Children: 0 | Has Children: NO
+    Will Show: YES
+
+  Menu: เน€เธ—เธกเน€เธเธฅเธ•เธซเธเธฑเธเธชเธทเธญ (ID: 51)
+    Route: '/documents/templates' | Has Route: YES
+    Children: 0 | Has Children: NO
+    Will Show: YES
+
+Menu: เธเธฒเธเธเธธเธฃเธเธฒเธฃ (ID: 2)
+  Route: '#' | Has Route: YES
+  Children: 6 | Has Children: YES
+  Will Show: YES
+
+
+=== SUMMARY ===
+Total parent menus shown: 3
+
+Dashboard: 0 children
+เธเธฅเธฑเธเน€เธญเธเธชเธฒเธฃเธเธธเธ“เธ เธฒเธ: 0 children
+เธเธฒเธเธเธธเธฃเธเธฒเธฃ: 6 children
+  โ””โ”€ เธเธญเธเธซเนเธญเธเธเธฃเธฐเธเธธเธก: 0 sub-children
+  โ””โ”€ เธฃเธฐเธเธเนเธเนเธเธเนเธญเธก: 5 sub-children
+  โ””โ”€ เธฃเธฐเธเธเธเธญเนเธเนเธฃเธ–: 6 sub-children
+  โ””โ”€ เธฃเธฑเธเธชเนเธเธซเธเธฑเธเธชเธทเธญ: 6 sub-children
+  โ””โ”€ เธฃเนเธฒเธเธซเธเธฑเธเธชเธทเธญ: 0 sub-children
+  โ””โ”€ เน€เธ—เธกเน€เธเธฅเธ•เธซเธเธฑเธเธชเธทเธญ: 0 sub-children
