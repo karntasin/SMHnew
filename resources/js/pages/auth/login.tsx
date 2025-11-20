@@ -88,6 +88,27 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                         {processing && <LoaderCircle className="h-4 w-4 animate-spin" />}
                         Log in
                     </Button>
+
+                    <div className="relative my-4">
+                        <div className="absolute inset-0 flex items-center">
+                            <span className="w-full border-t" />
+                        </div>
+                        <div className="relative flex justify-center text-xs uppercase">
+                            <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
+                        </div>
+                    </div>
+
+                    <Button
+                        variant="outline"
+                        type="button"
+                        className="w-full bg-[#06C755] text-white hover:bg-[#05B34C] hover:text-white border-none"
+                        onClick={() => (window.location.href = route('auth.line'))}
+                    >
+                        <svg className="mr-2 h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M20.5 10.5c0-4.8-4.6-8.7-10.3-8.7S0 5.7 0 10.5c0 4.3 3.8 7.9 8.6 8.6.3 0 .7.1.8.3.1.2.1.5 0 .8-.1.3-.2.8-.2 1.2 0 .4.2 1.5 1.3.8 5.5-3.2 10-6.8 10-11.7z" />
+                        </svg>
+                        Log in with LINE
+                    </Button>
                 </div>
 
                 <div className="text-muted-foreground text-center text-sm">

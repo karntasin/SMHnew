@@ -22,6 +22,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useTranslation } from '@/hooks/use-translation';
 
 const breadcrumbs: BreadcrumbItem[] = [
   { title: 'Dashboard', href: '/dashboard' },
@@ -78,6 +79,7 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ filter, stats }: DashboardProps) {
+  const { t } = useTranslation();
   const [startDate, setStartDate] = useState(filter?.start_date || '');
   const [endDate, setEndDate] = useState(filter?.end_date || '');
 
@@ -130,9 +132,9 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
             <div className="relative z-10">
               <div className="flex items-center gap-3 mb-2">
                 <Activity className="h-8 w-8" />
-                <h1 className="text-3xl font-bold">ภาพรวมระบบ Dashboard</h1>
+                <h1 className="text-3xl font-bold">{t('Dashboard Overview')}</h1>
               </div>
-              <p className="text-blue-100">ระบบข้อมูลโรงพยาบาล HOSxP - สถิติและรายงานแบบ Real-time</p>
+              <p className="text-blue-100">{t('HOSxP System Info')}</p>
             </div>
           </div>
 
@@ -141,16 +143,16 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
             <CardHeader className="bg-gradient-to-r from-blue-50 to-purple-50">
               <div className="flex items-center gap-2">
                 <Filter className="h-5 w-5 text-blue-600" />
-                <CardTitle>ตัวกรองข้อมูล</CardTitle>
+                <CardTitle>{t('Data Filter')}</CardTitle>
               </div>
-              <CardDescription>เลือกช่วงวันที่เพื่อดูสถิติและวิเคราะห์ข้อมูล</CardDescription>
+              <CardDescription>{t('Select Date Range')}</CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
               <form onSubmit={handleFilterSubmit} className="flex flex-wrap gap-4 items-end">
                 <div className="flex-1 min-w-[200px]">
                   <Label htmlFor="start_date" className="flex items-center gap-2 mb-2">
                     <Calendar className="h-4 w-4 text-blue-600" />
-                    วันที่เริ่มต้น
+                    {t('Start Date')}
                   </Label>
                   <Input
                     id="start_date"
@@ -163,7 +165,7 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
                 <div className="flex-1 min-w-[200px]">
                   <Label htmlFor="end_date" className="flex items-center gap-2 mb-2">
                     <Calendar className="h-4 w-4 text-purple-600" />
-                    วันที่สิ้นสุด
+                    {t('End Date')}
                   </Label>
                   <Input
                     id="end_date"
@@ -175,7 +177,7 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
                 </div>
                 <Button type="submit" className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">
                   <TrendingUp className="mr-2 h-4 w-4" />
-                  แสดงข้อมูล
+                  {t('Show Data')}
                 </Button>
               </form>
             </CardContent>
@@ -187,64 +189,64 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 <Card className="shadow-lg hover:shadow-xl transition-shadow border-t-4 border-t-blue-500">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 bg-gradient-to-br from-blue-50 to-blue-100">
-                    <CardTitle className="text-sm font-medium text-blue-900">ผู้ป่วยนอก (OPD)</CardTitle>
+                    <CardTitle className="text-sm font-medium text-blue-900">{t('Outpatients (OPD)')}</CardTitle>
                     <div className="p-2 bg-blue-500 rounded-lg">
                       <Stethoscope className="h-5 w-5 text-white" />
                     </div>
                   </CardHeader>
                   <CardContent className="pt-4">
-                    <div className="text-3xl font-bold text-blue-600">{formatNumber(stats.summary.opd)}</div>
+                    <div className="text-3xl font-bold text-blue-600">{formatNumber(Number(stats.summary.opd))}</div>
                     <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                       <Activity className="h-3 w-3" />
-                      จำนวน Visit ในช่วงเวลาที่เลือก
+                      {t('Visits in selected period')}
                     </p>
                   </CardContent>
                 </Card>
 
                 <Card className="shadow-lg hover:shadow-xl transition-shadow border-t-4 border-t-purple-500">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 bg-gradient-to-br from-purple-50 to-purple-100">
-                    <CardTitle className="text-sm font-medium text-purple-900">ผู้ป่วยใน (IPD)</CardTitle>
+                    <CardTitle className="text-sm font-medium text-purple-900">{t('Inpatients (IPD)')}</CardTitle>
                     <div className="p-2 bg-purple-500 rounded-lg">
                       <Bed className="h-5 w-5 text-white" />
                     </div>
                   </CardHeader>
                   <CardContent className="pt-4">
-                    <div className="text-3xl font-bold text-purple-600">{formatNumber(stats.summary.ipd)}</div>
+                    <div className="text-3xl font-bold text-purple-600">{formatNumber(Number(stats.summary.ipd))}</div>
                     <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                       <Users className="h-3 w-3" />
-                      จำนวนครั้ง Admit
+                      {t('Admissions')}
                     </p>
                   </CardContent>
                 </Card>
 
                 <Card className="shadow-lg hover:shadow-xl transition-shadow border-t-4 border-t-red-500">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 bg-gradient-to-br from-red-50 to-red-100">
-                    <CardTitle className="text-sm font-medium text-red-900">ฉุกเฉิน (ER)</CardTitle>
+                    <CardTitle className="text-sm font-medium text-red-900">{t('Emergency (ER)')}</CardTitle>
                     <div className="p-2 bg-red-500 rounded-lg">
                       <Ambulance className="h-5 w-5 text-white" />
                     </div>
                   </CardHeader>
                   <CardContent className="pt-4">
-                    <div className="text-3xl font-bold text-red-600">{formatNumber(stats.summary.er)}</div>
+                    <div className="text-3xl font-bold text-red-600">{formatNumber(Number(stats.summary.er))}</div>
                     <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                       <AlertTriangle className="h-3 w-3" />
-                      จำนวน Visit
+                      {t('Visits')}
                     </p>
                   </CardContent>
                 </Card>
 
                 <Card className="shadow-lg hover:shadow-xl transition-shadow border-t-4 border-t-green-500">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 bg-gradient-to-br from-green-50 to-green-100">
-                    <CardTitle className="text-sm font-medium text-green-900">ค่าใช้จ่ายรวม</CardTitle>
+                    <CardTitle className="text-sm font-medium text-green-900">{t('Total Cost')}</CardTitle>
                     <div className="p-2 bg-green-500 rounded-lg">
                       <DollarSign className="h-5 w-5 text-white" />
                     </div>
                   </CardHeader>
                   <CardContent className="pt-4">
-                    <div className="text-3xl font-bold text-green-600">{formatCurrency(stats.summary.cost_total)}</div>
+                    <div className="text-3xl font-bold text-green-600">{formatCurrency(Number(stats.summary.cost_total))}</div>
                     <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                       <TrendingUp className="h-3 w-3" />
-                      ในช่วงเวลาที่เลือก
+                      {t('In selected period')}
                     </p>
                   </CardContent>
                 </Card>
@@ -257,7 +259,7 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
                     </div>
                   </CardHeader>
                   <CardContent className="pt-4">
-                    <div className="text-3xl font-bold text-orange-600">{formatNumber(stats.summary.dm)}</div>
+                    <div className="text-3xl font-bold text-orange-600">{formatNumber(Number(stats.summary.dm))}</div>
                     <p className="text-xs text-muted-foreground mt-1">การวินิจฉัย (E10-E14)</p>
                   </CardContent>
                 </Card>
@@ -270,7 +272,7 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
                     </div>
                   </CardHeader>
                   <CardContent className="pt-4">
-                    <div className="text-3xl font-bold text-pink-600">{formatNumber(stats.summary.ht)}</div>
+                    <div className="text-3xl font-bold text-pink-600">{formatNumber(Number(stats.summary.ht))}</div>
                     <p className="text-xs text-muted-foreground mt-1">การวินิจฉัย (I10-I15)</p>
                   </CardContent>
                 </Card>
@@ -480,9 +482,9 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
                         <div className="absolute bottom-0 left-0 right-0 flex justify-between text-xs text-gray-600 pt-2">
                           {stats.charts.visits_monthly.slice(-6).map((v, i) => (
                             <div key={i} className="flex flex-col items-center">
-                              <div className="font-medium">{v.label}</div>
-                              <div className="text-[10px] text-blue-600">OPD: {formatNumber(v.opd)}</div>
-                              <div className="text-[10px] text-purple-600">IPD: {formatNumber(v.ipd)}</div>
+                              <div className="font-medium">{String(v.label)}</div>
+                              <div className="text-[10px] text-blue-600">OPD: {formatNumber(Number(v.opd))}</div>
+                              <div className="text-[10px] text-purple-600">IPD: {formatNumber(Number(v.ipd))}</div>
                             </div>
                           ))}
                         </div>
@@ -646,8 +648,8 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
                         <div className="absolute bottom-0 left-0 right-0 flex justify-between text-xs text-gray-600 pt-2">
                           {stats.charts.visits_monthly.slice(-6).map((v, i) => (
                             <div key={i} className="flex flex-col items-center">
-                              <div className="font-medium">{v.label}</div>
-                              <div className="text-[10px] text-red-600">{formatNumber(v.er)} ครั้ง</div>
+                              <div className="font-medium">{String(v.label)}</div>
+                              <div className="text-[10px] text-red-600">{formatNumber(Number(v.er))} ครั้ง</div>
                             </div>
                           ))}
                         </div>
@@ -693,7 +695,7 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
                                 <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 text-xs font-bold">
                                   {index + 1}
                                 </span>
-                                {disease.icd10}
+                                {String(disease.icd10)}
                               </span>
                               <span className="text-muted-foreground font-semibold">{formatNumber(disease.total)}</span>
                             </div>
@@ -731,7 +733,7 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
                             <div className="flex items-center justify-between text-sm">
                               <span className="font-medium flex items-center gap-2">
                                 <Calendar className="h-4 w-4 text-emerald-600" />
-                                ปี {cost.y + 543}
+                                ปี {Number(cost.y) + 543}
                               </span>
                               <span className="text-emerald-700 font-bold">{formatCurrency(cost.total)}</span>
                             </div>
@@ -894,8 +896,8 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
                         <div className="absolute left-12 right-0 bottom-0 h-8 flex justify-between items-start text-xs text-gray-500">
                           {stats.charts.cv_risk_high_monthly.map((risk: any, index: number) => (
                             <div key={index} className="flex flex-col items-center">
-                              <div className="font-medium text-rose-600">{formatNumber(risk.total)}</div>
-                              <div className="text-[10px]">{risk.label?.split(' ')[0] || `${risk.m}/${risk.y}`}</div>
+                              <div className="font-medium text-rose-600">{formatNumber(Number(risk.total))}</div>
+                              <div className="text-[10px]">{String(risk.label || '').split(' ')[0] || `${risk.m}/${risk.y}`}</div>
                             </div>
                           ))}
                         </div>
@@ -952,14 +954,14 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
                           return (
                             <div key={index} className="space-y-3">
                               <div className="font-medium text-sm text-gray-700">
-                                {dist.label || `${dist.m}/${dist.y}`} (รวม {total} คน)
+                                {String(dist.label || `${dist.m}/${dist.y}`)} (รวม {total} คน)
                               </div>
                               
                               {/* 0-9% - Low Risk (Green) */}
                               <div className="space-y-1">
                                 <div className="flex items-center justify-between text-xs">
                                   <span className="text-green-600">0-9% (เสี่ยงต่ำ)</span>
-                                  <span className="font-semibold">{dist.s0_9 || 0} คน</span>
+                                  <span className="font-semibold">{Number(dist.s0_9 || 0)} คน</span>
                                 </div>
                                 <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                                   <div 
@@ -973,7 +975,7 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
                               <div className="space-y-1">
                                 <div className="flex items-center justify-between text-xs">
                                   <span className="text-yellow-600">10-19% (เสี่ยงปานกลาง)</span>
-                                  <span className="font-semibold">{dist.s10_19 || 0} คน</span>
+                                  <span className="font-semibold">{Number(dist.s10_19 || 0)} คน</span>
                                 </div>
                                 <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                                   <div 
@@ -987,7 +989,7 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
                               <div className="space-y-1">
                                 <div className="flex items-center justify-between text-xs">
                                   <span className="text-orange-600">20-29% (เสี่ยงสูง)</span>
-                                  <span className="font-semibold">{dist.s20_29 || 0} คน</span>
+                                  <span className="font-semibold">{Number(dist.s20_29 || 0)} คน</span>
                                 </div>
                                 <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                                   <div 
@@ -1001,7 +1003,7 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
                               <div className="space-y-1">
                                 <div className="flex items-center justify-between text-xs">
                                   <span className="text-red-600">30-39% (เสี่ยงสูงมาก)</span>
-                                  <span className="font-semibold">{dist.s30_39 || 0} คน</span>
+                                  <span className="font-semibold">{Number(dist.s30_39 || 0)} คน</span>
                                 </div>
                                 <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                                   <div 
@@ -1015,7 +1017,7 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
                               <div className="space-y-1">
                                 <div className="flex items-center justify-between text-xs">
                                   <span className="text-rose-700">40%+ (วิกฤต)</span>
-                                  <span className="font-semibold">{dist.s40p || 0} คน</span>
+                                  <span className="font-semibold">{Number(dist.s40p || 0)} คน</span>
                                 </div>
                                 <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                                   <div 

@@ -113,6 +113,38 @@ export default function Profile({ mustVerifyEmail, status }: { mustVerifyEmail: 
                     </form>
                 </div>
 
+                <div className="space-y-6">
+                    <HeadingSmall title="Connected Accounts" description="Manage your connected social accounts" />
+
+                    <div className="flex items-center justify-between rounded-lg border p-4">
+                        <div className="flex items-center gap-3">
+                            <svg className="h-8 w-8 text-[#06C755]" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M20.5 10.5c0-4.8-4.6-8.7-10.3-8.7S0 5.7 0 10.5c0 4.3 3.8 7.9 8.6 8.6.3 0 .7.1.8.3.1.2.1.5 0 .8-.1.3-.2.8-.2 1.2 0 .4.2 1.5 1.3.8 5.5-3.2 10-6.8 10-11.7z" />
+                            </svg>
+                            <div>
+                                <div className="font-medium">LINE</div>
+                                <div className="text-sm text-muted-foreground">
+                                    {auth.user.line_id ? 'Connected' : 'Not connected'}
+                                </div>
+                            </div>
+                        </div>
+
+                        {auth.user.line_id ? (
+                            <Button variant="outline" disabled>
+                                Connected
+                            </Button>
+                        ) : (
+                            <Button
+                                variant="outline"
+                                className="border-[#06C755] text-[#06C755] hover:bg-[#06C755] hover:text-white"
+                                onClick={() => (window.location.href = route('auth.line'))}
+                            >
+                                Connect
+                            </Button>
+                        )}
+                    </div>
+                </div>
+
                 <DeleteUser />
             </SettingsLayout>
         </AppLayout>

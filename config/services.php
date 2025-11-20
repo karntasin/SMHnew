@@ -1,7 +1,6 @@
 <?php
 
 return [
-
     /*
     |--------------------------------------------------------------------------
     | Third Party Services
@@ -35,4 +34,9 @@ return [
         ],
     ],
 
+    'line' => [
+        'client_id' => env('LINE_LOGIN_CHANNEL_ID'),
+        'client_secret' => env('LINE_LOGIN_CHANNEL_SECRET'),
+        'redirect' => env('LINE_OAUTH_REDIRECT'),
+    ],
 ];

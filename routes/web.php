@@ -16,6 +16,9 @@ use App\Http\Controllers\MediaFolderController;
 use App\Http\Controllers\QualityDocumentController;
 use App\Http\Controllers\RoomBookingController;
 use App\Http\Controllers\LanguageController;
+use App\Http\Controllers\Vehicle\VehicleBookingController;
+use App\Http\Controllers\Vehicle\VehicleController;
+use App\Http\Controllers\Vehicle\VehicleSettingController;
 
 Route::redirect('/', '/login')->name('home');
 
@@ -75,6 +78,73 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::get('/bookings/{booking}', [RoomBookingController::class, 'show'])->name('bookings.show');
         Route::put('/bookings/{booking}', [RoomBookingController::class, 'update'])->name('bookings.update');
         Route::delete('/bookings/{booking}', [RoomBookingController::class, 'destroy'])->name('bookings.destroy');
+    });
+
+    // Vehicle Booking System (ระบบจองรถ)
+    Route::prefix('vehicles')->name('vehicles.')->group(function () {
+        Route::get('/bookings', [VehicleBookingController::class, 'index'])->name('bookings.index');
+        Route::get('/bookings/create', [VehicleBookingController::class, 'create'])->name('bookings.create');
+        Route::post('/bookings', [VehicleBookingController::class, 'store'])->name('bookings.store');
+        Route::get('/bookings/{booking}', [VehicleBookingController::class, 'show'])->name('bookings.show');
+        Route::put('/bookings/{booking}', [VehicleBookingController::class, 'update'])->name('bookings.update');
+        Route::delete('/bookings/{booking}', [VehicleBookingController::class, 'destroy'])->name('bookings.destroy');
+        
+        Route::get('/calendar', function () {
+            return Inertia::render('vehicles/Calendar');
+        })->name('calendar');
+        Route::get('/calendar/events', [VehicleBookingController::class, 'calendar'])->name('calendar.events');
+
+        // Vehicle Management
+        Route::resource('manage', VehicleController::class);
+
+        // Vehicle Settings
+        Route::get('/settings', [VehicleSettingController::class, 'index'])->name('settings.index');
+        Route::post('/settings/categories', [VehicleSettingController::class, 'storeCategory'])->name('settings.categories.store');
+        Route::put('/settings/categories/{category}', [VehicleSettingController::class, 'updateCategory'])->name('settings.categories.update');
+        Route::delete('/settings/categories/{category}', [VehicleSettingController::class, 'destroyCategory'])->name('settings.categories.destroy');
+    });
+
+    // Document Management System (ระบบรับส่งหนังสือ)
+    Route::prefix('documents')->name('documents.')->group(function () {
+        Route::get('/dashboard', [App\Http\Controllers\Document\DocumentDashboardController::class, 'index'])->name('dashboard');
+        
+        // Menu Routes
+        Route::get('/drafts', [App\Http\Controllers\Document\DocumentController::class, 'drafts'])->name('drafts');
+        Route::get('/receive', [App\Http\Controllers\Document\DocumentController::class, 'receive'])->name('receive');
+        Route::get('/import', [App\Http\Controllers\Document\DocumentController::class, 'import'])->name('import');
+        Route::get('/settings', [App\Http\Controllers\Document\DocumentSettingController::class, 'index'])->name('settings');
+        Route::post('/settings/types', [App\Http\Controllers\Document\DocumentSettingController::class, 'storeType'])->name('settings.types.store');
+        Route::delete('/settings/types/{id}', [App\Http\Controllers\Document\DocumentSettingController::class, 'deleteType'])->name('settings.types.delete');
+        
+        Route::get('/templates', [App\Http\Controllers\Document\DocumentController::class, 'templates'])->name('templates');
+
+        Route::get('/', [App\Http\Controllers\Document\DocumentController::class, 'index'])->name('index');
+        Route::get('/create', [App\Http\Controllers\Document\DocumentController::class, 'create'])->name('create');
+        Route::post('/', [App\Http\Controllers\Document\DocumentController::class, 'store'])->name('store');
+        Route::get('/{document}', [App\Http\Controllers\Document\DocumentController::class, 'show'])->name('show');
+        Route::post('/{document}/approve', [App\Http\Controllers\Document\DocumentController::class, 'approve'])->name('approve');
+        Route::post('/{document}/kasien', [App\Http\Controllers\Document\DocumentController::class, 'kasien'])->name('kasien');
+        Route::post('/{document}/distribute', [App\Http\Controllers\Document\DocumentController::class, 'distribute'])->name('distribute');
+        Route::post('/distributions/{distribution}/acknowledge', [App\Http\Controllers\Document\DocumentController::class, 'acknowledge'])->name('acknowledge');
+    });
+
+    // Maintenance System (ระบบแจ้งซ่อม)
+    Route::prefix('maintenance')->name('maintenance.')->group(function () {
+        Route::get('/dashboard', [App\Http\Controllers\MaintenanceDashboardController::class, 'index'])->name('dashboard');
+        
+        Route::resource('requests', App\Http\Controllers\MaintenanceRequestController::class);
+        
+        Route::get('/settings', [App\Http\Controllers\MaintenanceSettingController::class, 'index'])->name('settings.index');
+        
+        // Category Routes
+        Route::post('/settings/categories', [App\Http\Controllers\MaintenanceSettingController::class, 'storeCategory'])->name('settings.categories.store');
+        Route::put('/settings/categories/{category}', [App\Http\Controllers\MaintenanceSettingController::class, 'updateCategory'])->name('settings.categories.update');
+        Route::delete('/settings/categories/{category}', [App\Http\Controllers\MaintenanceSettingController::class, 'destroyCategory'])->name('settings.categories.destroy');
+        
+        // Priority Routes
+        Route::post('/settings/priorities', [App\Http\Controllers\MaintenanceSettingController::class, 'storePriority'])->name('settings.priorities.store');
+        Route::put('/settings/priorities/{priority}', [App\Http\Controllers\MaintenanceSettingController::class, 'updatePriority'])->name('settings.priorities.update');
+        Route::delete('/settings/priorities/{priority}', [App\Http\Controllers\MaintenanceSettingController::class, 'destroyPriority'])->name('settings.priorities.destroy');
     });
 });
 

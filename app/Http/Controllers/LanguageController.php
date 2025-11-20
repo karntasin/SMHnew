@@ -26,6 +26,7 @@ class LanguageController extends Controller
         }
         session(['locale' => $locale]);
         app()->setLocale($locale);
-        return response()->noContent();
+        
+        return back();
     }
 }

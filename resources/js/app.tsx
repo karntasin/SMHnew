@@ -1,4 +1,6 @@
+// Force re-scan
 import '../css/app.css';
+import './lib/axios'; // Initialize axios configuration
 
 import { createInertiaApp } from '@inertiajs/react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
