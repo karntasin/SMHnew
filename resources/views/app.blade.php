@@ -16,15 +16,12 @@
 
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600" rel="stylesheet" />
-
-    @php
-        $favicon = $page['props']->setting->favicon ?? null;
-    @endphp
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
     @if (!empty($favicon))
         <link rel="icon" href="{{ asset('storage/' . $favicon) }}" type="image/png">
     @else
-        <link rel="icon" href="/favicon.ico" type="image/x-icon">
+        <link rel="icon" href="/logosmh.png" type="image/png">
     @endif
 
 

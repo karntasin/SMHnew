@@ -28,6 +28,10 @@ class QualityDocumentController extends Controller
             $query->where('department_id', $request->department_id);
         }
 
+        if ($request->has('status') && $request->status) {
+            $query->where('status', $request->status);
+        }
+
         $documents = $query->paginate(10)->withQueryString();
         $departments = Department::select('id', 'name')->get();
 
@@ -66,7 +70,7 @@ class QualityDocumentController extends Controller
             'description' => 'nullable|string',
             'effective_date' => 'required|date',
             'review_date' => 'nullable|date|after:effective_date',
-            'file' => 'required|file|mimes:pdf,doc,docx|max:10240', // 10MB max
+            'file' => 'required|file|mimes:pdf,doc,docx,xls,xlsx|max:10240', // 10MB max
         ]);
 
         $path = null;

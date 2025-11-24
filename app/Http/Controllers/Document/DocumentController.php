@@ -40,6 +40,31 @@ class DocumentController extends Controller
         return redirect()->route('documents.dashboard')->with('message', 'Templates feature is coming soon.');
     }
 
+    public function inbox(Request $request)
+    {
+        $user = Auth::user();
+        $query = DocumentDistribution::with(['document.createdBy', 'department'])
+            ->where(function ($q) use ($user) {
+                $q->where('user_id', $user->id);
+                if ($user->department) {
+                    $q->orWhere('department_id', $user->department);
+                }
+            });
+
+        if ($request->status === 'history') {
+            $query->where('status', 'acknowledged');
+        } else {
+            $query->where('status', 'pending');
+        }
+
+        $distributions = $query->latest()->paginate(10);
+
+        return Inertia::render('documents/Inbox', [
+            'distributions' => $distributions,
+            'status' => $request->status ?? 'pending',
+        ]);
+    }
+
     public function index(Request $request)
     {
         $query = Document::with(['createdBy', 'currentHolder', 'approvals', 'distributions'])
@@ -232,15 +257,16 @@ class DocumentController extends Controller
 
     public function acknowledge(DocumentDistribution $distribution)
     {
-        // Check permission
-        // If distribution is to user, check Auth::id() == user_id
-        // If distribution is to department, check Auth::user()->department_id == department_id
-        
         $user = Auth::user();
+        
+        // Check permission
         if ($distribution->user_id && $distribution->user_id !== $user->id) {
-            abort(403);
+            abort(403, 'Unauthorized');
         }
-        // Check department logic...
+        
+        if ($distribution->department_id && $distribution->department_id != $user->department) {
+            abort(403, 'Unauthorized (Department mismatch)');
+        }
 
         $distribution->update([
             'status' => 'acknowledged',
@@ -248,5 +274,19 @@ class DocumentController extends Controller
         ]);
 
         return back()->with('success', 'Document acknowledged.');
+    }
+
+    public function sent(Request $request)
+    {
+        $user = Auth::user();
+        $query = Document::with(['distributions.user', 'distributions.department'])
+            ->where('created_by', $user->id)
+            ->latest();
+
+        $documents = $query->paginate(10);
+
+        return Inertia::render('documents/Sent', [
+            'documents' => $documents,
+        ]);
     }
 }

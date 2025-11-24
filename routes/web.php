@@ -62,6 +62,17 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::post('/{qualityDoc}/reject', [QualityDocumentController::class, 'reject'])->name('reject');
     });
 
+    // Quality Indicators System (ระบบตัวชี้วัดคุณภาพ)
+    Route::prefix('quality-indicators')->name('quality-indicators.')->group(function () {
+        Route::get('/', [App\Http\Controllers\QualityIndicatorController::class, 'index'])->name('index');
+        Route::post('/', [App\Http\Controllers\QualityIndicatorController::class, 'store'])->name('store');
+        Route::get('/dashboard', [App\Http\Controllers\QualityIndicatorController::class, 'dashboard'])->name('dashboard');
+        Route::get('/{indicator}', [App\Http\Controllers\QualityIndicatorController::class, 'show'])->name('show');
+        Route::put('/{indicator}', [App\Http\Controllers\QualityIndicatorController::class, 'update'])->name('update');
+        Route::delete('/{indicator}', [App\Http\Controllers\QualityIndicatorController::class, 'destroy'])->name('destroy');
+        Route::post('/{indicator}/entries', [App\Http\Controllers\QualityIndicatorController::class, 'storeEntry'])->name('entries.store');
+    });
+
     // Administration -> Meeting rooms / bookings (งานธุรการ -> จองห้องประชุม)
     Route::prefix('administration/rooms')->name('rooms.')->group(function () {
         Route::get('/', [RoomBookingController::class, 'index'])->name('index');
@@ -109,6 +120,8 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::get('/dashboard', [App\Http\Controllers\Document\DocumentDashboardController::class, 'index'])->name('dashboard');
         
         // Menu Routes
+        Route::get('/inbox', [App\Http\Controllers\Document\DocumentController::class, 'inbox'])->name('inbox');
+        Route::get('/sent', [App\Http\Controllers\Document\DocumentController::class, 'sent'])->name('sent');
         Route::get('/drafts', [App\Http\Controllers\Document\DocumentController::class, 'drafts'])->name('drafts');
         Route::get('/receive', [App\Http\Controllers\Document\DocumentController::class, 'receive'])->name('receive');
         Route::get('/import', [App\Http\Controllers\Document\DocumentController::class, 'import'])->name('import');
@@ -145,6 +158,56 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::post('/settings/priorities', [App\Http\Controllers\MaintenanceSettingController::class, 'storePriority'])->name('settings.priorities.store');
         Route::put('/settings/priorities/{priority}', [App\Http\Controllers\MaintenanceSettingController::class, 'updatePriority'])->name('settings.priorities.update');
         Route::delete('/settings/priorities/{priority}', [App\Http\Controllers\MaintenanceSettingController::class, 'destroyPriority'])->name('settings.priorities.destroy');
+    });
+
+    // Finance Dashboard
+    Route::get('/finance-dashboard', [App\Http\Controllers\FinanceDashboardController::class, 'index'])->name('finance.dashboard');
+
+    // Quality Assurance System (ระบบติดตามการทบทวน)
+    Route::prefix('quality-assurance')->name('quality-assurance.')->group(function () {
+        Route::get('/', [App\Http\Controllers\QualityAssuranceController::class, 'index'])->name('index');
+        
+        // Reviews
+        Route::post('/reviews', [App\Http\Controllers\QualityAssuranceController::class, 'storeReview'])->name('reviews.store');
+        Route::put('/reviews/{review}', [App\Http\Controllers\QualityAssuranceController::class, 'updateReview'])->name('reviews.update');
+        Route::delete('/reviews/{review}', [App\Http\Controllers\QualityAssuranceController::class, 'destroyReview'])->name('reviews.destroy');
+
+        // Audits
+        Route::post('/audits', [App\Http\Controllers\QualityAssuranceController::class, 'storeAudit'])->name('audits.store');
+        Route::put('/audits/{audit}', [App\Http\Controllers\QualityAssuranceController::class, 'updateAudit'])->name('audits.update');
+        Route::delete('/audits/{audit}', [App\Http\Controllers\QualityAssuranceController::class, 'destroyAudit'])->name('audits.destroy');
+
+        // Improvements
+        Route::post('/improvements', [App\Http\Controllers\QualityAssuranceController::class, 'storeImprovement'])->name('improvements.store');
+        Route::put('/improvements/{improvement}', [App\Http\Controllers\QualityAssuranceController::class, 'updateImprovement'])->name('improvements.update');
+        Route::delete('/improvements/{improvement}', [App\Http\Controllers\QualityAssuranceController::class, 'destroyImprovement'])->name('improvements.destroy');
+    });
+
+    // ENV System
+    Route::prefix('env')->name('env.')->group(function () {
+        Route::get('/', [App\Http\Controllers\EnvController::class, 'index'])->name('index');
+        
+        // Assets
+        Route::get('/assets', [App\Http\Controllers\EnvAssetController::class, 'index'])->name('assets.index');
+        Route::post('/assets', [App\Http\Controllers\EnvAssetController::class, 'store'])->name('assets.store');
+        Route::put('/assets/{asset}', [App\Http\Controllers\EnvAssetController::class, 'update'])->name('assets.update');
+        Route::delete('/assets/{asset}', [App\Http\Controllers\EnvAssetController::class, 'destroy'])->name('assets.destroy');
+
+        // PM Tracking
+        Route::get('/pm', [App\Http\Controllers\EnvPmController::class, 'index'])->name('pm.index');
+        Route::post('/pm', [App\Http\Controllers\EnvPmController::class, 'store'])->name('pm.store');
+
+        // Incidents
+        Route::get('/incidents', [App\Http\Controllers\EnvIncidentController::class, 'index'])->name('incidents.index');
+        Route::post('/incidents', [App\Http\Controllers\EnvIncidentController::class, 'store'])->name('incidents.store');
+        Route::put('/incidents/{incident}', [App\Http\Controllers\EnvIncidentController::class, 'update'])->name('incidents.update');
+        Route::delete('/incidents/{incident}', [App\Http\Controllers\EnvIncidentController::class, 'destroy'])->name('incidents.destroy');
+
+        // Utility Monitoring
+        Route::get('/utility', [App\Http\Controllers\EnvUtilityController::class, 'index'])->name('utility.index');
+        Route::post('/utility/system', [App\Http\Controllers\EnvUtilityController::class, 'storeSystem'])->name('utility.store-system');
+        Route::post('/utility/checklist', [App\Http\Controllers\EnvUtilityController::class, 'storeChecklist'])->name('utility.store-checklist');
+        Route::post('/utility/check', [App\Http\Controllers\EnvUtilityController::class, 'storeCheck'])->name('utility.store-check');
     });
 });
 

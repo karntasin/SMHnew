@@ -64,6 +64,8 @@ function RenderMenu({ items, level = 0 }: { items: MenuItem[]; level?: number })
         };
         const isExpanded = hasChildren && isChildActive(children);
 
+        const isExternal = menu.route && (menu.route.startsWith('http://') || menu.route.startsWith('https://'));
+
         return (
           <Collapsible key={menu.id} asChild defaultOpen={isExpanded} className="group/collapsible">
             <SidebarMenuItem>
@@ -74,14 +76,15 @@ function RenderMenu({ items, level = 0 }: { items: MenuItem[]; level?: number })
                       className={cn(
                         `group flex items-center justify-between rounded-md transition-colors ${indentClass}`,
                         activeClass,
-                        level === 0 ? 'py-3 px-4 my-1' : 'py-2 px-3'
+                        level === 0 ? 'py-3 px-4 my-1' : 'py-2 px-3',
+                        'h-auto'
                       )}
                     >
-                      <div className="flex items-center">
-                        <Icon className="size-4 mr-3 opacity-80 group-hover:opacity-100" />
-                        <span>{t(menu.title)}</span>
+                      <div className="flex items-center flex-1">
+                        <Icon className="size-4 mr-3 opacity-80 group-hover:opacity-100 shrink-0" />
+                        <span className="whitespace-normal leading-tight">{t(menu.title)}</span>
                       </div>
-                      <ChevronDown className="size-4 opacity-50 group-hover:opacity-70 transition-transform group-data-[state=open]/collapsible:rotate-180" />
+                      <ChevronDown className="size-4 opacity-50 group-hover:opacity-70 transition-transform group-data-[state=open]/collapsible:rotate-180 shrink-0 ml-2" />
                     </SidebarMenuButton>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
@@ -96,16 +99,27 @@ function RenderMenu({ items, level = 0 }: { items: MenuItem[]; level?: number })
                   className={cn(
                     `group flex items-center rounded-md transition-colors ${indentClass}`,
                     activeClass,
-                    level === 0 ? 'py-3 px-4 my-1' : 'py-2 px-3'
+                    level === 0 ? 'py-3 px-4 my-1' : 'py-2 px-3',
+                    'h-auto'
                   )}
                 >
-                  <Link href={menu.route || '#'}>
-                    <Icon className="size-4 mr-3 opacity-80 group-hover:opacity-100" />
-                    <span>{t(menu.title)}</span>
-                    {level > 0 && (
-                      <ChevronRight className="ml-auto size-4 opacity-0 group-hover:opacity-50" />
-                    )}
-                  </Link>
+                  {isExternal ? (
+                    <a href={menu.route || '#'} target="_blank" rel="noopener noreferrer" className="flex items-center w-full">
+                      <Icon className="size-4 mr-3 opacity-80 group-hover:opacity-100 shrink-0" />
+                      <span className="whitespace-normal leading-tight flex-1">{t(menu.title)}</span>
+                      {level > 0 && (
+                        <ChevronRight className="ml-2 size-4 opacity-0 group-hover:opacity-50 shrink-0" />
+                      )}
+                    </a>
+                  ) : (
+                    <Link href={menu.route || '#'} className="flex items-center w-full">
+                      <Icon className="size-4 mr-3 opacity-80 group-hover:opacity-100 shrink-0" />
+                      <span className="whitespace-normal leading-tight flex-1">{t(menu.title)}</span>
+                      {level > 0 && (
+                        <ChevronRight className="ml-2 size-4 opacity-0 group-hover:opacity-50 shrink-0" />
+                      )}
+                    </Link>
+                  )}
                 </SidebarMenuButton>
               )}
             </SidebarMenuItem>

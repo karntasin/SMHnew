@@ -154,7 +154,7 @@ export default function Create({ departments }: Props) {
                                         <input 
                                             type="file" 
                                             id="file" 
-                                            accept=".pdf"
+                                            accept=".pdf,.doc,.docx,.xls,.xlsx"
                                             onChange={e => setData('file', e.target.files ? e.target.files[0] : null)}
                                             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                                         />
@@ -166,7 +166,7 @@ export default function Create({ departments }: Props) {
                                                 <p className="text-sm font-medium">
                                                     {data.file ? data.file.name : 'คลิกเพื่อเลือกไฟล์ หรือลากไฟล์มาวางที่นี่'}
                                                 </p>
-                                                <p className="text-xs text-muted-foreground">รองรับไฟล์ PDF ขนาดไม่เกิน 10MB</p>
+                                                <p className="text-xs text-muted-foreground">รองรับไฟล์ PDF, Word, Excel ขนาดไม่เกิน 10MB</p>
                                             </div>
                                         </div>
                                     </div>

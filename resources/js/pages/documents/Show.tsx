@@ -94,6 +94,15 @@ export default function Show({ document, users, departments, auth }: ShowProps) 
         }
     };
 
+    const toggleUser = (id: string) => {
+        const current = distData.user_ids;
+        if (current.includes(id)) {
+            setDistData('user_ids', current.filter(i => i !== id));
+        } else {
+            setDistData('user_ids', [...current, id]);
+        }
+    };
+
     const getStatusBadge = (status: string) => {
         switch (status) {
             case 'draft': return <Badge variant="outline">ร่าง</Badge>;
@@ -342,6 +351,23 @@ export default function Show({ document, users, departments, auth }: ShowProps) 
                                                                 />
                                                                 <label htmlFor={`dept-${dept.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                                                                     {dept.name}
+                                                                </label>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label>เลือกบุคคลที่ต้องการเวียนทราบ</Label>
+                                                    <div className="grid grid-cols-2 gap-2 border p-3 rounded-md max-h-40 overflow-y-auto">
+                                                        {users.map(user => (
+                                                            <div key={user.id} className="flex items-center space-x-2">
+                                                                <Checkbox 
+                                                                    id={`user-${user.id}`} 
+                                                                    checked={distData.user_ids.includes(user.id.toString())}
+                                                                    onCheckedChange={() => toggleUser(user.id.toString())}
+                                                                />
+                                                                <label htmlFor={`user-${user.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                                                    {user.name}
                                                                 </label>
                                                             </div>
                                                         ))}

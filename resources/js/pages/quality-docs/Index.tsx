@@ -112,50 +112,61 @@ export default function Index({ documents, departments, filters, stats }: Props)
                 {/* Stats Cards */}
                 {stats && (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <Card className="bg-white dark:bg-gray-800 shadow-sm border-l-4 border-l-blue-500">
-                            <CardContent className="p-6 flex items-center justify-between">
-                                <div>
-                                    <p className="text-sm font-medium text-muted-foreground">เอกสารทั้งหมด</p>
-                                    <h3 className="text-2xl font-bold mt-1">{stats.total}</h3>
-                                </div>
-                                <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
-                                    <FileText className="h-5 w-5" />
-                                </div>
-                            </CardContent>
-                        </Card>
-                        <Card className="bg-white dark:bg-gray-800 shadow-sm border-l-4 border-l-green-500">
-                            <CardContent className="p-6 flex items-center justify-between">
-                                <div>
-                                    <p className="text-sm font-medium text-muted-foreground">ใช้งานจริง</p>
-                                    <h3 className="text-2xl font-bold mt-1">{stats.published}</h3>
-                                </div>
-                                <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center text-green-600">
-                                    <CheckCircle className="h-5 w-5" />
-                                </div>
-                            </CardContent>
-                        </Card>
-                        <Card className="bg-white dark:bg-gray-800 shadow-sm border-l-4 border-l-yellow-500">
-                            <CardContent className="p-6 flex items-center justify-between">
-                                <div>
-                                    <p className="text-sm font-medium text-muted-foreground">รออนุมัติ</p>
-                                    <h3 className="text-2xl font-bold mt-1">{stats.review}</h3>
-                                </div>
-                                <div className="h-10 w-10 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600">
-                                    <Clock className="h-5 w-5" />
-                                </div>
-                            </CardContent>
-                        </Card>
-                        <Card className="bg-white dark:bg-gray-800 shadow-sm border-l-4 border-l-gray-500">
-                            <CardContent className="p-6 flex items-center justify-between">
-                                <div>
-                                    <p className="text-sm font-medium text-muted-foreground">ฉบับร่าง</p>
-                                    <h3 className="text-2xl font-bold mt-1">{stats.draft}</h3>
-                                </div>
-                                <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-600">
-                                    <File className="h-5 w-5" />
-                                </div>
-                            </CardContent>
-                        </Card>
+                        <Link href={route('quality-docs.index')}>
+                            <Card className="bg-white dark:bg-gray-800 shadow-sm border-l-4 border-l-blue-500 hover:bg-blue-50/50 transition-colors cursor-pointer">
+                                <CardContent className="p-6 flex items-center justify-between">
+                                    <div>
+                                        <p className="text-sm font-medium text-muted-foreground">เอกสารทั้งหมด</p>
+                                        <h3 className="text-2xl font-bold mt-1">{stats.total}</h3>
+                                    </div>
+                                    <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+                                        <FileText className="h-5 w-5" />
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </Link>
+                        
+                        <Link href={route('quality-docs.index', { status: 'published' })}>
+                            <Card className="bg-white dark:bg-gray-800 shadow-sm border-l-4 border-l-green-500 hover:bg-green-50/50 transition-colors cursor-pointer">
+                                <CardContent className="p-6 flex items-center justify-between">
+                                    <div>
+                                        <p className="text-sm font-medium text-muted-foreground">ใช้งานจริง</p>
+                                        <h3 className="text-2xl font-bold mt-1">{stats.published}</h3>
+                                    </div>
+                                    <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center text-green-600">
+                                        <CheckCircle className="h-5 w-5" />
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </Link>
+
+                        <Link href={route('quality-docs.index', { status: 'review' })}>
+                            <Card className="bg-white dark:bg-gray-800 shadow-sm border-l-4 border-l-yellow-500 hover:bg-yellow-50/50 transition-colors cursor-pointer">
+                                <CardContent className="p-6 flex items-center justify-between">
+                                    <div>
+                                        <p className="text-sm font-medium text-muted-foreground">รออนุมัติ</p>
+                                        <h3 className="text-2xl font-bold mt-1">{stats.review}</h3>
+                                    </div>
+                                    <div className="h-10 w-10 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600">
+                                        <Clock className="h-5 w-5" />
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </Link>
+
+                        <Link href={route('quality-docs.index', { status: 'draft' })}>
+                            <Card className="bg-white dark:bg-gray-800 shadow-sm border-l-4 border-l-gray-500 hover:bg-gray-50/50 transition-colors cursor-pointer">
+                                <CardContent className="p-6 flex items-center justify-between">
+                                    <div>
+                                        <p className="text-sm font-medium text-muted-foreground">ฉบับร่าง</p>
+                                        <h3 className="text-2xl font-bold mt-1">{stats.draft}</h3>
+                                    </div>
+                                    <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-600">
+                                        <File className="h-5 w-5" />
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </Link>
                     </div>
                 )}
 

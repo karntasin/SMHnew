@@ -5,10 +5,7 @@ axios.defaults.baseURL = window.location.origin;
 axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
 axios.defaults.withCredentials = true;
 
-// Add CSRF token to all requests
-const token = document.head.querySelector('meta[name="csrf-token"]');
-if (token) {
-    axios.defaults.headers.common['X-CSRF-TOKEN'] = token.getAttribute('content');
-}
+// Axios automatically handles CSRF via the XSRF-TOKEN cookie set by Laravel
+// We do not need to manually set the header from the meta tag, as that can become stale in an SPA
 
 export default axios;

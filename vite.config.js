@@ -4,6 +4,7 @@ import {
     defineConfig
 } from 'vite';
 import tailwindcss from "@tailwindcss/vite";
+import path from 'path';
 
 export default defineConfig({
     plugins: [
@@ -15,6 +16,11 @@ export default defineConfig({
         react(),
         tailwindcss(),
     ],
+    resolve: {
+        alias: {
+            '@': path.resolve(__dirname, 'resources/js'),
+        },
+    },
     esbuild: {
         jsx: 'automatic',
     },

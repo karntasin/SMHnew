@@ -29,3 +29,9 @@ createInertiaApp({
 
 // This will set light / dark mode on load...
 initializeTheme();
+
+// Reload page if a dynamic import fails (e.g. after a new deployment)
+window.addEventListener('vite:preloadError', (event) => {
+    event.preventDefault();
+    window.location.reload();
+});
