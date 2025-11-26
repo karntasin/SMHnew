@@ -42,6 +42,17 @@ import { Textarea } from '@/components/ui/textarea';
 import { Plus, Search, BarChart2, MoreVertical, Pencil, Trash } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
+interface Department {
+    id: number;
+    name: string;
+}
+
+interface Team {
+    id: number;
+    abbreviation: string;
+    name_th: string;
+}
+
 interface Indicator {
     id: number;
     code: string;
@@ -54,15 +65,25 @@ interface Indicator {
     is_active: boolean;
     description: string;
     formula_description: string;
+    department?: Department;
+    team?: Team;
 }
 
-export default function Index({ indicators }: { indicators: Indicator[] }) {
+export default function Index({ indicators, type, departments, teams }: { 
+    indicators: Indicator[], 
+    type: 'department' | 'ha_team' | 'organization',
+    departments: Department[],
+    teams: Team[]
+}) {
     const [isOpen, setIsOpen] = useState(false);
     const [search, setSearch] = useState('');
     const [editingIndicator, setEditingIndicator] = useState<Indicator | null>(null);
     const [deleteId, setDeleteId] = useState<number | null>(null);
 
     const { data, setData, post, put, processing, errors, reset } = useForm({
+        type: type,
+        department_id: '',
+        team_id: '',
         code: '',
         name: '',
         category: 'Clinical',
@@ -78,6 +99,9 @@ export default function Index({ indicators }: { indicators: Indicator[] }) {
     useEffect(() => {
         if (editingIndicator) {
             setData({
+                type: type,
+                department_id: editingIndicator.department?.id.toString() || '',
+                team_id: editingIndicator.team?.id.toString() || '',
                 code: editingIndicator.code || '',
                 name: editingIndicator.name || '',
                 category: editingIndicator.category || 'Clinical',
@@ -92,8 +116,21 @@ export default function Index({ indicators }: { indicators: Indicator[] }) {
             setIsOpen(true);
         } else {
             reset();
+            setData('type', type);
         }
-    }, [editingIndicator]);
+    }, [editingIndicator, type]);
+
+    const getPageTitle = () => {
+        switch(type) {
+            case 'organization': return 'ตัวชี้วัดคุณภาพ (ระดับองค์กร)';
+            case 'department': return 'ตัวชี้วัดคุณภาพ (ระดับแผนก)';
+            case 'ha_team': return 'ตัวชี้วัดคุณภาพ (ระดับทีม)';
+            default: return 'ตัวชี้วัดคุณภาพ';
+        }
+    };
+    const pageTitle = getPageTitle();
+    
+    const breadcrumbTitle = type === 'department' ? 'KPIs (Department)' : (type === 'ha_team' ? 'KPIs (Team)' : 'KPIs (Organization)');
 
     const handleCreate = () => {
         setEditingIndicator(null);
@@ -141,15 +178,43 @@ export default function Index({ indicators }: { indicators: Indicator[] }) {
     return (
         <AppLayout breadcrumbs={[
             { title: 'ระบบงานคุณภาพ', href: '#' },
-            { title: 'ตัวชี้วัดคุณภาพ', href: route('quality-indicators.index') }
+            { title: breadcrumbTitle, href: route('quality-indicators.index', { type }) }
         ]}>
-            <Head title='Quality Indicators' />
+            <Head title={pageTitle} />
 
             <div className='p-6 space-y-6'>
+                {/* Type Selection Tabs */}
+                <div className="flex space-x-2 border-b pb-4">
+                    <Link href={route('quality-indicators.index', { type: 'organization' })}>
+                        <Button variant={type === 'organization' ? 'default' : 'outline'} className="gap-2">
+                            <BarChart2 className="w-4 h-4" /> ระดับองค์กร
+                        </Button>
+                    </Link>
+                    <Link href={route('quality-indicators.index', { type: 'department' })}>
+                        <Button variant={type === 'department' ? 'default' : 'outline'} className="gap-2">
+                            <BarChart2 className="w-4 h-4" /> ระดับแผนก/ฝ่าย
+                        </Button>
+                    </Link>
+                    <Link href={route('quality-indicators.index', { type: 'ha_team' })}>
+                        <Button variant={type === 'ha_team' ? 'default' : 'outline'} className="gap-2">
+                            <BarChart2 className="w-4 h-4" /> ระดับทีม
+                        </Button>
+                    </Link>
+                </div>
+
                 <div className='flex justify-between items-center'>
                     <div>
-                        <h2 className='text-2xl font-bold tracking-tight'>ตัวชี้วัดคุณภาพ (Quality Indicators)</h2>
-                        <p className='text-muted-foreground'>จัดการและติดตามตัวชี้วัดตามมาตรฐาน HA/สรพ.</p>
+                        <h2 className='text-2xl font-bold tracking-tight flex items-center gap-2'>
+                            <BarChart2 className='h-6 w-6' />
+                            {pageTitle}
+                        </h2>
+                        <p className='text-muted-foreground'>
+                            {type === 'department' 
+                                ? 'บริหารจัดการตัวชี้วัดคุณภาพระดับแผนก/หน่วยงาน' 
+                                : (type === 'ha_team' 
+                                    ? 'บริหารจัดการตัวชี้วัดคุณภาพระดับทีมนำทางคลินิก (PCT/Teams)'
+                                    : 'บริหารจัดการตัวชี้วัดคุณภาพระดับองค์กร')}
+                        </p>
                     </div>
                     <div className='flex gap-2'>
                         <Button variant='outline' asChild>
@@ -235,6 +300,42 @@ export default function Index({ indicators }: { indicators: Indicator[] }) {
                             </DialogDescription>
                         </DialogHeader>
                         <form onSubmit={handleSubmit} className='space-y-4'>
+                            {type === 'department' ? (
+                                <div className='space-y-2'>
+                                    <Label htmlFor='department_id'>แผนก/หน่วยงาน</Label>
+                                    <Select value={data.department_id} onValueChange={v => setData('department_id', v)}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder='เลือกแผนก' />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {departments.map(dept => (
+                                                <SelectItem key={dept.id} value={dept.id.toString()}>
+                                                    {dept.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    {errors.department_id && <p className='text-red-500 text-sm'>{errors.department_id}</p>}
+                                </div>
+                            ) : (
+                                <div className='space-y-2'>
+                                    <Label htmlFor='team_id'>ทีม HA</Label>
+                                    <Select value={data.team_id} onValueChange={v => setData('team_id', v)}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder='เลือกทีม' />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {teams.map(team => (
+                                                <SelectItem key={team.id} value={team.id.toString()}>
+                                                    {team.abbreviation} - {team.name_th}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    {errors.team_id && <p className='text-red-500 text-sm'>{errors.team_id}</p>}
+                                </div>
+                            )}
+
                             <div className='grid grid-cols-2 gap-4'>
                                 <div className='space-y-2'>
                                     <Label htmlFor='code'>รหัส (Code)</Label>

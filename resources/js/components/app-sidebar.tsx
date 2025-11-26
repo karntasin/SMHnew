@@ -49,8 +49,8 @@ function RenderMenu({ items, level = 0 }: { items: MenuItem[]; level?: number })
         const indentClass = level > 0 ? `pl-${4 + level * 3}` : '';
         
         const activeClass = isActive
-          ? 'bg-primary/10 text-primary font-medium'
-          : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground';
+          ? 'bg-primary/10 text-primary font-semibold shadow-sm translate-x-1'
+          : 'text-muted-foreground hover:bg-primary/5 hover:text-primary hover:translate-x-1';
 
         if (!menu.route && !hasChildren) return null;
 
@@ -74,7 +74,7 @@ function RenderMenu({ items, level = 0 }: { items: MenuItem[]; level?: number })
                   <CollapsibleTrigger asChild>
                     <SidebarMenuButton 
                       className={cn(
-                        `group flex items-center justify-between rounded-md transition-colors ${indentClass}`,
+                        `group flex items-center justify-between rounded-md transition-all duration-200 ease-in-out ${indentClass}`,
                         activeClass,
                         level === 0 ? 'py-3 px-4 my-1' : 'py-2 px-3',
                         'h-auto'
@@ -84,11 +84,11 @@ function RenderMenu({ items, level = 0 }: { items: MenuItem[]; level?: number })
                         <Icon className="size-4 mr-3 opacity-80 group-hover:opacity-100 shrink-0" />
                         <span className="whitespace-normal leading-tight">{t(menu.title)}</span>
                       </div>
-                      <ChevronDown className="size-4 opacity-50 group-hover:opacity-70 transition-transform group-data-[state=open]/collapsible:rotate-180 shrink-0 ml-2" />
+                      <ChevronRight className="size-4 opacity-50 group-hover:opacity-100 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90 shrink-0 ml-2" />
                     </SidebarMenuButton>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
-                    <SidebarMenu className="ml-2 border-l border-muted pl-2">
+                    <SidebarMenu className="ml-2 border-l-2 border-primary/20 pl-2 my-1">
                       <RenderMenu items={children} level={level + 1} />
                     </SidebarMenu>
                   </CollapsibleContent>
@@ -97,7 +97,7 @@ function RenderMenu({ items, level = 0 }: { items: MenuItem[]; level?: number })
                 <SidebarMenuButton 
                   asChild 
                   className={cn(
-                    `group flex items-center rounded-md transition-colors ${indentClass}`,
+                    `group flex items-center rounded-md transition-all duration-200 ease-in-out ${indentClass}`,
                     activeClass,
                     level === 0 ? 'py-3 px-4 my-1' : 'py-2 px-3',
                     'h-auto'
@@ -153,10 +153,10 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon" variant="inset" className="border-r bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <SidebarHeader className="px-4 py-3 border-b">
+      <SidebarHeader className="px-4 py-4 border-b">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild className="hover:bg-transparent">
+            <SidebarMenuButton size="lg" asChild className="h-auto py-1 hover:bg-transparent active:bg-transparent data-[active=true]:bg-transparent">
               <Link href="/dashboard" prefetch>
                 <AppLogo />
               </Link>

@@ -11,12 +11,25 @@ use Spatie\Permission\Models\Role;
 
 class UserController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $users = User::with('roles')->latest()->paginate(10);
+        $query = User::with('roles')->latest();
+
+        if ($request->has('search')) {
+            $search = $request->input('search');
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%");
+            });
+        }
+
+        $users = $query->paginate(10)->withQueryString();
+        $allRoles = Role::all(['id', 'name']);
 
         return Inertia::render('users/Index', [
             'users' => $users,
+            'filters' => $request->only(['search']),
+            'allRoles' => $allRoles,
         ]);
     }
 
@@ -46,7 +59,7 @@ class UserController extends Controller
 
         $user->assignRole($validated['role']);
 
-        return redirect()->route('users.index')->with('success', 'User berhasil dibuat.');
+        return redirect()->route('users.index')->with('success', 'สร้างผู้ใช้งานสำเร็จ');
     }
 
     public function edit(User $user)
@@ -79,14 +92,14 @@ class UserController extends Controller
 
         $user->syncRoles([$validated['role']]);
 
-        return redirect()->route('users.index')->with('success', 'User berhasil diperbarui.');
+        return redirect()->route('users.index')->with('success', 'อัปเดตข้อมูลผู้ใช้งานสำเร็จ');
     }
 
     public function destroy(User $user)
     {
         $user->delete();
 
-        return redirect()->route('users.index')->with('success', 'User berhasil dihapus.');
+        return redirect()->route('users.index')->with('success', 'ลบผู้ใช้งานสำเร็จ');
     }
 
     public function resetPassword(User $user)
@@ -95,6 +108,51 @@ class UserController extends Controller
             'password' => Hash::make('ResetPasswordNya'),
         ]);
 
-        return redirect()->back()->with('success', 'Password berhasil direset ke default.');
+        return redirect()->back()->with('success', 'รีเซ็ตรหัสผ่านเป็นค่าเริ่มต้นสำเร็จ');
+    }
+
+    public function updateRoles(Request $request, User $user)
+    {
+        $request->validate([
+            'roles' => 'array'
+        ]);
+
+        $user->syncRoles($request->roles);
+
+        return back()->with('success', 'อัปเดตบทบาทเรียบร้อยแล้ว');
+    }
+
+    public function bulkRolesIndex()
+    {
+        $users = User::with('roles')->orderBy('name')->get(['id', 'name', 'email']);
+        $roles = Role::all(['id', 'name']);
+
+        return Inertia::render('users/BulkRoles', [
+            'users' => $users,
+            'roles' => $roles,
+        ]);
+    }
+
+    public function bulkRolesUpdate(Request $request)
+    {
+        $validated = $request->validate([
+            'userIds' => ['required', 'array'],
+            'userIds.*' => ['exists:users,id'],
+            'roleName' => ['required', 'exists:roles,name'],
+            'action' => ['required', 'in:sync'],
+        ]);
+
+        $users = User::whereIn('id', $validated['userIds'])->get();
+        $role = $validated['roleName'];
+
+        foreach ($users as $user) {
+            // Always sync to enforce single role
+            $user->syncRoles([$role]);
+        }
+
+        // Clear permission cache to ensure fresh data
+        app()->make(\Spatie\Permission\PermissionRegistrar::class)->forgetCachedPermissions();
+
+        return redirect()->route('users.bulk-roles')->with('success', 'อัปเดตบทบาทผู้ใช้งานเรียบร้อยแล้ว');
     }
 }

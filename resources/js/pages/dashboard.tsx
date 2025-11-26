@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Head, router } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
@@ -83,9 +83,14 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
   const [startDate, setStartDate] = useState(filter?.start_date || '');
   const [endDate, setEndDate] = useState(filter?.end_date || '');
 
+  useEffect(() => {
+    setStartDate(filter?.start_date || '');
+    setEndDate(filter?.end_date || '');
+  }, [filter]);
+
   const handleFilterSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    router.get('/dashboard', { start_date: startDate, end_date: endDate });
+    router.get('/dashboard', { start_date: startDate, end_date: endDate }, { preserveScroll: true });
   };
 
   const formatCurrency = (value: number) => {

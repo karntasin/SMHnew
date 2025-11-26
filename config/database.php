@@ -3,7 +3,6 @@
 use Illuminate\Support\Str;
 
 return [
-
     /*
     |--------------------------------------------------------------------------
     | Default Database Connection Name
@@ -30,7 +29,6 @@ return [
     */
 
     'connections' => [
-
         'sqlite' => [
             'driver' => 'sqlite',
             'url' => env('DB_URL'),
@@ -123,18 +121,17 @@ return [
 
         'hosxp' => [
             'driver' => 'mysql',
-            'host' => env('HOSXP_DB_HOST', '192.168.1.191'),
+            'host' => env('HOSXP_DB_HOST', '127.0.0.1'),
             'port' => env('HOSXP_DB_PORT', '3306'),
             'database' => env('HOSXP_DB_DATABASE', 'hos'),
             'username' => env('HOSXP_DB_USERNAME', 'sa'),
             'password' => env('HOSXP_DB_PASSWORD', 'sa'),
-            'charset' => 'utf8mb4',
-            'collation' => 'utf8mb4_unicode_ci',
+            'charset' => 'utf8',
+            'collation' => 'utf8_general_ci',
             'prefix' => '',
             'strict' => false,
             'engine' => null,
         ],
-
     ],
 
     /*
@@ -165,7 +162,6 @@ return [
     */
 
     'redis' => [
-
         'client' => env('REDIS_CLIENT', 'phpredis'),
 
         'options' => [
@@ -191,7 +187,5 @@ return [
             'port' => env('REDIS_PORT', '6379'),
             'database' => env('REDIS_CACHE_DB', '1'),
         ],
-
     ],
-
 ];

@@ -19,6 +19,7 @@ use App\Http\Controllers\LanguageController;
 use App\Http\Controllers\Vehicle\VehicleBookingController;
 use App\Http\Controllers\Vehicle\VehicleController;
 use App\Http\Controllers\Vehicle\VehicleSettingController;
+use App\Http\Controllers\Ic\IcController;
 
 Route::redirect('/', '/login')->name('home');
 
@@ -32,8 +33,11 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
     Route::resource('menus', MenuController::class);
     Route::post('menus/reorder', [MenuController::class, 'reorder'])->name('menus.reorder');
     Route::resource('permissions', PermissionController::class);
+    Route::get('/users/bulk-roles', [UserController::class, 'bulkRolesIndex'])->name('users.bulk-roles');
+    Route::post('/users/bulk-roles', [UserController::class, 'bulkRolesUpdate'])->name('users.bulk-roles.update');
     Route::resource('users', UserController::class);
     Route::put('/users/{user}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');
+    Route::put('/users/{user}/roles', [UserController::class, 'updateRoles'])->name('users.update-roles');
     Route::get('/settingsapp', [SettingAppController::class, 'edit'])->name('setting.edit');
     Route::post('/settingsapp', [SettingAppController::class, 'update'])->name('setting.update');
     Route::get('/audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');
@@ -45,6 +49,9 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
     Route::post('/files', [UserFileController::class, 'store'])->name('files.store');
     Route::delete('/files/{id}', [UserFileController::class, 'destroy'])->name('files.destroy');
     Route::resource('media', MediaFolderController::class);
+
+    // Quality Hub (ศูนย์รวมงานคุณภาพ)
+    Route::get('/quality', [App\Http\Controllers\QualityHubController::class, 'index'])->name('quality.index');
 
     // Quality Document Repository
     Route::prefix('quality-docs')->name('quality-docs.')->group(function () {
@@ -114,6 +121,8 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::put('/settings/categories/{category}', [VehicleSettingController::class, 'updateCategory'])->name('settings.categories.update');
         Route::delete('/settings/categories/{category}', [VehicleSettingController::class, 'destroyCategory'])->name('settings.categories.destroy');
     });
+
+
 
     // Document Management System (ระบบรับส่งหนังสือ)
     Route::prefix('documents')->name('documents.')->group(function () {
@@ -209,6 +218,67 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::post('/utility/checklist', [App\Http\Controllers\EnvUtilityController::class, 'storeChecklist'])->name('utility.store-checklist');
         Route::post('/utility/check', [App\Http\Controllers\EnvUtilityController::class, 'storeCheck'])->name('utility.store-check');
     });
+
+    // Knowledge Management (KM)
+    Route::redirect('/km', '/km/dashboard');
+    Route::prefix('km')->name('km.')->group(function () {
+        Route::get('/dashboard', [App\Http\Controllers\Km\KmDashboardController::class, 'index'])->name('dashboard');
+        
+        // Knowledge Assets (Document Repository)
+        Route::resource('assets', App\Http\Controllers\Km\KmAssetController::class);
+        
+        // E-Learning (Aliased to HRD System)
+        Route::prefix('learn')->name('learn.')->group(function () {
+            Route::get('/', [App\Http\Controllers\HrdController::class, 'index'])->name('index');
+            Route::get('/dashboard', [App\Http\Controllers\HrdController::class, 'dashboard'])->name('dashboard');
+            Route::get('/my-training', [App\Http\Controllers\HrdController::class, 'myTraining'])->name('my-training');
+            Route::post('/external-records', [App\Http\Controllers\HrdController::class, 'storeExternalRecord'])->name('external-records.store');
+            Route::get('/my-skills', [App\Http\Controllers\HrdController::class, 'mySkills'])->name('my-skills');
+            
+            // Course Routes
+            Route::get('/courses', [App\Http\Controllers\HrdController::class, 'index'])->name('courses.index');
+            Route::get('/courses/create', [App\Http\Controllers\HrdController::class, 'create'])->name('courses.create');
+            Route::post('/courses', [App\Http\Controllers\HrdController::class, 'store'])->name('courses.store');
+            Route::get('/courses/{course}', [App\Http\Controllers\HrdController::class, 'show'])->name('courses.show');
+            Route::post('/courses/{course}/enroll', [App\Http\Controllers\HrdController::class, 'enroll'])->name('courses.enroll');
+            Route::get('/courses/{course}/learn/{lesson}', [App\Http\Controllers\HrdController::class, 'learn'])->name('courses.learn');
+            Route::post('/courses/{course}/learn/{lesson}/complete', [App\Http\Controllers\HrdController::class, 'completeLesson'])->name('courses.complete-lesson');
+            Route::get('/courses/{course}/quiz/{quiz}', [App\Http\Controllers\HrdController::class, 'showQuiz'])->name('courses.quiz');
+            Route::post('/courses/{course}/quiz/{quiz}/submit', [App\Http\Controllers\HrdController::class, 'submitQuiz'])->name('courses.quiz.submit');
+            
+            // Builder
+            Route::get('/courses/{course}/builder', [App\Http\Controllers\HrdCourseBuilderController::class, 'edit'])->name('courses.builder');
+            Route::put('/courses/{course}/builder', [App\Http\Controllers\HrdCourseBuilderController::class, 'update'])->name('courses.builder.update');
+        });
+    });
+
+    // Medical Record Accuracy (MRA)
+    Route::prefix('mra')->name('mra.')->group(function () {
+        Route::get('/search-patient', [App\Http\Controllers\Mra\MraController::class, 'searchPatient'])->name('search-patient');
+        Route::get('/', [App\Http\Controllers\Mra\MraController::class, 'index'])->name('index');
+        Route::get('/dashboard', [App\Http\Controllers\Mra\MraController::class, 'dashboard'])->name('dashboard');
+        Route::get('/create', [App\Http\Controllers\Mra\MraController::class, 'create'])->name('create');
+        Route::post('/', [App\Http\Controllers\Mra\MraController::class, 'store'])->name('store');
+        Route::get('/{audit}', [App\Http\Controllers\Mra\MraController::class, 'show'])->name('show');
+        Route::put('/{audit}', [App\Http\Controllers\Mra\MraController::class, 'update'])->name('update');
+    });
+
+    // Infection Control (IC)
+    Route::prefix('ic')->name('ic.')->group(function () {
+        Route::get('/', [IcController::class, 'index'])->name('index');
+        Route::get('/surveillance', [IcController::class, 'surveillance'])->name('surveillance');
+        Route::get('/surveillance/search', [IcController::class, 'searchAdmissions'])->name('surveillance.search');
+        Route::post('/surveillance', [IcController::class, 'storeSurveillance'])->name('surveillance.store');
+        Route::get('/incidents', [IcController::class, 'incidents'])->name('incidents');
+        Route::post('/incidents', [IcController::class, 'storeIncident'])->name('incidents.store');
+    });
+
+    // Administrative Hub
+    Route::get('/admin-hub', [App\Http\Controllers\AdminHubController::class, 'index'])->name('admin.hub');
+
+    // HOSxP Reports
+    Route::get('/hosxp-reports', [App\Http\Controllers\HosxpReportController::class, 'index'])->name('hosxp-reports.index');
+    Route::get('/hosxp-reports/generate', [App\Http\Controllers\HosxpReportController::class, 'generate'])->name('hosxp-reports.generate');
 });
 
 // Locale switcher (outside auth)

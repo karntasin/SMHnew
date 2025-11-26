@@ -1,0 +1,212 @@
+import React from 'react';
+import { Head, useForm } from '@inertiajs/react';
+import AppLayout from '@/layouts/app-layout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Plus, AlertTriangle } from 'lucide-react';
+import { toast } from 'sonner';
+
+interface Incident {
+  id: number;
+  incident_date: string;
+  incident_type: string;
+  location: string;
+  severity: string;
+  status: string;
+  reporter: { name: string };
+}
+
+interface Props {
+  incidents: {
+    data: Incident[];
+    links: any[];
+  };
+}
+
+export default function IcIncidents({ incidents }: Props) {
+  const { data, setData, post, processing, reset, errors } = useForm({
+    incident_date: new Date().toISOString().slice(0, 16), // datetime-local format
+    location: '',
+    incident_type: '',
+    description: '',
+    severity: 'low',
+    action_taken: '',
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    post('/ic/incidents', {
+      onSuccess: () => {
+        toast.success('รายงานอุบัติการณ์เรียบร้อย');
+        reset();
+      },
+    });
+  };
+
+  return (
+    <AppLayout breadcrumbs={[{ title: 'IC', href: '/ic' }, { title: 'Incidents', href: '#' }]}>
+      <Head title="IC Incidents" />
+
+      <div className="p-6 space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold">รายงานอุบัติการณ์ (Incidents)</h1>
+            <p className="text-muted-foreground">แจ้งเหตุเข็มตำ สัมผัสสารคัดหลั่ง หรือการละเมิดแนวปฏิบัติ</p>
+          </div>
+          
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="destructive"><AlertTriangle className="mr-2 h-4 w-4" /> แจ้งเหตุใหม่</Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>แจ้งอุบัติการณ์ IC</DialogTitle>
+              </DialogHeader>
+              
+              <form onSubmit={handleSubmit} className="space-y-4 py-4">
+                <div className="space-y-2">
+                    <Label>วันเวลาที่เกิดเหตุ</Label>
+                    <Input 
+                        type="datetime-local" 
+                        value={data.incident_date} 
+                        onChange={e => setData('incident_date', e.target.value)} 
+                    />
+                    {errors.incident_date && <p className="text-red-500 text-xs">{errors.incident_date}</p>}
+                </div>
+
+                <div className="space-y-2">
+                    <Label>สถานที่เกิดเหตุ</Label>
+                    <Input 
+                        placeholder="เช่น หอผู้ป่วยอายุรกรรม, ห้องฉุกเฉิน" 
+                        value={data.location} 
+                        onChange={e => setData('location', e.target.value)} 
+                    />
+                    {errors.location && <p className="text-red-500 text-xs">{errors.location}</p>}
+                </div>
+
+                <div className="space-y-2">
+                    <Label>ประเภทอุบัติการณ์</Label>
+                    <Select value={data.incident_type} onValueChange={v => setData('incident_type', v)}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="เลือกประเภท" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="Needle Stick">Needle Stick Injury (เข็มตำ)</SelectItem>
+                            <SelectItem value="Blood/Body Fluid Exposure">สัมผัสเลือด/สารคัดหลั่ง</SelectItem>
+                            <SelectItem value="PPE Breach">การใช้อุปกรณ์ป้องกันไม่ถูกต้อง (PPE Breach)</SelectItem>
+                            <SelectItem value="Environment">สิ่งแวดล้อมไม่ปลอดภัย</SelectItem>
+                            <SelectItem value="Other">อื่นๆ</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    {errors.incident_type && <p className="text-red-500 text-xs">{errors.incident_type}</p>}
+                </div>
+
+                <div className="space-y-2">
+                    <Label>ระดับความรุนแรง</Label>
+                    <Select value={data.severity} onValueChange={v => setData('severity', v)}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="เลือกระดับ" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="low">Low (เล็กน้อย)</SelectItem>
+                            <SelectItem value="medium">Medium (ปานกลาง)</SelectItem>
+                            <SelectItem value="high">High (สูง)</SelectItem>
+                            <SelectItem value="critical">Critical (วิกฤต)</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                <div className="space-y-2">
+                    <Label>รายละเอียดเหตุการณ์</Label>
+                    <Textarea 
+                        value={data.description} 
+                        onChange={e => setData('description', e.target.value)} 
+                        rows={3}
+                    />
+                    {errors.description && <p className="text-red-500 text-xs">{errors.description}</p>}
+                </div>
+
+                <div className="space-y-2">
+                    <Label>การแก้ไขเบื้องต้น (ถ้ามี)</Label>
+                    <Textarea 
+                        value={data.action_taken} 
+                        onChange={e => setData('action_taken', e.target.value)} 
+                        rows={2}
+                    />
+                </div>
+
+                <Button type="submit" className="w-full" variant="destructive" disabled={processing}>ส่งรายงาน</Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        <Card>
+            <CardHeader>
+                <CardTitle>ประวัติอุบัติการณ์</CardTitle>
+            </CardHeader>
+            <CardContent>
+                <div className="rounded-md border">
+                    <table className="w-full text-sm text-left">
+                        <thead className="bg-muted/50 text-muted-foreground">
+                            <tr>
+                                <th className="p-3">วันเวลา</th>
+                                <th className="p-3">ประเภท</th>
+                                <th className="p-3">สถานที่</th>
+                                <th className="p-3">ความรุนแรง</th>
+                                <th className="p-3">สถานะ</th>
+                                <th className="p-3">ผู้รายงาน</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {incidents.data.length === 0 ? (
+                                <tr>
+                                    <td colSpan={6} className="p-4 text-center text-muted-foreground">ไม่พบข้อมูล</td>
+                                </tr>
+                            ) : (
+                                incidents.data.map((item) => (
+                                    <tr key={item.id} className="border-t hover:bg-muted/50">
+                                        <td className="p-3">{new Date(item.incident_date).toLocaleString('th-TH')}</td>
+                                        <td className="p-3 font-medium">{item.incident_type}</td>
+                                        <td className="p-3">{item.location}</td>
+                                        <td className="p-3">
+                                            <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                                                item.severity === 'critical' ? 'bg-red-500 text-white' :
+                                                item.severity === 'high' ? 'bg-orange-500 text-white' :
+                                                item.severity === 'medium' ? 'bg-yellow-500 text-black' :
+                                                'bg-green-500 text-white'
+                                            }`}>
+                                                {item.severity.toUpperCase()}
+                                            </span>
+                                        </td>
+                                        <td className="p-3">{item.status}</td>
+                                        <td className="p-3">{item.reporter?.name}</td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </CardContent>
+        </Card>
+      </div>
+    </AppLayout>
+  );
+}

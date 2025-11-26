@@ -1,9 +1,21 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { type BreadcrumbItem } from '@/types';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import {
   AlertDialog,
   AlertDialogTrigger,
@@ -15,29 +27,59 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from '@/components/ui/alert-dialog';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { 
+  User as UserIcon, 
+  Plus, 
+  Search, 
+  MoreHorizontal, 
+  Pencil, 
+  Trash2, 
+  KeyRound,
+  Mail,
+  Shield
+} from 'lucide-react';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
-import 'dayjs/locale/id';
+import 'dayjs/locale/th';
+import { useDebounce } from 'use-debounce';
 
 dayjs.extend(relativeTime);
-dayjs.locale('id');
+dayjs.locale('th');
 
 const breadcrumbs: BreadcrumbItem[] = [
   {
-    title: 'User Management',
+    title: 'การจัดการผู้ใช้งาน',
     href: '/users',
   },
 ];
+
+interface Role {
+  id: number;
+  name: string;
+}
 
 interface User {
   id: number;
   name: string;
   email: string;
   created_at: string;
-  roles: {
-    id: number;
-    name: string;
-  }[];
+  roles: Role[];
 }
 
 interface Props {
@@ -46,7 +88,14 @@ interface Props {
     current_page: number;
     last_page: number;
     links: { url: string | null; label: string; active: boolean }[];
+    total: number;
+    from: number;
+    to: number;
   };
+  filters?: {
+    search?: string;
+  };
+  allRoles: Role[];
 }
 
 function getInitials(name: string) {
@@ -54,124 +103,278 @@ function getInitials(name: string) {
     .split(' ')
     .map((n) => n[0])
     .join('')
-    .toUpperCase();
+    .toUpperCase()
+    .slice(0, 2);
 }
 
-export default function UserIndex({ users }: Props) {
+export default function UserIndex({ users, filters, allRoles }: Props) {
   const { delete: destroy, processing } = useForm();
+  const [searchTerm, setSearchTerm] = useState(filters?.search || '');
+  const [debouncedSearch] = useDebounce(searchTerm, 500);
+
+  // Role Management State
+  const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
+  const [isSavingRoles, setIsSavingRoles] = useState(false);
+
+  useEffect(() => {
+    if (debouncedSearch !== (filters?.search || '')) {
+      router.get(
+        '/users',
+        { search: debouncedSearch },
+        { preserveState: true, replace: true }
+      );
+    }
+  }, [debouncedSearch]);
 
   const handleDelete = (id: number) => {
     destroy(`/users/${id}`);
   };
 
   const handleResetPassword = (id: number) => {
-    router.put(`/users/${id}/reset-password`, {}, { preserveScroll: true });
+    if (confirm('คุณแน่ใจหรือไม่ว่าต้องการรีเซ็ตรหัสผ่านสำหรับผู้ใช้นี้?')) {
+      router.put(`/users/${id}/reset-password`, {}, { preserveScroll: true });
+    }
+  };
+
+  const openRoleModal = (user: User) => {
+    setSelectedUser(user);
+    setSelectedRoles(user.roles.map(r => r.name));
+    setIsRoleModalOpen(true);
+  };
+
+  const handleRoleSave = () => {
+    if (!selectedUser) return;
+    setIsSavingRoles(true);
+    router.put(`/users/${selectedUser.id}/roles`, {
+      roles: selectedRoles
+    }, {
+      onSuccess: () => {
+        setIsRoleModalOpen(false);
+        setIsSavingRoles(false);
+      },
+      onError: () => {
+        setIsSavingRoles(false);
+      }
+    });
+  };
+
+  const toggleRole = (roleName: string) => {
+    setSelectedRoles(prev => 
+      prev.includes(roleName) 
+        ? prev.filter(r => r !== roleName)
+        : [...prev, roleName]
+    );
   };
 
   return (
     <AppLayout breadcrumbs={breadcrumbs}>
-      <Head title="User Management" />
+      <Head title="การจัดการผู้ใช้งาน" />
       <div className="p-4 md:p-6 space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">User Management</h1>
-            <p className="text-muted-foreground">Manage user data and their roles within the system.</p>
+            <h1 className="text-2xl font-bold tracking-tight">การจัดการผู้ใช้งาน</h1>
+            <p className="text-muted-foreground">จัดการบัญชีผู้ใช้ บทบาท และสิทธิ์การเข้าถึง</p>
           </div>
-          <Link href="/users/create">
-            <Button className="w-full md:w-auto" size="sm">+ Add User</Button>
-          </Link>
+          <div className="flex flex-col md:flex-row gap-2">
+            <Link href={route('users.bulk-roles')}>
+              <Button variant="outline" className="w-full md:w-auto">
+                <Shield className="mr-2 h-4 w-4" /> จัดการบทบาทแบบกลุ่ม
+              </Button>
+            </Link>
+            <Link href="/users/create">
+              <Button className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700">
+                <Plus className="mr-2 h-4 w-4" /> เพิ่มผู้ใช้งานใหม่
+              </Button>
+            </Link>
+          </div>
         </div>
 
-        <div className="space-y-2 divide-y rounded-md border bg-background">
-          {users.data.length === 0 ? (
-            <div className="py-8 text-center text-muted-foreground">No user data available.</div>
-          ) : (
-            users.data.map((user) => (
-              <div
-                key={user.id}
-                className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-4 py-5 hover:bg-muted/50 transition"
-              >
-                {/* Avatar dan Informasi */}
-                <div className="flex items-start gap-4 flex-1">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-lg font-semibold text-primary">
-                    {getInitials(user.name)}
-                  </div>
-                  <div className="space-y-1">
-                    <div className="text-base font-medium">{user.name}</div>
-                    <div className="text-sm text-muted-foreground">{user.email}</div>
-                    <div className="text-xs text-muted-foreground italic">
-                      Registered {dayjs(user.created_at).fromNow()}
-                    </div>
-                    {user.roles.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {user.roles.map((role) => (
-                          <Badge key={role.id} variant="secondary" className="text-xs font-normal">
-                            {role.name}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Aksi */}
-                <div className="flex flex-wrap gap-2 md:justify-end">
-                  <Link href={`/users/${user.id}/edit`}>
-                    <Button size="sm" variant="outline">Edit</Button>
-                  </Link>
-
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button size="sm" variant="secondary">Reset</Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Reset Password?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Password for <strong>{user.name}</strong> will be reset to:
-                          <br />
-                          <code className="bg-muted rounded px-2 py-1 text-sm">ResetPasswordNya</code>
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => handleResetPassword(user.id)}
-                          disabled={processing}
-                        >
-                          Yes, Reset
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button size="sm" variant="destructive">Delete</Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Delete User?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          User <strong>{user.name}</strong> will be permanently deleted.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => handleDelete(user.id)}
-                          disabled={processing}
-                        >
-                          Yes, Delete
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </div>
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg font-medium">รายชื่อผู้ใช้งาน</CardTitle>
+              <div className="relative w-full md:w-64">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="search"
+                  placeholder="ค้นหาผู้ใช้งาน..."
+                  className="pl-9"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
               </div>
-            ))
-          )}
-        </div>
+            </div>
+            <CardDescription>
+              แสดง {users.from || 0} ถึง {users.to || 0} จากทั้งหมด {users.total} ผู้ใช้งาน
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[250px]">ผู้ใช้งาน</TableHead>
+                    <TableHead>บทบาท</TableHead>
+                    <TableHead>วันที่เข้าร่วม</TableHead>
+                    <TableHead className="text-right">การจัดการ</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {users.data.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                        ไม่พบข้อมูลผู้ใช้งาน
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    users.data.map((user) => (
+                      <TableRow key={user.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                              {getInitials(user.name)}
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{user.name}</span>
+                              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                <Mail className="h-3 w-3" /> {user.email}
+                              </span>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {user.roles.length > 0 ? (
+                              user.roles.map((role) => (
+                                <Badge key={role.id} variant="secondary" className="font-normal">
+                                  {role.name}
+                                </Badge>
+                              ))
+                            ) : (
+                              <span className="text-muted-foreground text-sm italic">ไม่มีบทบาท</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-sm">
+                          {dayjs(user.created_at).fromNow()}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0">
+                                <span className="sr-only">เปิดเมนู</span>
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuLabel>การจัดการ</DropdownMenuLabel>
+                              <DropdownMenuItem onClick={() => openRoleModal(user)}>
+                                <Shield className="mr-2 h-4 w-4" /> จัดการบทบาท
+                              </DropdownMenuItem>
+                              <Link href={`/users/${user.id}/edit`}>
+                                <DropdownMenuItem>
+                                  <Pencil className="mr-2 h-4 w-4" /> แก้ไขข้อมูล
+                                </DropdownMenuItem>
+                              </Link>
+                              <DropdownMenuItem onClick={() => handleResetPassword(user.id)}>
+                                <KeyRound className="mr-2 h-4 w-4" /> รีเซ็ตรหัสผ่าน
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-red-600 focus:text-red-600">
+                                    <Trash2 className="mr-2 h-4 w-4" /> ลบผู้ใช้งาน
+                                  </DropdownMenuItem>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>คุณแน่ใจหรือไม่?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      การกระทำนี้ไม่สามารถย้อนกลับได้ ระบบจะลบบัญชีผู้ใช้
+                                      <strong> {user.name}</strong> อย่างถาวร
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => handleDelete(user.id)}
+                                      className="bg-red-600 hover:bg-red-700"
+                                    >
+                                      ลบข้อมูล
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Pagination */}
+            {users.links.length > 3 && (
+              <div className="flex items-center justify-end space-x-2 py-4">
+                {users.links.map((link, i) => (
+                  <Button
+                    key={i}
+                    variant={link.active ? "default" : "outline"}
+                    size="sm"
+                    asChild
+                    disabled={!link.url}
+                    className={!link.url ? 'opacity-50 pointer-events-none' : ''}
+                  >
+                    <Link href={link.url || '#'}>
+                      <span dangerouslySetInnerHTML={{ __html: link.label }} />
+                    </Link>
+                  </Button>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Role Management Modal */}
+        <Dialog open={isRoleModalOpen} onOpenChange={setIsRoleModalOpen}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>จัดการบทบาทผู้ใช้งาน</DialogTitle>
+              <DialogDescription>
+                กำหนดบทบาทให้กับ <strong>{selectedUser?.name}</strong> เลือกบทบาทที่ต้องการด้านล่าง
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="space-y-4">
+                {allRoles.map((role) => (
+                  <div key={role.id} className="flex items-center space-x-2">
+                    <Checkbox 
+                      id={`role-${role.id}`} 
+                      checked={selectedRoles.includes(role.name)}
+                      onCheckedChange={() => toggleRole(role.name)}
+                    />
+                    <Label 
+                      htmlFor={`role-${role.id}`}
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                    >
+                      {role.name}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsRoleModalOpen(false)}>ยกเลิก</Button>
+              <Button onClick={handleRoleSave} disabled={isSavingRoles}>
+                {isSavingRoles ? 'กำลังบันทึก...' : 'บันทึกการเปลี่ยนแปลง'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </AppLayout>
   );

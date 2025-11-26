@@ -11,7 +11,7 @@ class RoleController extends Controller
 {
     public function index()
     {
-        $roles = Role::with('permissions')->get();
+        $roles = Role::with('permissions')->withCount('users')->get();
         $permissions = Permission::all()->groupBy('group');
 
         return Inertia::render('roles/Index', [

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\QualityDocument;
 use App\Models\Department;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -54,8 +55,11 @@ class QualityDocumentController extends Controller
     public function create()
     {
         $departments = Department::select('id', 'name')->get();
+        $teams = DB::table('teamha')->select('abbreviation', 'name_th')->get();
+        
         return Inertia::render('quality-docs/Create', [
-            'departments' => $departments
+            'departments' => $departments,
+            'teams' => $teams
         ]);
     }
 
@@ -67,6 +71,7 @@ class QualityDocumentController extends Controller
             'category' => 'required|string',
             'document_type' => 'required|string',
             'department_id' => 'required|exists:departments,id',
+            'owner_department' => 'nullable|string|exists:teamha,abbreviation',
             'description' => 'nullable|string',
             'effective_date' => 'required|date',
             'review_date' => 'nullable|date|after:effective_date',
@@ -84,6 +89,7 @@ class QualityDocumentController extends Controller
             'category' => $validated['category'],
             'document_type' => $validated['document_type'],
             'department_id' => $validated['department_id'],
+            'owner_department' => $validated['owner_department'] ?? null,
             'description' => $validated['description'],
             'effective_date' => $validated['effective_date'],
             'review_date' => $validated['review_date'],

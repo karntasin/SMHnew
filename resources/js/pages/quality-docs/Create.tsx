@@ -20,17 +20,24 @@ interface Department {
     name: string;
 }
 
-interface Props {
-    departments: Department[];
+interface Team {
+    abbreviation: string;
+    name_th: string;
 }
 
-export default function Create({ departments }: Props) {
+interface Props {
+    departments: Department[];
+    teams: Team[];
+}
+
+export default function Create({ departments, teams }: Props) {
     const { data, setData, post, processing, errors } = useForm({
         title: '',
         document_number: '',
         category: '',
         document_type: '',
         department_id: '',
+        owner_department: '',
         description: '',
         effective_date: '',
         review_date: '',
@@ -109,6 +116,23 @@ export default function Create({ departments }: Props) {
                                                 </SelectContent>
                                             </Select>
                                             {errors.department_id && <p className="text-sm text-red-500">{errors.department_id}</p>}
+                                        </div>
+                                        
+                                        <div className="space-y-2">
+                                            <Label htmlFor="owner_department">ทีมเจ้าของเอกสาร (HA Team)</Label>
+                                            <Select onValueChange={val => setData('owner_department', val)}>
+                                                <SelectTrigger className={errors.owner_department ? 'border-red-500' : ''}>
+                                                    <SelectValue placeholder="เลือกทีม" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {teams.map(team => (
+                                                        <SelectItem key={team.abbreviation} value={team.abbreviation}>
+                                                            {team.abbreviation} - {team.name_th}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            {errors.owner_department && <p className="text-sm text-red-500">{errors.owner_department}</p>}
                                         </div>
                                     </div>
 

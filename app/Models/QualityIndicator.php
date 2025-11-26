@@ -8,6 +8,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class QualityIndicator extends Model
 {
     protected $fillable = [
+        'type',
+        'department_id',
+        'team_id',
         'code',
         'name',
         'description',
@@ -24,6 +27,16 @@ class QualityIndicator extends Model
         'is_active' => 'boolean',
         'target_value' => 'decimal:2',
     ];
+
+    public function department()
+    {
+        return $this->belongsTo(Department::class);
+    }
+
+    public function team()
+    {
+        return $this->belongsTo(TeamHa::class, 'team_id'); // Assuming TeamHa model exists or will be created? No, I created table 'teamha' but maybe not model.
+    }
 
     public function entries(): HasMany
     {

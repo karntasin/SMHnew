@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import AppLayout from '@/layouts/app-layout';
-import { Head, useForm } from '@inertiajs/react';
+import { Head, useForm, Link } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -38,6 +38,7 @@ interface Entry {
 
 interface Indicator {
     id: number;
+    type: string;
     code: string;
     name: string;
     description: string;
@@ -105,20 +106,27 @@ export default function Show({ indicator }: { indicator: Indicator }) {
 
     return (
         <AppLayout breadcrumbs={[
-            { title: 'ตัวชี้วัดคุณภาพ', href: route('quality-indicators.index') },
-            { title: indicator.code || indicator.name, href: '#' }
+            { title: 'ตัวชี้วัดคุณภาพ', href: route('quality-indicators.index', { type: indicator.type }) },
+            { title: indicator.code, href: '#' }
         ]}>
-            <Head title={indicator.name} />
+            <Head title={`${indicator.code} - ${indicator.name}`} />
 
             <div className="p-6 space-y-6">
-                <div className="flex items-center gap-4">
-                    <Button variant="ghost" size="icon" onClick={() => window.history.back()}>
-                        <ArrowLeft className="h-4 w-4" />
-                    </Button>
+                <div className="flex items-start justify-between">
                     <div>
-                        <h2 className="text-2xl font-bold tracking-tight">{indicator.name}</h2>
-                        <p className="text-muted-foreground">{indicator.code} • {indicator.category}</p>
+                        <Button variant="ghost" className="mb-2 pl-0 hover:pl-2 transition-all" asChild>
+                            <Link href={route('quality-indicators.index', { type: indicator.type })}>
+                                <ArrowLeft className="mr-2 h-4 w-4" />
+                                ย้อนกลับ
+                            </Link>
+                        </Button>
+                        <h2 className="text-2xl font-bold tracking-tight">{indicator.code}: {indicator.name}</h2>
+                        <p className="text-muted-foreground mt-1">{indicator.description}</p>
                     </div>
+                    <Button onClick={() => setIsOpen(true)}>
+                        <Plus className="mr-2 h-4 w-4" />
+                        บันทึกข้อมูล
+                    </Button>
                 </div>
 
                 <div className="grid gap-6 md:grid-cols-3">

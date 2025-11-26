@@ -12,26 +12,17 @@ class PermissionController extends Controller
     {
         $query = Permission::query();
 
-        if ($request->filled('group')) {
-            $query->where('group', $request->group);
-        }
-
         if ($request->filled('search')) {
-            $query->where('name', 'like', '%' . $request->search . '%');
+            $query->where('name', 'like', '%' . $request->search . '%')
+                  ->orWhere('group', 'like', '%' . $request->search . '%');
         }
 
-        $permissions = $query
-            ->orderBy('group')
-            ->orderBy('name')
-            ->paginate(10)
-            ->withQueryString();
-
-        $groups = Permission::select('group')->distinct()->pluck('group')->filter()->values();
+        // Get all permissions grouped by 'group'
+        $permissions = $query->orderBy('group')->orderBy('name')->get()->groupBy('group');
 
         return Inertia::render('permissions/Index', [
-            'permissions' => $permissions,
-            'groups' => $groups,
-            'filters' => $request->only('group', 'search'),
+            'groupedPermissions' => $permissions,
+            'filters' => $request->only('search'),
         ]);
     }
 

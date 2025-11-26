@@ -1,5 +1,8 @@
 import { Breadcrumbs } from '@/components/breadcrumbs';
 import { SidebarTrigger } from '@/components/ui/sidebar';
+import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
+import { ChevronLeft } from 'lucide-react';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { type BreadcrumbItem as BreadcrumbItemType } from '@/types';
 import AppearanceDropdown from '@/components/appearance-dropdown';
@@ -19,6 +22,16 @@ export function AppSidebarHeader({ breadcrumbs = [] }: { breadcrumbs?: Breadcrum
       {/* Left: Sidebar + Breadcrumb */}
       <div className="flex items-center gap-2">
         <SidebarTrigger className="-ml-1" />
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          className="h-7 w-7" 
+          onClick={() => window.history.back()}
+          title="ย้อนกลับ"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <Separator orientation="vertical" className="mr-2 h-4" />
         <Breadcrumbs breadcrumbs={breadcrumbs} />
       </div>
 

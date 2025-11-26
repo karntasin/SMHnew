@@ -90,7 +90,7 @@ export default function Index({ assets }: { assets: any[] }) {
     return (
         <AppLayout breadcrumbs={[
             { title: 'ENV', href: route('env.index') },
-            { title: 'จัดการทรัพย์สิน', href: route('env.assets.index') }
+            { title: 'จัดการครุภัณฑ์', href: route('env.assets.index') }
         ]}>
             <Head title="Asset Management" />
 
@@ -99,13 +99,13 @@ export default function Index({ assets }: { assets: any[] }) {
                     <div>
                         <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
                             <Box className="h-6 w-6" />
-                            ทะเบียนทรัพย์สิน (Asset Registry)
+                            ทะเบียนครุภัณฑ์ (Asset Registry)
                         </h2>
                         <p className="text-muted-foreground">จัดการข้อมูลเครื่องมือแพทย์และอุปกรณ์สำคัญ</p>
                     </div>
                     <Button onClick={handleCreate}>
                         <Plus className="mr-2 h-4 w-4" />
-                        เพิ่มทรัพย์สิน
+                        เพิ่มครุภัณฑ์
                     </Button>
                 </div>
 
@@ -167,7 +167,7 @@ export default function Index({ assets }: { assets: any[] }) {
                 <Dialog open={isOpen} onOpenChange={setIsOpen}>
                     <DialogContent className="max-w-2xl">
                         <DialogHeader>
-                            <DialogTitle>{editingItem ? 'แก้ไขทรัพย์สิน' : 'เพิ่มทรัพย์สินใหม่'}</DialogTitle>
+                            <DialogTitle>{editingItem ? 'แก้ไขครุภัณฑ์' : 'เพิ่มครุภัณฑ์ใหม่'}</DialogTitle>
                         </DialogHeader>
                         <form onSubmit={handleSubmit} className="space-y-4">
                             <div className="grid grid-cols-2 gap-4">

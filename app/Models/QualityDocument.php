@@ -17,6 +17,7 @@ class QualityDocument extends Model
         'category',
         'document_type',
         'department_id',
+        'owner_department',
         'status',
         'current_version',
         'file_path',

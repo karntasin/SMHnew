@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\QualityIndicator;
 use App\Models\QualityIndicatorEntry;
+use App\Models\Department;
+use App\Models\TeamHa;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
@@ -11,17 +13,42 @@ use Illuminate\Support\Facades\DB;
 
 class QualityIndicatorController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $indicators = QualityIndicator::orderBy('category')->orderBy('code')->get();
+        $type = $request->query('type', 'department'); // 'department', 'ha_team', 'organization'
+        
+        $query = QualityIndicator::where('type', $type)
+            ->with(['department', 'team'])
+            ->orderBy('category')
+            ->orderBy('code');
+
+        if ($request->has('department_id') && $type === 'department') {
+            $query->where('department_id', $request->department_id);
+        }
+
+        if ($request->has('team_id') && $type === 'ha_team') {
+            $query->where('team_id', $request->team_id);
+        }
+
+        $indicators = $query->get();
+        
+        $departments = Department::select('id', 'name')->get();
+        $teams = TeamHa::select('id', 'abbreviation', 'name_th')->get();
+
         return Inertia::render('QualityIndicators/Index', [
-            'indicators' => $indicators
+            'indicators' => $indicators,
+            'type' => $type,
+            'departments' => $departments,
+            'teams' => $teams,
         ]);
     }
 
     public function store(Request $request)
     {
         $validated = $request->validate([
+            'type' => 'required|in:department,ha_team,organization',
+            'department_id' => 'nullable|required_if:type,department|exists:departments,id',
+            'team_id' => 'nullable|required_if:type,ha_team|exists:teamha,id',
             'code' => 'nullable|string|unique:quality_indicators,code',
             'name' => 'required|string',
             'category' => 'nullable|string',
