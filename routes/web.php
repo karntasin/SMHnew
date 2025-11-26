@@ -40,9 +40,18 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
     Route::put('/users/{user}/roles', [UserController::class, 'updateRoles'])->name('users.update-roles');
     Route::get('/settingsapp', [SettingAppController::class, 'edit'])->name('setting.edit');
     Route::post('/settingsapp', [SettingAppController::class, 'update'])->name('setting.update');
+    Route::post('/settingsapp/check-path', [SettingAppController::class, 'checkPath'])->name('setting.check-path');
+    
+    // DB Settings
+    Route::get('/settingsapp/database', [App\Http\Controllers\DBSettingsController::class, 'edit'])->name('setting.database');
+    Route::post('/settingsapp/database', [App\Http\Controllers\DBSettingsController::class, 'update'])->name('setting.database.update');
+    Route::post('/settingsapp/database/test', [App\Http\Controllers\DBSettingsController::class, 'testConnection'])->name('setting.database.test');
+
     Route::get('/audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');
     Route::get('/backup', [BackupController::class, 'index'])->name('backup.index');
     Route::post('/backup/run', [BackupController::class, 'run'])->name('backup.run');
+    Route::post('/backup/upload', [BackupController::class, 'upload'])->name('backup.upload');
+    Route::post('/backup/restore/{file}', [BackupController::class, 'restore'])->name('backup.restore');
     Route::get('/backup/download/{file}', [BackupController::class, 'download'])->name('backup.download');
     Route::delete('/backup/delete/{file}', [BackupController::class, 'delete'])->name('backup.delete');
     Route::get('/files', [UserFileController::class, 'index'])->name('files.index');

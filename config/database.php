@@ -60,12 +60,9 @@ return [
             ]) : [],
 
             'dump' => [
-                'dump_binary_path' => '/Applications/XAMPP/xamppfiles/bin',
+                'dump_binary_path' => 'C:\xampp\mysql\bin',
                 'use_single_transaction' => true,
                 'timeout' => 60,
-                'extra_options' => [
-                    '--socket=/Applications/XAMPP/xamppfiles/var/mysql/mysql.sock',
-                ],
             ],
         ],
 

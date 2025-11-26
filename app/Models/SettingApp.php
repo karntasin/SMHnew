@@ -15,9 +15,12 @@ class SettingApp extends Model
         'favicon',
         'warna',
         'seo',
+        'backup_path',
+        'backup_hosxp',
     ];
 
     protected $casts = [
         'seo' => 'array',
+        'backup_hosxp' => 'boolean',
     ];
 }
