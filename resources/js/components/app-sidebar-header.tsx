@@ -6,6 +6,7 @@ import { ChevronLeft } from 'lucide-react';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { type BreadcrumbItem as BreadcrumbItemType } from '@/types';
 import AppearanceDropdown from '@/components/appearance-dropdown';
+import NotificationDropdown from '@/Components/NotificationDropdown';
 import { usePage, router } from '@inertiajs/react';
 
 export function AppSidebarHeader({ breadcrumbs = [] }: { breadcrumbs?: BreadcrumbItemType[] }) {
@@ -55,6 +56,7 @@ export function AppSidebarHeader({ breadcrumbs = [] }: { breadcrumbs?: Breadcrum
           </SelectContent>
         </Select>
 
+        <NotificationDropdown />
         <AppearanceDropdown />
       </div>
     </header>

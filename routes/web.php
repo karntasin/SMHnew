@@ -29,6 +29,11 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
     Route::get('dashboard/monthly-visits', [DashboardController::class, 'monthlyVisits'])->name('dashboard.monthly-visits');
     Route::get('dashboard/cv-risk-report', [CvRiskReportController::class, 'export'])->name('dashboard.cv-risk-report');
 
+    // Notifications
+    Route::get('/notifications', [App\Http\Controllers\NotificationController::class, 'index'])->name('notifications.index');
+    Route::post('/notifications/{id}/read', [App\Http\Controllers\NotificationController::class, 'markAsRead'])->name('notifications.read');
+    Route::post('/notifications/read-all', [App\Http\Controllers\NotificationController::class, 'markAllAsRead'])->name('notifications.read-all');
+
     Route::resource('roles', RoleController::class);
     Route::resource('menus', MenuController::class);
     Route::post('menus/reorder', [MenuController::class, 'reorder'])->name('menus.reorder');
@@ -41,6 +46,18 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
     Route::get('/settingsapp', [SettingAppController::class, 'edit'])->name('setting.edit');
     Route::post('/settingsapp', [SettingAppController::class, 'update'])->name('setting.update');
     Route::post('/settingsapp/check-path', [SettingAppController::class, 'checkPath'])->name('setting.check-path');
+    
+    // Position Settings (CRUD)
+    Route::resource('settings/positions', App\Http\Controllers\PositionController::class)
+        ->names('settings.positions');
+    
+    // TeamHA Settings (CRUD)
+    Route::resource('settings/teamha', App\Http\Controllers\TeamhaController::class)
+        ->names('settings.teamha');
+    
+    // Department Settings (CRUD)
+    Route::resource('settings/departments', App\Http\Controllers\DepartmentController::class)
+        ->names('settings.departments');
     
     // DB Settings
     Route::get('/settingsapp/database', [App\Http\Controllers\DBSettingsController::class, 'edit'])->name('setting.database');
@@ -249,6 +266,8 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
             Route::get('/courses/create', [App\Http\Controllers\HrdController::class, 'create'])->name('courses.create');
             Route::post('/courses', [App\Http\Controllers\HrdController::class, 'store'])->name('courses.store');
             Route::get('/courses/{course}', [App\Http\Controllers\HrdController::class, 'show'])->name('courses.show');
+            Route::put('/courses/{course}', [App\Http\Controllers\HrdController::class, 'update'])->name('courses.update');
+            Route::delete('/courses/{course}', [App\Http\Controllers\HrdController::class, 'destroy'])->name('courses.destroy');
             Route::post('/courses/{course}/enroll', [App\Http\Controllers\HrdController::class, 'enroll'])->name('courses.enroll');
             Route::get('/courses/{course}/learn/{lesson}', [App\Http\Controllers\HrdController::class, 'learn'])->name('courses.learn');
             Route::post('/courses/{course}/learn/{lesson}/complete', [App\Http\Controllers\HrdController::class, 'completeLesson'])->name('courses.complete-lesson');

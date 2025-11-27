@@ -241,6 +241,12 @@ export default function UserIndex({ users, filters, allRoles }: Props) {
                               <span className="text-xs text-muted-foreground flex items-center gap-1">
                                 <Mail className="h-3 w-3" /> {user.email}
                               </span>
+                              {/* ตำแหน่งงาน */}
+                              {user.positions && user.positions.length > 0 && (
+                                <span className="text-xs text-indigo-700 mt-1">
+                                  {user.positions.map((pos: any) => pos.name).join(', ')}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </TableCell>

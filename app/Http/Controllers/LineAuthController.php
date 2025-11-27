@@ -138,6 +138,8 @@ class LineAuthController extends Controller
                 'line_id' => $lineUserId,
                 'avatar' => $pictureUrl,
             ]);
+            
+            $user->assignRole('user');
         } else {
             // Update avatar if changed
             if ($user->avatar !== $pictureUrl) {

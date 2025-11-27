@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Separator } from '@/components/ui/separator';
 import { BreadcrumbItem } from '@/types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { MultiSelect } from '../../components/ui/multiselect';
 import { User, Mail, Lock, Shield, ArrowLeft, Save } from 'lucide-react';
 
 interface Role {
@@ -21,15 +22,17 @@ interface UserData {
   name: string;
   email: string;
   role?: string;
+  positions?: number[];
 }
 
 interface Props {
   user?: UserData;
   roles: Role[];
+  positions: any[];
   currentRole?: string;
 }
 
-export default function UserForm({ user, roles, currentRole }: Props) {
+export default function UserForm({ user, roles, positions, currentRole }: Props) {
   const isEdit = !!user;
 
   const { data, setData, post, put, processing, errors } = useForm({
@@ -37,6 +40,7 @@ export default function UserForm({ user, roles, currentRole }: Props) {
     email: user?.email || '',
     password: '',
     role: currentRole || '',
+    positions: user?.positions || [],
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -153,6 +157,23 @@ export default function UserForm({ user, roles, currentRole }: Props) {
                     <p className="text-xs text-muted-foreground">
                       การกำหนดบทบาทจะเป็นตัวกำหนดสิทธิ์การใช้งานในระบบ
                     </p>
+                  </div>
+                  {/* Positions Multi-Select */}
+                  <div className="space-y-2">
+                    <Label htmlFor="positions" className="flex items-center gap-2">
+                      ตำแหน่งงาน <span className="text-red-500">*</span>
+                    </Label>
+                    <MultiSelect
+                      id="positions"
+                      options={positions.map((p) => ({
+                        value: p.id,
+                        label: p.name,
+                      }))}
+                      value={data.positions}
+                      onChange={(values) => setData('positions', values)}
+                      placeholder="เลือกตำแหน่งงาน"
+                    />
+                    {errors.positions && <p className="text-sm text-red-500">{errors.positions}</p>}
                   </div>
                 </div>
 

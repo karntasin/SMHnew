@@ -16,6 +16,10 @@ class HrdCourseBuilderController extends Controller
 {
     public function edit(HrdCourse $course)
     {
+        if (!auth()->user()->hasRole(['admin', 'header', 'Admin', 'Header'])) {
+            abort(403, 'Unauthorized action.');
+        }
+
         $course->load(['modules.lessons.quiz.questions.answers']);
         
         return Inertia::render('HRD/Courses/Builder', [
@@ -25,6 +29,10 @@ class HrdCourseBuilderController extends Controller
 
     public function update(Request $request, HrdCourse $course)
     {
+        if (!auth()->user()->hasRole(['admin', 'header', 'Admin', 'Header'])) {
+            abort(403, 'Unauthorized action.');
+        }
+
         // This is a complex update. We receive the full structure.
         // Strategy: Sync modules, then lessons, then quizzes/questions.
         
@@ -166,6 +174,6 @@ class HrdCourseBuilderController extends Controller
             HrdModule::destroy($modulesToDelete);
         });
 
-        return back()->with('success', 'Course structure updated successfully.');
+        return redirect()->route('km.learn.courses.show', $course->id)->with('success', 'Course structure updated successfully.');
     }
 }

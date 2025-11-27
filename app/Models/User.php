@@ -12,6 +12,13 @@ use Spatie\MediaLibrary\HasMedia;
 
 class User extends Authenticatable implements HasMedia
 {
+    /**
+     * Many-to-many relationship: User positions
+     */
+    public function positions()
+    {
+        return $this->belongsToMany(Position::class, 'position_user');
+    }
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable, HasRoles, InteractsWithMedia;
 
@@ -26,6 +33,8 @@ class User extends Authenticatable implements HasMedia
         'password',
         'line_id',
         'avatar',
+        'position',
+        'department_id',
     ];
 
     /**

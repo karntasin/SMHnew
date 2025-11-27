@@ -13,7 +13,7 @@ class UserController extends Controller
 {
     public function index(Request $request)
     {
-        $query = User::with('roles')->latest();
+        $query = User::with(['roles', 'positions'])->latest();
 
         if ($request->has('search')) {
             $search = $request->input('search');
@@ -36,9 +36,11 @@ class UserController extends Controller
     public function create()
     {
         $roles = Role::all();
+        $positions = \App\Models\Position::orderBy('name')->get();
 
         return Inertia::render('users/Form', [
             'roles' => $roles,
+            'positions' => $positions,
         ]);
     }
 
@@ -49,6 +51,8 @@ class UserController extends Controller
             'email'    => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:6'],
             'role'     => ['required', Rule::exists('roles', 'name')],
+            'positions' => ['nullable', 'array'],
+            'positions.*' => ['exists:positions,id'],
         ]);
 
         $user = User::create([
@@ -59,16 +63,27 @@ class UserController extends Controller
 
         $user->assignRole($validated['role']);
 
+        if (isset($validated['positions'])) {
+            $user->positions()->sync($validated['positions']);
+        }
+
         return redirect()->route('users.index')->with('success', 'สร้างผู้ใช้งานสำเร็จ');
     }
 
     public function edit(User $user)
     {
         $roles = Role::all();
+        $positions = \App\Models\Position::orderBy('name')->get();
 
         return Inertia::render('users/Form', [
-            'user'         => $user->only(['id', 'name', 'email']),
+            'user'         => array_merge(
+                $user->only(['id', 'name', 'email']),
+                [
+                    'positions' => $user->positions->pluck('id')->toArray(),
+                ]
+            ),
             'roles'        => $roles,
+            'positions'     => $positions,
             'currentRole'  => $user->roles->pluck('name')->first(), // satu role saja
         ]);
     }
@@ -80,6 +95,8 @@ class UserController extends Controller
             'email'    => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'password' => ['nullable', 'string', 'min:6'],
             'role'     => ['required', Rule::exists('roles', 'name')],
+            'positions' => ['nullable', 'array'],
+            'positions.*' => ['exists:positions,id'],
         ]);
 
         $user->update([
@@ -91,6 +108,10 @@ class UserController extends Controller
         ]);
 
         $user->syncRoles([$validated['role']]);
+
+        if (isset($validated['positions'])) {
+            $user->positions()->sync($validated['positions']);
+        }
 
         return redirect()->route('users.index')->with('success', 'อัปเดตข้อมูลผู้ใช้งานสำเร็จ');
     }

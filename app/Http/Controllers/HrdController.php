@@ -48,6 +48,7 @@ class HrdController extends Controller
                 $query->where('user_id', $user->id);
             }])
             ->where('user_id', $user->id)
+            ->whereHas('course')
             ->orderBy('updated_at', 'desc')
             ->take(5)
             ->get()
@@ -117,9 +118,13 @@ class HrdController extends Controller
 
         $courses = $query->orderBy('start_date', 'desc')->paginate(10);
 
+        $user = Auth::user();
+        $canEdit = $user->hasRole(['admin', 'header', 'Admin', 'Header']);
+
         return Inertia::render('HRD/Courses/Index', [
             'courses' => $courses,
             'filters' => $request->only(['search']),
+            'canEdit' => $canEdit,
         ]);
     }
 
@@ -133,9 +138,13 @@ class HrdController extends Controller
             ->where('course_id', $course->id)
             ->exists();
 
+        $user = Auth::user();
+        $canEdit = $user->hasRole(['admin', 'header', 'Admin', 'Header']);
+
         return Inertia::render('HRD/Courses/Show', [
             'course' => $course,
             'isEnrolled' => $isEnrolled,
+            'canEdit' => $canEdit,
         ]);
     }
 
@@ -380,5 +389,37 @@ class HrdController extends Controller
         }
 
         return back()->with('success', 'Enrolled successfully!');
+    }
+
+    public function update(Request $request, HrdCourse $course)
+    {
+        if (!Auth::user()->hasRole(['admin', 'header', 'Admin', 'Header'])) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $validated = $request->validate([
+            'title' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'type' => 'required|in:internal,external,online,ojt,conference',
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date|after_or_equal:start_date',
+            'hours' => 'required|numeric|min:0',
+            'location' => 'nullable|string|max:255',
+        ]);
+
+        $course->update($validated);
+
+        return back()->with('success', 'Course updated successfully!');
+    }
+
+    public function destroy(HrdCourse $course)
+    {
+        if (!Auth::user()->hasRole(['admin', 'header', 'Admin', 'Header'])) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $course->delete();
+
+        return redirect()->route('km.learn.courses.index')->with('success', 'Course deleted successfully!');
     }
 }

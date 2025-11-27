@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { PlayCircle, FileText, CheckCircle, Lock, Clock, Calendar, BookOpen, GraduationCap, ArrowRight, Star } from 'lucide-react';
+import { PlayCircle, FileText, CheckCircle, Lock, Clock, Calendar, BookOpen, GraduationCap, ArrowRight, Star, Trash2 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 
 interface Lesson {
@@ -36,6 +36,7 @@ interface Course {
 interface Props {
     course: Course;
     isEnrolled: boolean;
+    canEdit: boolean;
 }
 
 const breadcrumbs = [
@@ -53,7 +54,7 @@ const breadcrumbs = [
     },
 ];
 
-export default function CourseShow({ course, isEnrolled }: Props) {
+export default function CourseShow({ course, isEnrolled, canEdit }: Props) {
     
     const handleEnroll = () => {
         router.post(route('km.learn.courses.enroll', course.id));
@@ -98,6 +99,25 @@ export default function CourseShow({ course, isEnrolled }: Props) {
                                     <span className="flex items-center gap-1 text-sm">
                                         <Clock className="h-4 w-4" /> {course.hours} ชั่วโมง
                                     </span>
+                                    {canEdit && (
+                                        <div className="flex gap-2 ml-2">
+                                            <Link href={route('km.learn.courses.builder', course.id)}>
+                                                <Badge className="bg-yellow-500/80 hover:bg-yellow-500 cursor-pointer text-white border-none">
+                                                    แก้ไขหลักสูตร
+                                                </Badge>
+                                            </Link>
+                                            <Badge 
+                                                className="bg-red-500/80 hover:bg-red-500 cursor-pointer text-white border-none flex items-center gap-1"
+                                                onClick={() => {
+                                                    if(confirm('Are you sure you want to delete this course?')) {
+                                                        router.delete(route('km.learn.courses.destroy', course.id));
+                                                    }
+                                                }}
+                                            >
+                                                <Trash2 className="h-3 w-3" /> ลบหลักสูตร
+                                            </Badge>
+                                        </div>
+                                    )}
                                 </div>
                                 
                                 <h1 className="text-3xl md:text-5xl font-bold leading-tight">
@@ -202,7 +222,14 @@ export default function CourseShow({ course, isEnrolled }: Props) {
                                                                             <Lock className="h-4 w-4 text-gray-400" />
                                                                         ) : (
                                                                             isCompleted ? (
-                                                                                <Badge className="bg-emerald-500 hover:bg-emerald-600">สำเร็จ</Badge>
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <Badge className="bg-emerald-500 hover:bg-emerald-600">สำเร็จ</Badge>
+                                                                                    <Button size="sm" variant="ghost" className="h-8 text-xs text-muted-foreground hover:text-emerald-600" asChild>
+                                                                                        <Link href={route('km.learn.courses.learn', [course.id, lesson.id])}>
+                                                                                            เรียนซ้ำ
+                                                                                        </Link>
+                                                                                    </Button>
+                                                                                </div>
                                                                             ) : (
                                                                                 <Button size="sm" variant="outline" className="h-8 text-xs" asChild>
                                                                                     <Link href={route('km.learn.courses.learn', [course.id, lesson.id])}>

@@ -1,131 +1,141 @@
 import React from 'react';
 import { Head, Link } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { 
   FileText, 
   BarChart2, 
   ClipboardCheck, 
-  Stethoscope, 
   ShieldAlert, 
   GraduationCap, 
-  AlertTriangle,
   BookOpen,
   Activity,
   Search,
   Leaf,
   Users,
-  ChevronRight
+  ChevronRight,
+  Sparkles
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/hooks/use-translation';
+import { cn } from '@/lib/utils';
 
 export default function QualityHub() {
   const { t } = useTranslation();
-  const modules = [
+
+  const systems = [
     {
       title: t('Quality Document Repository'),
-      description: 'Quality Document Repository',
-      icon: <BookOpen className="h-8 w-8 text-blue-500" />,
+      description: t('Manage WI, Procedure, Policy and regulations'),
+      icon: BookOpen,
+      color: 'text-blue-600',
+      bg: 'bg-blue-100',
+      gradient: 'from-blue-500 to-cyan-500',
       href: '/quality-docs',
-      color: 'bg-blue-50 hover:bg-blue-100',
-      details: t('Manage WI, Procedure, Policy and regulations'),
-      subMenus: [
-        { title: t('Search Documents'), href: '/quality-docs' },
-        { title: t('Create New Document'), href: '/quality-docs/create' },
+      links: [
+        { label: t('Search Documents'), href: '/quality-docs' },
+        { label: t('Create New Document'), href: '/quality-docs/create' },
       ]
     },
     {
       title: t('Quality Indicators (KPIs)'),
-      description: 'Quality Indicators (KPIs)',
-      icon: <BarChart2 className="h-8 w-8 text-green-500" />,
+      description: t('Track and report hospital quality indicators'),
+      icon: BarChart2,
+      color: 'text-emerald-600',
+      bg: 'bg-emerald-100',
+      gradient: 'from-emerald-500 to-green-500',
       href: '/quality-indicators',
-      color: 'bg-green-50 hover:bg-green-100',
-      details: t('Track and report hospital quality indicators'),
-      subMenus: [
-        { title: t('Organization Level'), href: '/quality-indicators?type=organization' },
-        { title: t('Department Level'), href: '/quality-indicators?type=department' },
-        { title: t('Team Level'), href: '/quality-indicators?type=ha_team' },
+      links: [
+        { label: t('Organization Level'), href: '/quality-indicators?type=organization' },
+        { label: t('Department Level'), href: '/quality-indicators?type=department' },
+        { label: t('Team Level'), href: '/quality-indicators?type=ha_team' },
       ]
     },
     {
       title: t('Quality Assurance (QA)'),
-      description: 'Quality Assurance (QA)',
-      icon: <ClipboardCheck className="h-8 w-8 text-purple-500" />,
+      description: t('Record Review, Audit and Improvement'),
+      icon: ClipboardCheck,
+      color: 'text-violet-600',
+      bg: 'bg-violet-100',
+      gradient: 'from-violet-500 to-purple-500',
       href: '/quality-assurance',
-      color: 'bg-purple-50 hover:bg-purple-100',
-      details: t('Record Review, Audit and Improvement'),
-      subMenus: [
-        { title: t('Review'), href: '/quality-assurance' },
-        { title: t('Audit'), href: '/quality-assurance' }, // Assuming tabs
-        { title: t('Improvement'), href: '/quality-assurance' }, // Assuming tabs
+      links: [
+        { label: t('Review'), href: '/quality-assurance' },
+        { label: t('Audit'), href: '/quality-assurance' },
+        { label: t('Improvement'), href: '/quality-assurance' },
       ]
     },
     {
       title: t('Medical Record Accuracy (MRA)'),
-      description: 'Medical Record Accuracy (MRA)',
-      icon: <Search className="h-8 w-8 text-indigo-500" />,
+      description: t('Verify completeness and accuracy of medical records'),
+      icon: Search,
+      color: 'text-indigo-600',
+      bg: 'bg-indigo-100',
+      gradient: 'from-indigo-500 to-blue-600',
       href: '/mra',
-      color: 'bg-indigo-50 hover:bg-indigo-100',
-      details: t('Verify completeness and accuracy of medical records'),
-      subMenus: [
-        { title: 'Dashboard', href: '/mra/dashboard' },
-        { title: t('Search Patient'), href: '/mra/search-patient' },
-        { title: t('Checklist'), href: '/mra' },
+      links: [
+        { label: 'Dashboard', href: '/mra/dashboard' },
+        { label: t('Search Patient'), href: '/mra/search-patient' },
+        { label: t('Checklist'), href: '/mra' },
       ]
     },
     {
       title: t('Infection Control (IC)'),
-      description: 'Infection Control (IC)',
-      icon: <ShieldAlert className="h-8 w-8 text-red-500" />,
+      description: t('Monitor hospital infections and report incidents'),
+      icon: ShieldAlert,
+      color: 'text-rose-600',
+      bg: 'bg-rose-100',
+      gradient: 'from-rose-500 to-red-500',
       href: '/ic',
-      color: 'bg-red-50 hover:bg-red-100',
-      details: t('Monitor hospital infections and report incidents'),
-      subMenus: [
-        { title: 'Dashboard', href: '/ic' },
-        { title: t('Surveillance'), href: '/ic/surveillance' },
-        { title: t('Incident Report'), href: '/ic/incidents' },
+      links: [
+        { label: 'Dashboard', href: '/ic' },
+        { label: t('Surveillance'), href: '/ic/surveillance' },
+        { label: t('Incident Report'), href: '/ic/incidents' },
       ]
     },
     {
       title: t('Environment & Safety (ENV)'),
-      description: 'Environment & Safety (ENV)',
-      icon: <Leaf className="h-8 w-8 text-emerald-600" />,
+      description: t('Manage utilities, medical equipment and building safety'),
+      icon: Leaf,
+      color: 'text-teal-600',
+      bg: 'bg-teal-100',
+      gradient: 'from-teal-500 to-emerald-500',
       href: '/env',
-      color: 'bg-emerald-50 hover:bg-emerald-100',
-      details: t('Manage utilities, medical equipment and building safety'),
-      subMenus: [
-        { title: 'Dashboard', href: '/env' },
-        { title: t('Manage Assets'), href: '/env/assets' },
-        { title: t('Maintenance Plan (PM)'), href: '/env/pm' },
-        { title: t('Incident Report'), href: '/env/incidents' },
-        { title: t('System Check'), href: '/env/utility' },
+      links: [
+        { label: 'Dashboard', href: '/env' },
+        { label: t('Manage Assets'), href: '/env/assets' },
+        { label: t('Maintenance Plan (PM)'), href: '/env/pm' },
+        { label: t('Incident Report'), href: '/env/incidents' },
+        { label: t('System Check'), href: '/env/utility' },
       ]
     },
     {
       title: t('Human Resource Development (HRD)'),
-      description: 'Human Resource Development (HRD)',
-      icon: <Users className="h-8 w-8 text-pink-500" />,
+      description: t('Training plan, training hours and competency'),
+      icon: Users,
+      color: 'text-pink-600',
+      bg: 'bg-pink-100',
+      gradient: 'from-pink-500 to-rose-500',
       href: '/km/learn/dashboard',
-      color: 'bg-pink-50 hover:bg-pink-100',
-      details: t('Training plan, training hours and competency'),
-      subMenus: [
-        { title: 'Dashboard', href: '/km/learn/dashboard' },
-        { title: t('Training Courses'), href: '/km/learn/courses' },
-        { title: t('My Training'), href: '/km/learn/my-training' },
-        { title: t('My Skills'), href: '/km/learn/my-skills' },
+      links: [
+        { label: 'Dashboard', href: '/km/learn/dashboard' },
+        { label: t('Training Courses'), href: '/km/learn/courses' },
+        { label: t('My Training'), href: '/km/learn/my-training' },
+        { label: t('My Skills'), href: '/km/learn/my-skills' },
       ]
     },
     {
       title: t('Knowledge Management (KM)'),
-      description: 'Knowledge Management (KM)',
-      icon: <GraduationCap className="h-8 w-8 text-teal-500" />,
+      description: t('Knowledge repository, lessons and learning materials'),
+      icon: GraduationCap,
+      color: 'text-amber-600',
+      bg: 'bg-amber-100',
+      gradient: 'from-amber-500 to-orange-500',
       href: '/km',
-      color: 'bg-teal-50 hover:bg-teal-100',
-      details: t('Knowledge repository, lessons and learning materials'),
-      subMenus: [
-        { title: 'Dashboard', href: '/km/dashboard' },
-        { title: t('Knowledge Assets'), href: '/km/assets' },
+      links: [
+        { label: 'Dashboard', href: '/km/dashboard' },
+        { label: t('Knowledge Assets'), href: '/km/assets' },
+        { label: t('E-Learning Dashboard'), href: '/km/learn/dashboard' },
+        { label: t('All Courses'), href: '/km/learn' },
+        { label: t('Create Course'), href: '/km/learn/courses/create' },
       ]
     }
   ];
@@ -134,86 +144,77 @@ export default function QualityHub() {
     <AppLayout breadcrumbs={[{ title: t('Quality Hub'), href: '/quality' }]}>
       <Head title={t('Quality Hub')} />
 
-      <div className="p-6 max-w-7xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">{t('Quality Hub')}</h1>
-          <p className="text-gray-500 mt-2">Quality Management System Hub</p>
+      <div className="min-h-screen bg-slate-50/50">
+        {/* Hero Section */}
+        <div className="relative bg-white border-b border-slate-100 overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-blue-50 via-indigo-50/30 to-purple-50 opacity-60" />
+          <div className="absolute inset-0 bg-grid-slate-100/50 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.5))]" />
+          
+          <div className="relative max-w-7xl mx-auto px-6 py-10 sm:py-12">
+            <div className="max-w-3xl">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white border border-blue-100 text-blue-600 text-sm font-medium mb-6 shadow-sm">
+                <Sparkles className="w-4 h-4 text-blue-500" />
+                <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                  {t('Quality Management System')}
+                </span>
+              </div>
+              
+              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 mb-4">
+                {t('Quality Center')}
+              </h1>
+              <p className="text-lg text-slate-600 leading-relaxed">
+                {t('Centralized hub for all hospital quality assurance systems, document control, and performance indicators.')}
+              </p>
+            </div>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {modules.map((module, index) => (
-            <Card key={index} className={`flex flex-col h-full transition-all duration-200 border-2 border-transparent hover:border-primary/20 ${module.color}`}>
-              <Link href={module.href} className="block">
-                <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-                  <div className="space-y-1">
-                    <CardTitle className="text-xl font-bold text-gray-800">
-                      {module.title}
-                    </CardTitle>
-                    <CardDescription className="font-medium text-gray-600">
-                      {module.description}
-                    </CardDescription>
+        {/* Systems Grid */}
+        <div className="max-w-7xl mx-auto px-6 py-10">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {systems.map((system, idx) => (
+              <div 
+                key={idx}
+                className="group relative flex flex-col bg-white rounded-2xl border border-slate-200/60 shadow-sm hover:shadow-xl hover:border-blue-100 transition-all duration-300 overflow-hidden"
+              >
+                {/* Card Header */}
+                <div className="p-6">
+                  <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center mb-5 transition-transform group-hover:scale-110 duration-300", system.bg)}>
+                    <system.icon className={cn("w-7 h-7", system.color)} />
                   </div>
-                  <div className="p-2 bg-white rounded-lg shadow-sm">
-                    {module.icon}
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-gray-600 mt-2">
-                    {module.details}
+                  
+                  <h3 className="text-xl font-bold text-slate-900 mb-2 group-hover:text-blue-700 transition-colors">
+                    {system.title}
+                  </h3>
+                  <p className="text-slate-500 text-sm leading-relaxed mb-4 line-clamp-2">
+                    {system.description}
                   </p>
-                </CardContent>
-              </Link>
-              
-              <CardFooter className="mt-auto pt-0 px-6 pb-6">
-                <div className="w-full pt-4 border-t border-gray-200/60">
-                  <div className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary/60"></span>
-                    {t('Quick Links')}
+                </div>
+
+                {/* Links Section */}
+                <div className="mt-auto bg-slate-50/50 p-4 border-t border-slate-100">
+                  <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 px-2">
+                    {t('Quick Actions')}
                   </div>
-                  <div className="grid grid-cols-1 gap-2">
-                    {module.subMenus.map((sub, subIndex) => (
+                  <div className="space-y-1">
+                    {system.links.map((link, i) => (
                       <Link 
-                        key={subIndex} 
-                        href={sub.href}
-                        className="group flex items-center justify-between text-sm text-gray-700 hover:text-primary bg-white/60 hover:bg-white border border-transparent hover:border-primary/20 px-3 py-2 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md"
+                        key={i} 
+                        href={link.href}
+                        className="flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:text-blue-600 hover:bg-white hover:shadow-sm transition-all group/link"
                       >
-                        <span className="font-medium">{sub.title}</span>
-                        <ChevronRight className="h-4 w-4 opacity-30 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+                        <span>{link.label}</span>
+                        <ChevronRight className="w-4 h-4 opacity-0 -translate-x-2 group-hover/link:opacity-100 group-hover/link:translate-x-0 transition-all text-blue-400" />
                       </Link>
                     ))}
                   </div>
                 </div>
-              </CardFooter>
-            </Card>
-          ))}
-        </div>
-
-        <div className="mt-12 bg-white p-6 rounded-xl shadow-sm border">
-          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <Activity className="h-5 w-5 text-primary" />
-            {t('Overview')}
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="p-4 bg-gray-50 rounded-lg border">
-              <div className="text-sm text-gray-500">เอกสารคุณภาพทั้งหมด</div>
-              <div className="text-2xl font-bold mt-1">--</div>
-            </div>
-            <div className="p-4 bg-gray-50 rounded-lg border">
-              <div className="text-sm text-gray-500">ตัวชี้วัดที่ผ่านเกณฑ์</div>
-              <div className="text-2xl font-bold mt-1 text-green-600">--%</div>
-            </div>
-            <div className="p-4 bg-gray-50 rounded-lg border">
-              <div className="text-sm text-gray-500">อุบัติการณ์เดือนนี้</div>
-              <div className="text-2xl font-bold mt-1 text-orange-600">--</div>
-            </div>
-            <div className="p-4 bg-gray-50 rounded-lg border">
-              <div className="text-sm text-gray-500">การทบทวนที่รอดำเนินการ</div>
-              <div className="text-2xl font-bold mt-1 text-blue-600">--</div>
-            </div>
+                
+                {/* Top Gradient Line */}
+                <div className={cn("absolute top-0 left-0 w-full h-1 bg-gradient-to-r opacity-0 group-hover:opacity-100 transition-opacity duration-300", system.gradient)} />
+              </div>
+            ))}
           </div>
-          <p className="text-xs text-gray-400 mt-4 text-center">
-            * ข้อมูลภาพรวมอยู่ระหว่างการเชื่อมต่อระบบ
-          </p>
         </div>
       </div>
     </AppLayout>

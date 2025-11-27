@@ -1,7 +1,6 @@
 import React from 'react';
 import { Head, Link } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { 
   Calendar, 
   Wrench, 
@@ -14,66 +13,79 @@ import {
   List,
   Inbox,
   Send,
-  CheckSquare
+  CheckSquare,
+  Building2
 } from 'lucide-react';
 import { useTranslation } from '@/hooks/use-translation';
+import { cn } from '@/lib/utils';
 
 export default function AdminHub() {
   const { t } = useTranslation();
-  const modules = [
+
+  const systems = [
     {
       title: t('Meeting Room Booking'),
-      description: 'Meeting Room Booking',
-      icon: <Calendar className="h-8 w-8 text-blue-500" />,
+      description: t('Book meeting rooms, check schedule and manage meetings'),
+      icon: Calendar,
+      color: 'text-blue-600',
+      bg: 'bg-blue-100',
+      gradient: 'from-blue-500 to-cyan-500',
       href: '/administration/rooms',
-      color: 'bg-blue-50 hover:bg-blue-100',
-      details: t('Book meeting rooms, check schedule and manage meetings'),
-      subMenus: [
-        { title: t('Room Schedule'), href: '/administration/rooms' },
-        { title: t('Book Room'), href: '/administration/rooms/create' }, // Assuming create route exists or is modal
-        { title: t('My Bookings'), href: '/administration/rooms?filter=my' },
+      links: [
+        { label: t('Room Schedule'), href: '/administration/rooms' },
+        { label: t('Book Room'), href: '/administration/rooms/create' },
+        { label: t('My Bookings'), href: '/administration/rooms?filter=my' },
+        { label: t('Meeting Rooms List'), href: '/administration/rooms/meeting-rooms' },
       ]
     },
     {
       title: t('Maintenance Request'),
-      description: 'Maintenance Request',
-      icon: <Wrench className="h-8 w-8 text-orange-500" />,
+      description: t('Report maintenance, facilities and track status'),
+      icon: Wrench,
+      color: 'text-orange-600',
+      bg: 'bg-orange-100',
+      gradient: 'from-orange-500 to-amber-500',
       href: '/maintenance/dashboard',
-      color: 'bg-orange-50 hover:bg-orange-100',
-      details: t('Report maintenance, facilities and track status'),
-      subMenus: [
-        { title: 'Dashboard', href: '/maintenance/dashboard' },
-        { title: t('New Request'), href: '/maintenance/requests/create' },
-        { title: t('Request List'), href: '/maintenance/requests' },
-        { title: t('My Requests'), href: '/maintenance/requests/my' },
+      links: [
+        { label: 'Dashboard', href: '/maintenance/dashboard' },
+        { label: t('New Request'), href: '/maintenance/requests/create' },
+        { label: t('Request List'), href: '/maintenance/requests' },
+        { label: t('My Requests'), href: '/maintenance/requests/my' },
+        { label: t('Settings'), href: '/maintenance/settings' },
       ]
     },
     {
       title: t('Vehicle Booking'),
-      description: 'Vehicle Booking',
-      icon: <Car className="h-8 w-8 text-green-500" />,
+      description: t('Book vehicles, check schedule and manage fleet'),
+      icon: Car,
+      color: 'text-green-600',
+      bg: 'bg-green-100',
+      gradient: 'from-green-500 to-emerald-500',
       href: '/vehicles/bookings',
-      color: 'bg-green-50 hover:bg-green-100',
-      details: t('Book vehicles, check schedule and manage fleet'),
-      subMenus: [
-        { title: t('Vehicle Schedule'), href: '/vehicles/calendar' },
-        { title: t('Book Vehicle'), href: '/vehicles/bookings/create' },
-        { title: t('Vehicle Bookings'), href: '/vehicles/bookings' },
+      links: [
+        { label: t('Vehicle Schedule'), href: '/vehicles/calendar' },
+        { label: t('Book Vehicle'), href: '/vehicles/bookings/create' },
+        { label: t('Vehicle Bookings'), href: '/vehicles/bookings' },
+        { label: t('Manage Vehicles'), href: '/vehicles/manage' },
+        { label: t('Settings'), href: '/vehicles/settings' },
       ]
     },
     {
       title: t('Document Management'),
-      description: 'Document Management',
-      icon: <FileText className="h-8 w-8 text-purple-500" />,
+      description: t('Manage inbound/outbound documents and registration'),
+      icon: FileText,
+      color: 'text-purple-600',
+      bg: 'bg-purple-100',
+      gradient: 'from-purple-500 to-violet-500',
       href: '/documents/dashboard',
-      color: 'bg-purple-50 hover:bg-purple-100',
-      details: t('Manage inbound/outbound documents and registration'),
-      subMenus: [
-        { title: 'Dashboard', href: '/documents/dashboard' },
-        { title: t('Inbound (Inbox)'), href: '/documents/inbox' },
-        { title: t('Outbound (Sent)'), href: '/documents/sent' },
-        { title: t('Receive Document'), href: '/documents/receive' },
-        { title: t('Pending Approval'), href: '/documents?scope=approval' },
+      links: [
+        { label: 'Dashboard', href: '/documents/dashboard' },
+        { label: t('Inbound (Inbox)'), href: '/documents/inbox' },
+        { label: t('Outbound (Sent)'), href: '/documents/sent' },
+        { label: t('Receive Document'), href: '/documents/receive' },
+        { label: t('All Documents'), href: '/documents' },
+        { label: t('Pending Approval'), href: '/documents?scope=approval' },
+        { label: t('Settings'), href: '/documents/settings' },
       ]
     }
   ];
@@ -82,58 +94,77 @@ export default function AdminHub() {
     <AppLayout breadcrumbs={[{ title: t('Administrative Hub'), href: '/admin-hub' }]}>
       <Head title={t('Administrative Hub')} />
 
-      <div className="p-6 max-w-7xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">{t('Administrative Hub')}</h1>
-          <p className="text-gray-500 mt-2">Administrative Hub</p>
+      <div className="min-h-screen bg-slate-50/50">
+        {/* Hero Section */}
+        <div className="relative bg-white border-b border-slate-100 overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-orange-50 via-amber-50/30 to-yellow-50 opacity-60" />
+          <div className="absolute inset-0 bg-grid-slate-100/50 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.5))]" />
+          
+          <div className="relative max-w-7xl mx-auto px-6 py-10 sm:py-12">
+            <div className="max-w-3xl">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white border border-orange-100 text-orange-600 text-sm font-medium mb-6 shadow-sm">
+                <Building2 className="w-4 h-4 text-orange-500" />
+                <span className="bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent">
+                  Administrative Services
+                </span>
+              </div>
+              
+              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 mb-4">
+                {t('Administrative Center')}
+              </h1>
+              <p className="text-lg text-slate-600 leading-relaxed">
+                {t('Centralized management for hospital administration, facilities, vehicles, and document flow.')}
+              </p>
+            </div>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {modules.map((module, index) => (
-            <Card key={index} className={`flex flex-col h-full transition-all duration-200 border-2 border-transparent hover:border-primary/20 ${module.color}`}>
-              <Link href={module.href} className="block">
-                <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-                  <div className="space-y-1">
-                    <CardTitle className="text-xl font-bold text-gray-800">
-                      {module.title}
-                    </CardTitle>
-                    <CardDescription className="font-medium text-gray-600">
-                      {module.description}
-                    </CardDescription>
+        {/* Systems Grid */}
+        <div className="max-w-7xl mx-auto px-6 py-10">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {systems.map((system, idx) => (
+              <div 
+                key={idx}
+                className="group relative flex flex-col bg-white rounded-2xl border border-slate-200/60 shadow-sm hover:shadow-xl hover:border-orange-100 transition-all duration-300 overflow-hidden"
+              >
+                {/* Card Header */}
+                <div className="p-6">
+                  <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center mb-5 transition-transform group-hover:scale-110 duration-300", system.bg)}>
+                    <system.icon className={cn("w-7 h-7", system.color)} />
                   </div>
-                  <div className="p-2 bg-white rounded-lg shadow-sm">
-                    {module.icon}
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-gray-600 mt-2">
-                    {module.details}
+                  
+                  <h3 className="text-xl font-bold text-slate-900 mb-2 group-hover:text-orange-700 transition-colors">
+                    {system.title}
+                  </h3>
+                  <p className="text-slate-500 text-sm leading-relaxed mb-4 line-clamp-2">
+                    {system.description}
                   </p>
-                </CardContent>
-              </Link>
-              
-              <CardFooter className="mt-auto pt-0 px-6 pb-6">
-                <div className="w-full pt-4 border-t border-gray-200/60">
-                  <div className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary/60"></span>
-                    {t('Quick Links')}
+                </div>
+
+                {/* Links Section */}
+                <div className="mt-auto bg-slate-50/50 p-4 border-t border-slate-100">
+                  <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 px-2">
+                    {t('Quick Actions')}
                   </div>
-                  <div className="grid grid-cols-1 gap-2">
-                    {module.subMenus.map((sub, subIndex) => (
+                  <div className="space-y-1">
+                    {system.links.map((link, i) => (
                       <Link 
-                        key={subIndex} 
-                        href={sub.href}
-                        className="group flex items-center justify-between text-sm text-gray-700 hover:text-primary bg-white/60 hover:bg-white border border-transparent hover:border-primary/20 px-3 py-2 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md"
+                        key={i} 
+                        href={link.href}
+                        className="flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:text-orange-600 hover:bg-white hover:shadow-sm transition-all group/link"
                       >
-                        <span className="font-medium">{sub.title}</span>
-                        <ChevronRight className="h-4 w-4 opacity-30 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+                        <span>{link.label}</span>
+                        <ChevronRight className="w-4 h-4 opacity-0 -translate-x-2 group-hover/link:opacity-100 group-hover/link:translate-x-0 transition-all text-orange-400" />
                       </Link>
                     ))}
                   </div>
                 </div>
-              </CardFooter>
-            </Card>
-          ))}
+                
+                {/* Top Gradient Line */}
+                <div className={cn("absolute top-0 left-0 w-full h-1 bg-gradient-to-r opacity-0 group-hover:opacity-100 transition-opacity duration-300", system.gradient)} />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </AppLayout>

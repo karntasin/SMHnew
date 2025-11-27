@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Search, Calendar, Clock, MapPin } from 'lucide-react';
+import { Search, Calendar, Clock, MapPin, Edit, Trash2 } from 'lucide-react';
 import { Pagination } from '@/components/ui/pagination'; // Assuming you have a pagination component or I'll make a simple one
 
 interface Course {
@@ -31,6 +31,7 @@ interface Props {
     filters: {
         search?: string;
     };
+    canEdit: boolean;
 }
 
 const breadcrumbs = [
@@ -48,7 +49,7 @@ const breadcrumbs = [
     },
 ];
 
-export default function CoursesIndex({ courses, filters }: Props) {
+export default function CoursesIndex({ courses, filters, canEdit }: Props) {
     const [search, setSearch] = useState(filters.search || '');
 
     const handleSearch = (e: React.FormEvent) => {
@@ -124,12 +125,33 @@ export default function CoursesIndex({ courses, filters }: Props) {
                                         <span className="line-clamp-1">{course.location}</span>
                                     </div>
                                 </CardContent>
-                                <CardFooter className="pt-4 border-t bg-gray-50/50">
-                                    <Link href={route('km.learn.courses.show', course.id)} className="w-full">
+                                <CardFooter className="pt-4 border-t bg-gray-50/50 flex gap-2">
+                                    <Link href={route('km.learn.courses.show', course.id)} className="flex-1">
                                         <Button className="w-full bg-white text-emerald-600 border border-emerald-200 hover:bg-emerald-600 hover:text-white transition-all shadow-sm hover:shadow-md font-medium">
                                             ดูรายละเอียด
                                         </Button>
                                     </Link>
+                                    {canEdit && (
+                                        <>
+                                            <Link href={route('km.learn.courses.builder', course.id)}>
+                                                <Button variant="outline" size="icon" className="border-yellow-200 text-yellow-600 hover:bg-yellow-50">
+                                                    <Edit className="h-4 w-4" />
+                                                </Button>
+                                            </Link>
+                                            <Button 
+                                                variant="outline" 
+                                                size="icon" 
+                                                className="border-red-200 text-red-600 hover:bg-red-50"
+                                                onClick={() => {
+                                                    if(confirm('Are you sure you want to delete this course?')) {
+                                                        router.delete(route('km.learn.courses.destroy', course.id));
+                                                    }
+                                                }}
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </>
+                                    )}
                                 </CardFooter>
                             </Card>
                         ))

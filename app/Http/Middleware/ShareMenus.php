@@ -44,6 +44,14 @@ class ShareMenus
 
             $menus = $buildTree();
 
+            // Force specific menus to be leaf nodes (no dropdown)
+            $menus->transform(function ($menu) {
+                if (in_array($menu->route, ['/quality', '/admin-hub'])) {
+                    $menu->children = collect([]);
+                }
+                return $menu;
+            });
+
             return $menus;
         });
 

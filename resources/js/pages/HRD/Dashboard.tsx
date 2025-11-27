@@ -147,7 +147,7 @@ export default function HrdDashboard({ stats, recent_activity, upcoming_courses 
                                         <div key={activity.id} className="flex items-center gap-4 p-6 hover:bg-gray-50 transition-colors">
                                             <div className="space-y-1 flex-1">
                                                 <p className="text-base font-semibold text-gray-800 leading-none mb-2">
-                                                    {activity.course.title}
+                                                    {activity.course?.title || 'หลักสูตรถูกลบ'}
                                                 </p>
                                                 <p className="text-sm text-muted-foreground mb-3 flex items-center gap-2">
                                                     <Calendar className="h-3 w-3" />
