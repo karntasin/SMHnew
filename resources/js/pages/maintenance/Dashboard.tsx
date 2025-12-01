@@ -3,7 +3,7 @@ import AppLayout from '@/layouts/app-layout';
 import { Head, Link } from '@inertiajs/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Wrench, Clock, CheckCircle, AlertCircle, Plus } from 'lucide-react';
+import { Wrench, Clock, CheckCircle, AlertCircle, Plus, List, Settings, Briefcase } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 interface DashboardProps {
@@ -37,42 +37,110 @@ export default function Dashboard({ stats, recentRequests, monthlyStats, categor
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">รายการทั้งหมด</CardTitle>
-                            <Wrench className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{stats.total}</div>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">รอดำเนินการ</CardTitle>
-                            <AlertCircle className="h-4 w-4 text-yellow-500" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{stats.pending}</div>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">กำลังดำเนินการ</CardTitle>
-                            <Clock className="h-4 w-4 text-blue-500" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{stats.in_progress}</div>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">เสร็จสิ้น</CardTitle>
-                            <CheckCircle className="h-4 w-4 text-green-500" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{stats.completed}</div>
-                        </CardContent>
-                    </Card>
+                    <Link href={route('maintenance.requests.index')}>
+                        <Card className="hover:bg-accent transition-colors cursor-pointer h-full">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium">รายการทั้งหมด</CardTitle>
+                                <Wrench className="h-4 w-4 text-muted-foreground" />
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-2xl font-bold">{stats.total}</div>
+                            </CardContent>
+                        </Card>
+                    </Link>
+                    <Link href={route('maintenance.requests.index', { status: 'pending' })}>
+                        <Card className="hover:bg-accent transition-colors cursor-pointer h-full">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium">รอดำเนินการ</CardTitle>
+                                <AlertCircle className="h-4 w-4 text-yellow-500" />
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-2xl font-bold">{stats.pending}</div>
+                            </CardContent>
+                        </Card>
+                    </Link>
+                    <Link href={route('maintenance.requests.index', { status: 'in_progress' })}>
+                        <Card className="hover:bg-accent transition-colors cursor-pointer h-full">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium">กำลังดำเนินการ</CardTitle>
+                                <Clock className="h-4 w-4 text-blue-500" />
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-2xl font-bold">{stats.in_progress}</div>
+                            </CardContent>
+                        </Card>
+                    </Link>
+                    <Link href={route('maintenance.requests.index', { status: 'completed' })}>
+                        <Card className="hover:bg-accent transition-colors cursor-pointer h-full">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium">เสร็จสิ้น</CardTitle>
+                                <CheckCircle className="h-4 w-4 text-green-500" />
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-2xl font-bold">{stats.completed}</div>
+                            </CardContent>
+                        </Card>
+                    </Link>
+                </div>
+
+                {/* Quick Access Menu */}
+                <h2 className="text-lg font-semibold">เมนูลัด</h2>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                    <Link href={route('maintenance.requests.index')}>
+                        <Card className="hover:bg-accent transition-colors cursor-pointer h-full">
+                            <CardContent className="flex flex-col items-center justify-center p-6 gap-4">
+                                <div className="p-4 bg-primary/10 rounded-full">
+                                    <List className="w-8 h-8 text-primary" />
+                                </div>
+                                <div className="text-center">
+                                    <h3 className="font-semibold">รายการแจ้งซ่อม</h3>
+                                    <p className="text-sm text-muted-foreground">ดูรายการแจ้งซ่อมทั้งหมด</p>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </Link>
+
+                    <Link href={route('maintenance.requests.create')}>
+                        <Card className="hover:bg-accent transition-colors cursor-pointer h-full">
+                            <CardContent className="flex flex-col items-center justify-center p-6 gap-4">
+                                <div className="p-4 bg-green-100 rounded-full">
+                                    <Plus className="w-8 h-8 text-green-600" />
+                                </div>
+                                <div className="text-center">
+                                    <h3 className="font-semibold">แจ้งซ่อมใหม่</h3>
+                                    <p className="text-sm text-muted-foreground">สร้างใบแจ้งซ่อมใหม่</p>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </Link>
+
+                    <Link href={route('technician.work-orders.index')}>
+                        <Card className="hover:bg-accent transition-colors cursor-pointer h-full">
+                            <CardContent className="flex flex-col items-center justify-center p-6 gap-4">
+                                <div className="p-4 bg-orange-100 rounded-full">
+                                    <Briefcase className="w-8 h-8 text-orange-600" />
+                                </div>
+                                <div className="text-center">
+                                    <h3 className="font-semibold">ใบงานช่าง</h3>
+                                    <p className="text-sm text-muted-foreground">สำหรับเจ้าหน้าที่ช่าง</p>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </Link>
+
+                    <Link href={route('maintenance.settings.index')}>
+                        <Card className="hover:bg-accent transition-colors cursor-pointer h-full">
+                            <CardContent className="flex flex-col items-center justify-center p-6 gap-4">
+                                <div className="p-4 bg-gray-100 rounded-full">
+                                    <Settings className="w-8 h-8 text-gray-600" />
+                                </div>
+                                <div className="text-center">
+                                    <h3 className="font-semibold">ตั้งค่าระบบ</h3>
+                                    <p className="text-sm text-muted-foreground">จัดการข้อมูลพื้นฐาน</p>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </Link>
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">
@@ -109,7 +177,7 @@ export default function Dashboard({ stats, recentRequests, monthlyStats, categor
                                             cx="50%"
                                             cy="50%"
                                             labelLine={false}
-                                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                            label={({ name, percent }: any) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
                                             outerRadius={80}
                                             fill="#8884d8"
                                             dataKey="count"

@@ -5,6 +5,7 @@ use App\Http\Middleware\ShareMenus;
 use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\CheckMenuPermission;
 use App\Http\Middleware\TrustProxies;
+use App\Http\Middleware\EnsureProfileIsCompleted;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -26,8 +27,14 @@ return Application::configure(basePath: dirname(__DIR__))
             ShareMenus::class,
         ]);
 
+        // Append EnsureProfileIsCompleted after auth middleware
+        $middleware->appendToGroup('auth', [
+            EnsureProfileIsCompleted::class,
+        ]);
+
         $middleware->alias([
             'menu.permission' => CheckMenuPermission::class,
+            'profile.completed' => EnsureProfileIsCompleted::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

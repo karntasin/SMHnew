@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, Check, CheckCheck, Info, AlertTriangle, XCircle, CheckCircle } from 'lucide-react';
+import { Bell, Check, CheckCheck, Info, AlertTriangle, XCircle, CheckCircle, Car, Wrench, CalendarDays } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -13,7 +13,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import axios from 'axios';
-import { Link } from '@inertiajs/react';
+import { Link, usePage, router } from '@inertiajs/react';
 import { cn } from '@/lib/utils';
 
 interface Notification {
@@ -22,35 +22,58 @@ interface Notification {
         title: string;
         message: string;
         action_url?: string;
-        type?: 'info' | 'success' | 'warning' | 'error';
+        url?: string;
+        action_text?: string;
+        type?: string;
     };
     created_at: string;
     read_at: string | null;
 }
 
 export default function NotificationDropdown() {
+    const { props } = usePage();
+    const auth = props.auth as { user?: { id: number } } | undefined;
+    
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
     const [isOpen, setIsOpen] = useState(false);
     const [loading, setLoading] = useState(false);
 
     const fetchNotifications = async () => {
+        // Don't fetch if user is not authenticated
+        if (!auth?.user?.id) {
+            return;
+        }
+        
         try {
-            const response = await axios.get('/notifications');
-            setNotifications(response.data.notifications);
-            setUnreadCount(response.data.unread_count);
-        } catch (error) {
-            console.error('Failed to fetch notifications', error);
+            const response = await axios.get('/notifications/api');
+            // Combine unread and read notifications
+            const unread = response.data?.unread_notifications || [];
+            const read = response.data?.read_notifications || [];
+            setNotifications([...unread, ...read]);
+            setUnreadCount(response.data?.unread_count || 0);
+        } catch (error: any) {
+            // Only log if it's not a 401/403 (unauthenticated)
+            if (error?.response?.status !== 401 && error?.response?.status !== 403) {
+                console.error('Failed to fetch notifications', error);
+            }
+            setNotifications([]);
+            setUnreadCount(0);
         }
     };
 
     useEffect(() => {
+        // Only fetch if user is authenticated
+        if (!auth?.user?.id) {
+            return;
+        }
+        
         fetchNotifications();
         
         // Optional: Poll every minute
         const interval = setInterval(fetchNotifications, 60000);
         return () => clearInterval(interval);
-    }, []);
+    }, [auth?.user?.id]);
 
     const markAsRead = async (id: string) => {
         try {
@@ -82,7 +105,22 @@ export default function NotificationDropdown() {
             case 'success': return <CheckCircle className="h-4 w-4 text-green-500" />;
             case 'warning': return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
             case 'error': return <XCircle className="h-4 w-4 text-red-500" />;
+            case 'vehicle_driver': return <Car className="h-4 w-4 text-green-500" />;
+            case 'vehicle_booking_status': return <Car className="h-4 w-4 text-blue-500" />;
+            case 'room_booking': return <CalendarDays className="h-4 w-4 text-purple-500" />;
+            case 'maintenance': return <Wrench className="h-4 w-4 text-orange-500" />;
             default: return <Info className="h-4 w-4 text-blue-500" />;
+        }
+    };
+
+    const handleNotificationClick = (notification: Notification) => {
+        const url = notification.data.action_url || notification.data.url;
+        if (url) {
+            if (!notification.read_at) {
+                markAsRead(notification.id);
+            }
+            setIsOpen(false);
+            router.visit(url);
         }
     };
 
@@ -117,55 +155,60 @@ export default function NotificationDropdown() {
                 <ScrollArea className="h-[400px]">
                     {notifications.length > 0 ? (
                         <div className="flex flex-col">
-                            {notifications.map((notification) => (
-                                <div 
-                                    key={notification.id} 
-                                    className={cn(
-                                        "flex gap-3 p-4 border-b last:border-0 hover:bg-muted/50 transition-colors relative group",
-                                        !notification.read_at && "bg-blue-50/50 dark:bg-blue-900/10"
-                                    )}
-                                >
-                                    <div className="mt-1 flex-shrink-0">
-                                        {getIcon(notification.data.type)}
-                                    </div>
-                                    <div className="flex-1 space-y-1">
-                                        <div className="flex items-start justify-between gap-2">
-                                            <p className={cn("text-sm font-medium leading-none", !notification.read_at && "text-primary")}>
-                                                {notification.data.title}
-                                            </p>
-                                            <span className="text-xs text-muted-foreground whitespace-nowrap">
-                                                {notification.created_at}
-                                            </span>
+                            {notifications.map((notification) => {
+                                const hasLink = notification.data.action_url || notification.data.url;
+                                return (
+                                    <div 
+                                        key={notification.id} 
+                                        className={cn(
+                                            "flex gap-3 p-4 border-b last:border-0 hover:bg-muted/50 transition-colors relative group",
+                                            !notification.read_at && "bg-blue-50/50 dark:bg-blue-900/10",
+                                            hasLink && "cursor-pointer"
+                                        )}
+                                        onClick={() => hasLink && handleNotificationClick(notification)}
+                                    >
+                                        <div className="mt-1 flex-shrink-0">
+                                            {getIcon(notification.data.type)}
                                         </div>
-                                        <p className="text-sm text-muted-foreground line-clamp-2">
-                                            {notification.data.message}
-                                        </p>
-                                        {notification.data.action_url && (
-                                            <Link 
-                                                href={notification.data.action_url} 
-                                                className="text-xs text-primary hover:underline inline-block mt-1"
-                                                onClick={() => !notification.read_at && markAsRead(notification.id)}
+                                        <div className="flex-1 space-y-1">
+                                            <div className="flex items-start justify-between gap-2">
+                                                <p className={cn(
+                                                    "text-sm font-medium leading-none", 
+                                                    !notification.read_at && "text-primary",
+                                                    hasLink && "hover:underline"
+                                                )}>
+                                                    {notification.data.title}
+                                                </p>
+                                                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                                    {notification.created_at}
+                                                </span>
+                                            </div>
+                                            <p className="text-sm text-muted-foreground line-clamp-2 whitespace-pre-line">
+                                                {notification.data.message}
+                                            </p>
+                                            {hasLink && (
+                                                <span className="text-xs text-primary hover:underline inline-block mt-1">
+                                                    {notification.data.action_text || 'ดูรายละเอียด →'}
+                                                </span>
+                                            )}
+                                        </div>
+                                        {!notification.read_at && (
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-6 w-6 absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    markAsRead(notification.id);
+                                                }}
+                                                title="Mark as read"
                                             >
-                                                ดูรายละเอียด
-                                            </Link>
+                                                <Check className="h-3 w-3" />
+                                            </Button>
                                         )}
                                     </div>
-                                    {!notification.read_at && (
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-6 w-6 absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                markAsRead(notification.id);
-                                            }}
-                                            title="Mark as read"
-                                        >
-                                            <Check className="h-3 w-3" />
-                                        </Button>
-                                    )}
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     ) : (
                         <div className="flex flex-col items-center justify-center h-full py-8 text-muted-foreground">

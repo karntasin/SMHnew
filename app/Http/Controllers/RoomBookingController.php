@@ -6,6 +6,9 @@ use Inertia\Inertia;
 use Illuminate\Http\Request;
 use App\Models\MeetingRoom;
 use App\Models\RoomBooking;
+use App\Models\User;
+use App\Models\Department;
+use App\Notifications\RoomBookingNotification;
 use Carbon\Carbon;
 
 class RoomBookingController extends Controller
@@ -47,7 +50,7 @@ class RoomBookingController extends Controller
             'active_rooms' => MeetingRoom::where('status', 'active')->count()
         ];
 
-        return Inertia::render('admin/rooms/List', [
+        return Inertia::render('AdminHub/rooms/List', [
             'rooms' => $rooms,
             'bookings' => $bookings,
             'stats' => $stats,
@@ -82,7 +85,44 @@ class RoomBookingController extends Controller
 
     public function myBookings()
     {
-        return Inertia::render('admin/rooms/List');
+        $rooms = MeetingRoom::all();
+        
+        $bookings = RoomBooking::with(['room', 'user'])
+            ->where('user_id', auth()->id())
+            ->orderBy('start_time', 'desc')
+            ->get()
+            ->map(function ($booking) {
+                return [
+                    'id' => $booking->id,
+                    'title' => $booking->title,
+                    'start_time' => $booking->start_time->toIso8601String(),
+                    'end_time' => $booking->end_time->toIso8601String(),
+                    'status' => $booking->status,
+                    'room' => $booking->room,
+                    'user' => [
+                        'name' => $booking->user ? $booking->user->name : 'Unknown',
+                    ],
+                    'attendees_count' => $booking->attendees_count
+                ];
+            });
+
+        $myBookingsCount = RoomBooking::where('user_id', auth()->id())->count();
+        $myPendingCount = RoomBooking::where('user_id', auth()->id())->where('status', 'pending')->count();
+        $myTodayCount = RoomBooking::where('user_id', auth()->id())->whereDate('start_time', Carbon::today())->count();
+
+        $stats = [
+            'total_bookings' => $myBookingsCount,
+            'pending_approval' => $myPendingCount,
+            'today_bookings' => $myTodayCount,
+            'active_rooms' => MeetingRoom::where('status', 'active')->count()
+        ];
+
+        return Inertia::render('AdminHub/rooms/List', [
+            'rooms' => $rooms,
+            'bookings' => $bookings,
+            'stats' => $stats,
+            'currentFilter' => 'my'
+        ]);
     }
 
     public function store(Request $request)
@@ -123,10 +163,10 @@ class RoomBookingController extends Controller
             ->exists();
 
         if ($overlap) {
-            return back()->withErrors(['room_id' => 'ห้องประชุมไม่ว่างในช่วงเวลาดังกล่าว']);
+            return back()->withErrors(['room_id' => 'ห้องประชุมไม่ว่างในช่วงเวลาดังกล่าว กรุณาเลือกเวลาอื่นหรือห้องอื่น']);
         }
 
-        RoomBooking::create([
+        $booking = RoomBooking::create([
             'room_id' => $validated['room_id'],
             'user_id' => auth()->id(),
             'title' => $validated['title'],
@@ -137,6 +177,12 @@ class RoomBookingController extends Controller
             'status' => 'pending'
         ]);
 
+        // Send notification to booker
+        $booking->user->notify(new RoomBookingNotification($booking, 'booking_created'));
+
+        // Send notification to IT Center staff (ศูนย์สารสนเทศ)
+        $this->notifyITCenterStaff($booking, 'new_booking');
+
         return back()->with('success', 'จองห้องประชุมสำเร็จ รอการอนุมัติ');
     }
 
@@ -144,7 +190,7 @@ class RoomBookingController extends Controller
     {
         $booking = RoomBooking::with(['room', 'user.department'])->findOrFail($id);
         
-        return Inertia::render('admin/rooms/Show', [
+        return Inertia::render('AdminHub/rooms/Show', [
             'booking' => [
                 'id' => $booking->id,
                 'title' => $booking->title,
@@ -175,6 +221,10 @@ class RoomBookingController extends Controller
     {
         $booking = RoomBooking::findOrFail($id);
         $booking->update(['status' => 'approved']);
+        
+        // Notify the booker
+        $booking->user->notify(new RoomBookingNotification($booking, 'approved'));
+        
         return back()->with('success', 'อนุมัติการจองเรียบร้อยแล้ว');
     }
 
@@ -184,10 +234,43 @@ class RoomBookingController extends Controller
         
         if ($booking->status === 'pending') {
              $booking->update(['status' => 'rejected']);
+             // Notify the booker about rejection
+             $booking->user->notify(new RoomBookingNotification($booking, 'rejected'));
         } else {
              $booking->update(['status' => 'cancelled']);
+             // Notify the booker about cancellation
+             $booking->user->notify(new RoomBookingNotification($booking, 'cancelled'));
         }
         
         return to_route('rooms.index')->with('success', 'ยกเลิกการจองเรียบร้อยแล้ว');
+    }
+
+    /**
+     * Notify IT Center staff about room booking
+     */
+    protected function notifyITCenterStaff(RoomBooking $booking, string $actionType): void
+    {
+        // Find department "ศูนย์สารสนเทศ"
+        $itDepartment = Department::where('name', 'like', '%ศูนย์สารสนเทศ%')
+            ->orWhere('name', 'like', '%สารสนเทศ%')
+            ->orWhere('name', 'like', '%IT%')
+            ->first();
+
+        if ($itDepartment) {
+            // Notify all users in IT department
+            $itStaff = User::where('department_id', $itDepartment->id)->get();
+            foreach ($itStaff as $staff) {
+                $staff->notify(new RoomBookingNotification($booking, $actionType));
+            }
+        }
+
+        // Also notify users with 'admin' or 'hroom' role (room admin)
+        $admins = User::role(['admin', 'hroom'])->get();
+        foreach ($admins as $admin) {
+            // Don't notify if already notified as IT staff
+            if (!$itDepartment || $admin->department_id !== $itDepartment->id) {
+                $admin->notify(new RoomBookingNotification($booking, $actionType));
+            }
+        }
     }
 }

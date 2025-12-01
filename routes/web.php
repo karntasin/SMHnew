@@ -30,7 +30,9 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
     Route::get('dashboard/cv-risk-report', [CvRiskReportController::class, 'export'])->name('dashboard.cv-risk-report');
 
     // Notifications
-    Route::get('/notifications', [App\Http\Controllers\NotificationController::class, 'index'])->name('notifications.index');
+    Route::get('/notifications', [App\Http\Controllers\NotificationController::class, 'page'])->name('notifications.index');
+    Route::get('/notifications/api', [App\Http\Controllers\NotificationController::class, 'index'])->name('notifications.api');
+    Route::get('/notifications/urgent', [App\Http\Controllers\NotificationController::class, 'urgent'])->name('notifications.urgent');
     Route::post('/notifications/{id}/read', [App\Http\Controllers\NotificationController::class, 'markAsRead'])->name('notifications.read');
     Route::post('/notifications/read-all', [App\Http\Controllers\NotificationController::class, 'markAllAsRead'])->name('notifications.read-all');
 
@@ -111,7 +113,7 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::get('/', [RoomBookingController::class, 'index'])->name('index');
         // Calendar page (Inertia) — renders the React page
         Route::get('/calendar', function () {
-            return Inertia::render('admin/rooms/Calendar');
+            return Inertia::render('AdminHub/rooms/Calendar');
         })->name('calendar');
         // Calendar events API (returns JSON for FullCalendar)
         Route::get('/calendar/events', [RoomBookingController::class, 'calendar'])->name('calendar.events');
@@ -127,11 +129,17 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
     // Vehicle Booking System (ระบบจองรถ)
     Route::prefix('vehicles')->name('vehicles.')->group(function () {
         Route::get('/bookings', [VehicleBookingController::class, 'index'])->name('bookings.index');
+        Route::get('/bookings/my', [VehicleBookingController::class, 'myRequests'])->name('bookings.my');
         Route::get('/bookings/create', [VehicleBookingController::class, 'create'])->name('bookings.create');
         Route::post('/bookings', [VehicleBookingController::class, 'store'])->name('bookings.store');
         Route::get('/bookings/{booking}', [VehicleBookingController::class, 'show'])->name('bookings.show');
         Route::put('/bookings/{booking}', [VehicleBookingController::class, 'update'])->name('bookings.update');
         Route::delete('/bookings/{booking}', [VehicleBookingController::class, 'destroy'])->name('bookings.destroy');
+        
+        // Driver assignment and confirmation
+        Route::post('/bookings/{booking}/assign-driver', [VehicleBookingController::class, 'assignDriver'])->name('bookings.assignDriver');
+        Route::post('/bookings/{booking}/confirm-driver', [VehicleBookingController::class, 'confirmDriver'])->name('bookings.confirmDriver');
+        Route::get('/drivers', [VehicleBookingController::class, 'getDrivers'])->name('drivers');
         
         Route::get('/calendar', function () {
             return Inertia::render('vehicles/Calendar');
@@ -152,35 +160,40 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
 
     // Document Management System (ระบบรับส่งหนังสือ)
     Route::prefix('documents')->name('documents.')->group(function () {
-        Route::get('/dashboard', [App\Http\Controllers\Document\DocumentDashboardController::class, 'index'])->name('dashboard');
+        Route::get('/dashboard', [App\Http\Controllers\Document\DocumentController::class, 'dashboard'])->name('dashboard');
         
-        // Menu Routes
-        Route::get('/inbox', [App\Http\Controllers\Document\DocumentController::class, 'inbox'])->name('inbox');
-        Route::get('/sent', [App\Http\Controllers\Document\DocumentController::class, 'sent'])->name('sent');
-        Route::get('/drafts', [App\Http\Controllers\Document\DocumentController::class, 'drafts'])->name('drafts');
-        Route::get('/receive', [App\Http\Controllers\Document\DocumentController::class, 'receive'])->name('receive');
-        Route::get('/import', [App\Http\Controllers\Document\DocumentController::class, 'import'])->name('import');
-        Route::get('/settings', [App\Http\Controllers\Document\DocumentSettingController::class, 'index'])->name('settings');
-        Route::post('/settings/types', [App\Http\Controllers\Document\DocumentSettingController::class, 'storeType'])->name('settings.types.store');
-        Route::delete('/settings/types/{id}', [App\Http\Controllers\Document\DocumentSettingController::class, 'deleteType'])->name('settings.types.delete');
+        // API endpoints for notifications/popups
+        Route::get('/pending-acknowledgments', [App\Http\Controllers\Document\DocumentController::class, 'getPendingAcknowledgments'])->name('pendingAcknowledgments');
+        Route::get('/overdue', [App\Http\Controllers\Document\DocumentController::class, 'getOverdueDocuments'])->name('overdue');
         
-        Route::get('/templates', [App\Http\Controllers\Document\DocumentController::class, 'templates'])->name('templates');
-
         Route::get('/', [App\Http\Controllers\Document\DocumentController::class, 'index'])->name('index');
         Route::get('/create', [App\Http\Controllers\Document\DocumentController::class, 'create'])->name('create');
         Route::post('/', [App\Http\Controllers\Document\DocumentController::class, 'store'])->name('store');
         Route::get('/{document}', [App\Http\Controllers\Document\DocumentController::class, 'show'])->name('show');
-        Route::post('/{document}/approve', [App\Http\Controllers\Document\DocumentController::class, 'approve'])->name('approve');
-        Route::post('/{document}/kasien', [App\Http\Controllers\Document\DocumentController::class, 'kasien'])->name('kasien');
-        Route::post('/{document}/distribute', [App\Http\Controllers\Document\DocumentController::class, 'distribute'])->name('distribute');
-        Route::post('/distributions/{distribution}/acknowledge', [App\Http\Controllers\Document\DocumentController::class, 'acknowledge'])->name('acknowledge');
+        
+        // Workflow Actions
+        Route::post('/{document}/forward', [App\Http\Controllers\Document\DocumentController::class, 'forward'])->name('forward');
+        Route::post('/{document}/submit-boss', [App\Http\Controllers\Document\DocumentController::class, 'submitBoss'])->name('submitBoss');
+        Route::post('/{document}/approve/{action}', [App\Http\Controllers\Document\DocumentController::class, 'approve'])->name('approve');
+        Route::post('/{document}/distribute-circular', [App\Http\Controllers\Document\DocumentController::class, 'distributeCircular'])->name('distributeCircular');
+        Route::post('/{document}/acknowledge', [App\Http\Controllers\Document\DocumentController::class, 'acknowledge'])->name('acknowledge');
+        
+        // Acknowledgment for forwarded documents
+        Route::post('/action/{action}/acknowledge', [App\Http\Controllers\Document\DocumentController::class, 'acknowledgeDocument'])->name('acknowledgeDocument');
     });
 
     // Maintenance System (ระบบแจ้งซ่อม)
     Route::prefix('maintenance')->name('maintenance.')->group(function () {
         Route::get('/dashboard', [App\Http\Controllers\MaintenanceDashboardController::class, 'index'])->name('dashboard');
         
-        Route::resource('requests', App\Http\Controllers\MaintenanceRequestController::class);
+        Route::get('/requests/my', [App\Http\Controllers\MaintenanceRequestController::class, 'myRequests'])->name('requests.my');
+        Route::post('/requests/{maintenanceRequest}/cancel', [App\Http\Controllers\MaintenanceRequestController::class, 'cancel'])->name('requests.cancel');
+
+        Route::resource('requests', App\Http\Controllers\MaintenanceRequestController::class)
+            ->parameters(['requests' => 'maintenanceRequest'])
+            ->withoutMiddleware(['menu.permission']);
+        Route::post('/requests/{maintenanceRequest}/assign', [App\Http\Controllers\MaintenanceRequestController::class, 'assign'])->name('requests.assign');
+        Route::post('/requests/{maintenanceRequest}/close', [App\Http\Controllers\MaintenanceRequestController::class, 'close'])->name('requests.close');
         
         Route::get('/settings', [App\Http\Controllers\MaintenanceSettingController::class, 'index'])->name('settings.index');
         
@@ -193,6 +206,15 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::post('/settings/priorities', [App\Http\Controllers\MaintenanceSettingController::class, 'storePriority'])->name('settings.priorities.store');
         Route::put('/settings/priorities/{priority}', [App\Http\Controllers\MaintenanceSettingController::class, 'updatePriority'])->name('settings.priorities.update');
         Route::delete('/settings/priorities/{priority}', [App\Http\Controllers\MaintenanceSettingController::class, 'destroyPriority'])->name('settings.priorities.destroy');
+    });
+
+    // Technician Work Orders (ระบบใบงานสำหรับช่าง)
+    Route::prefix('technician')->name('technician.')->group(function () {
+        Route::get('/work-orders', [App\Http\Controllers\TechnicianWorkOrderController::class, 'index'])->name('work-orders.index');
+        Route::get('/work-orders/{workOrder}', [App\Http\Controllers\TechnicianWorkOrderController::class, 'show'])->name('work-orders.show');
+        Route::post('/work-orders/{workOrder}/accept', [App\Http\Controllers\TechnicianWorkOrderController::class, 'accept'])->name('work-orders.accept');
+        Route::post('/work-orders/{workOrder}/assign', [App\Http\Controllers\TechnicianWorkOrderController::class, 'assign'])->name('work-orders.assign');
+        Route::post('/work-orders/{workOrder}/update-status', [App\Http\Controllers\TechnicianWorkOrderController::class, 'updateStatus'])->name('work-orders.update-status');
     });
 
     // Finance Dashboard

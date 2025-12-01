@@ -3,37 +3,37 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Models\DocumentAction;
+use App\Models\DocumentCircularRecipient;
 
 class Document extends Model
 {
+    use SoftDeletes;
+
     protected $guarded = [];
 
     protected $casts = [
         'document_date' => 'date',
-        'due_date' => 'date',
-        'approved_at' => 'datetime',
-        'sent_at' => 'datetime',
-        'received_at' => 'datetime',
-        'completed_at' => 'datetime',
     ];
 
-    public function approvals()
+    public function actions()
     {
-        return $this->hasMany(DocumentApproval::class);
+        return $this->hasMany(DocumentAction::class);
     }
 
-    public function distributions()
+    public function circularRecipients()
     {
-        return $this->hasMany(DocumentDistribution::class);
+        return $this->hasMany(DocumentCircularRecipient::class);
     }
 
-    public function createdBy()
+    public function creator()
     {
-        return $this->belongsTo(User::class, 'created_by');
+        return $this->belongsTo(User::class, 'user_id');
     }
 
-    public function currentHolder()
+    public function department()
     {
-        return $this->belongsTo(User::class, 'current_holder_id');
+        return $this->belongsTo(Department::class);
     }
 }

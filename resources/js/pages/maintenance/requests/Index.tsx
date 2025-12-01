@@ -14,6 +14,17 @@ interface IndexProps {
 }
 
 export default function Index({ requests }: IndexProps) {
+    // Safety check
+    if (!requests || !requests.data) {
+        return (
+            <AppLayout breadcrumbs={[{ title: 'ระบบแจ้งซ่อม', href: '#' }]}>
+                <div className="p-6 text-center text-red-500">
+                    เกิดข้อผิดพลาดในการโหลดข้อมูล (No data received)
+                </div>
+            </AppLayout>
+        );
+    }
+
     return (
         <AppLayout breadcrumbs={[
             { title: 'ระบบแจ้งซ่อม', href: route('maintenance.dashboard') },
@@ -53,7 +64,11 @@ export default function Index({ requests }: IndexProps) {
                                 ) : (
                                     requests.data.map((req) => (
                                         <TableRow key={req.id}>
-                                            <TableCell className="font-medium">{req.ticket_number}</TableCell>
+                                            <TableCell className="font-medium">
+                                                <Link href={route('maintenance.requests.show', req.id)} className="text-blue-600 hover:underline">
+                                                    {req.ticket_number}
+                                                </Link>
+                                            </TableCell>
                                             <TableCell>{req.title}</TableCell>
                                             <TableCell>{req.category?.name || '-'}</TableCell>
                                             <TableCell>

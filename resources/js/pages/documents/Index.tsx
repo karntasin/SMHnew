@@ -10,11 +10,13 @@ import { Badge } from '@/components/ui/badge';
 interface Document {
     id: number;
     document_number: string;
-    subject: string;
+    title: string;
     status: string;
     created_at: string;
-    urgency: string;
-    created_by: { name: string };
+    document_date: string;
+    origin_type: string;
+    type: string;
+    creator: { name: string };
 }
 
 interface IndexProps {
@@ -27,12 +29,19 @@ interface IndexProps {
 export default function Index({ documents }: IndexProps) {
     const getStatusBadge = (status: string) => {
         switch (status) {
-            case 'draft': return <Badge variant="outline">ร่าง</Badge>;
-            case 'pending_approval': return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">รออนุมัติ</Badge>;
+            case 'pending': return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">รอดำเนินการ</Badge>;
+            case 'in_progress': return <Badge variant="default" className="bg-blue-100 text-blue-800">กำลังดำเนินการ</Badge>;
             case 'approved': return <Badge variant="default" className="bg-green-100 text-green-800">อนุมัติแล้ว</Badge>;
-            case 'sent': return <Badge variant="default" className="bg-blue-100 text-blue-800">ส่งออกแล้ว</Badge>;
+            case 'distributed': return <Badge variant="default" className="bg-purple-100 text-purple-800">เวียนทราบ</Badge>;
+            case 'completed': return <Badge variant="outline" className="bg-gray-100 text-gray-800">เสร็จสิ้น</Badge>;
             default: return <Badge variant="outline">{status}</Badge>;
         }
+    };
+
+    const getTypeBadge = (type: string) => {
+        return type === 'circular' 
+            ? <Badge variant="outline" className="border-purple-500 text-purple-500">หนังสือเวียน</Badge>
+            : <Badge variant="outline">หนังสือปกติ</Badge>;
     };
 
     return (
@@ -45,7 +54,7 @@ export default function Index({ documents }: IndexProps) {
                     <Link href={route('documents.create')}>
                         <Button>
                             <Plus className="mr-2 h-4 w-4" />
-                            สร้างหนังสือใหม่
+                            ลงทะเบียนรับหนังสือ
                         </Button>
                     </Link>
                 </div>
@@ -60,10 +69,10 @@ export default function Index({ documents }: IndexProps) {
                                 <TableRow>
                                     <TableHead>เลขที่หนังสือ</TableHead>
                                     <TableHead>เรื่อง</TableHead>
-                                    <TableHead>ความเร่งด่วน</TableHead>
+                                    <TableHead>ประเภท</TableHead>
                                     <TableHead>สถานะ</TableHead>
                                     <TableHead>ผู้สร้าง</TableHead>
-                                    <TableHead>วันที่</TableHead>
+                                    <TableHead>ลงวันที่</TableHead>
                                     <TableHead>จัดการ</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -77,19 +86,21 @@ export default function Index({ documents }: IndexProps) {
                                 ) : (
                                     documents.data.map((doc) => (
                                         <TableRow key={doc.id}>
-                                            <TableCell className="font-medium">{doc.document_number}</TableCell>
+                                            <TableCell className="font-medium">{doc.document_number || '-'}</TableCell>
                                             <TableCell>
-                                                <div className="max-w-[300px] truncate" title={doc.subject}>
-                                                    {doc.subject}
+                                                <div className="max-w-[300px] truncate" title={doc.title}>
+                                                    {doc.title}
+                                                </div>
+                                                <div className="text-xs text-muted-foreground">
+                                                    {doc.origin_type === 'internal' ? 'ภายใน' : 'ภายนอก'}
                                                 </div>
                                             </TableCell>
                                             <TableCell>
-                                                {doc.urgency === 'urgent' ? <span className="text-red-600 font-bold">ด่วน</span> :
-                                                 doc.urgency === 'very_urgent' ? <span className="text-red-800 font-bold">ด่วนที่สุด</span> : 'ปกติ'}
+                                                {getTypeBadge(doc.type)}
                                             </TableCell>
                                             <TableCell>{getStatusBadge(doc.status)}</TableCell>
-                                            <TableCell>{doc.created_by?.name}</TableCell>
-                                            <TableCell>{new Date(doc.created_at).toLocaleDateString('th-TH')}</TableCell>
+                                            <TableCell>{doc.creator?.name}</TableCell>
+                                            <TableCell>{new Date(doc.document_date).toLocaleDateString('th-TH')}</TableCell>
                                             <TableCell>
                                                 <Link href={route('documents.show', doc.id)}>
                                                     <Button variant="ghost" size="sm">รายละเอียด</Button>

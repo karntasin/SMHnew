@@ -9,6 +9,7 @@ use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Auth\VerifyEmailController;
 use App\Http\Controllers\LineAuthController;
+use App\Http\Controllers\CompleteProfileController;
 use Illuminate\Support\Facades\Route;
 
 // LINE Authentication Routes (Accessible by both guests and authenticated users)
@@ -40,6 +41,12 @@ Route::middleware('guest')->group(function () {
 });
 
 Route::middleware('auth')->group(function () {
+    // Complete Profile (for new LINE users)
+    Route::get('profile/complete', [CompleteProfileController::class, 'show'])
+        ->name('profile.complete');
+    Route::post('profile/complete', [CompleteProfileController::class, 'update'])
+        ->name('profile.complete.update');
+
     Route::get('verify-email', EmailVerificationPromptController::class)
         ->name('verification.notice');
 

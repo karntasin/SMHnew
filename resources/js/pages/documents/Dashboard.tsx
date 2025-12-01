@@ -8,15 +8,17 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 interface DashboardProps {
     stats: {
         total: number;
-        draft: number;
         pending: number;
-        approved: number;
+        completed: number;
     };
-    recentDocuments: any[];
-    monthlyStats: any[];
+    deptStats: {
+        name: string;
+        received_count: number;
+    }[];
+    recent: any[];
 }
 
-export default function Dashboard({ stats, recentDocuments, monthlyStats }: DashboardProps) {
+export default function Dashboard({ stats, deptStats, recent }: DashboardProps) {
     return (
         <AppLayout breadcrumbs={[{ title: 'ระบบรับส่งหนังสือ', href: '/documents' }, { title: 'แดชบอร์ด', href: '#' }]}>
             <Head title="แดชบอร์ดเอกสาร" />
@@ -24,7 +26,7 @@ export default function Dashboard({ stats, recentDocuments, monthlyStats }: Dash
             <div className="p-6 space-y-6">
                 <h1 className="text-2xl font-bold">ภาพรวมระบบรับส่งหนังสือ</h1>
 
-                <div className="grid gap-4 md:grid-cols-4">
+                <div className="grid gap-4 md:grid-cols-3">
                     <Link href={route('documents.index')}>
                         <Card className="hover:bg-accent/50 transition-colors cursor-pointer">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -36,21 +38,10 @@ export default function Dashboard({ stats, recentDocuments, monthlyStats }: Dash
                             </CardContent>
                         </Card>
                     </Link>
-                    <Link href={route('documents.index', { status: 'draft' })}>
+                    <Link href={route('documents.index', { status: 'pending' })}>
                         <Card className="hover:bg-accent/50 transition-colors cursor-pointer">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">แบบร่าง</CardTitle>
-                                <File className="h-4 w-4 text-muted-foreground" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">{stats.draft}</div>
-                            </CardContent>
-                        </Card>
-                    </Link>
-                    <Link href={route('documents.index', { status: 'pending_approval' })}>
-                        <Card className="hover:bg-accent/50 transition-colors cursor-pointer">
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">รออนุมัติ</CardTitle>
+                                <CardTitle className="text-sm font-medium">รอดำเนินการ</CardTitle>
                                 <Clock className="h-4 w-4 text-yellow-500" />
                             </CardHeader>
                             <CardContent>
@@ -58,14 +49,14 @@ export default function Dashboard({ stats, recentDocuments, monthlyStats }: Dash
                             </CardContent>
                         </Card>
                     </Link>
-                    <Link href={route('documents.index', { status: 'approved' })}>
+                    <Link href={route('documents.index', { status: 'completed' })}>
                         <Card className="hover:bg-accent/50 transition-colors cursor-pointer">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">อนุมัติแล้ว</CardTitle>
+                                <CardTitle className="text-sm font-medium">เสร็จสิ้น</CardTitle>
                                 <CheckCircle className="h-4 w-4 text-green-500" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold">{stats.approved}</div>
+                                <div className="text-2xl font-bold">{stats.completed}</div>
                             </CardContent>
                         </Card>
                     </Link>
@@ -74,40 +65,18 @@ export default function Dashboard({ stats, recentDocuments, monthlyStats }: Dash
                 <div className="grid gap-4 md:grid-cols-2">
                     <Card className="col-span-1">
                         <CardHeader>
-                            <CardTitle>สถิติหนังสือรายเดือน (ปีปัจจุบัน)</CardTitle>
+                            <CardTitle>สถิติการรับหนังสือแยกตามแผนก</CardTitle>
                         </CardHeader>
-                        <CardContent className="pl-2">
-                            <div className="h-[300px]">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={monthlyStats}>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                        <XAxis 
-                                            dataKey="name" 
-                                            stroke="#888888" 
-                                            fontSize={12} 
-                                            tickLine={false} 
-                                            axisLine={false} 
-                                        />
-                                        <YAxis 
-                                            stroke="#888888" 
-                                            fontSize={12} 
-                                            tickLine={false} 
-                                            axisLine={false} 
-                                            tickFormatter={(value) => `${value}`} 
-                                        />
-                                        <Tooltip 
-                                            cursor={{ fill: 'transparent' }}
-                                            contentStyle={{ borderRadius: '8px' }}
-                                        />
-                                        <Bar 
-                                            dataKey="total" 
-                                            fill="#0ea5e9" 
-                                            radius={[4, 4, 0, 0]} 
-                                            name="จำนวนหนังสือ"
-                                        />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div>
+                        <CardContent className="h-[300px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={deptStats}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="name" angle={-45} textAnchor="end" height={70} />
+                                    <YAxis />
+                                    <Tooltip />
+                                    <Bar dataKey="received_count" fill="#8884d8" name="จำนวนหนังสือที่รับ" />
+                                </BarChart>
+                            </ResponsiveContainer>
                         </CardContent>
                     </Card>
 
@@ -117,14 +86,14 @@ export default function Dashboard({ stats, recentDocuments, monthlyStats }: Dash
                         </CardHeader>
                         <CardContent>
                             <div className="space-y-4">
-                                {recentDocuments.length === 0 ? (
+                                {recent.length === 0 ? (
                                     <p className="text-muted-foreground">ไม่มีรายการล่าสุด</p>
                                 ) : (
-                                    recentDocuments.map((doc) => (
+                                    recent.map((doc) => (
                                         <div key={doc.id} className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0">
                                             <div>
-                                                <p className="font-medium">{doc.subject}</p>
-                                                <p className="text-sm text-muted-foreground">{doc.document_number} • {new Date(doc.created_at).toLocaleDateString('th-TH')}</p>
+                                                <p className="font-medium">{doc.title}</p>
+                                                <p className="text-sm text-muted-foreground">{doc.document_number || '-'} • {new Date(doc.created_at).toLocaleDateString('th-TH')}</p>
                                             </div>
                                             <Link href={route('documents.show', doc.id)} className="text-sm text-blue-600 hover:underline">
                                                 ดูรายละเอียด

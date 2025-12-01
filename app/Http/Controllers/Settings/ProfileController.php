@@ -8,6 +8,7 @@ use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -28,6 +29,9 @@ class ProfileController extends Controller
                     'name' => $user->name,
                     'email' => $user->email,
                     'line_id' => $user->line_id,
+                    'line_display_name' => $user->line_display_name,
+                    'line_picture_url' => $user->line_picture_url,
+                    'avatar' => $user->avatar_url, // Use the accessor
                     'positions' => $user->positions->map(function($pos) {
                         return [
                             'id' => $pos->id,
@@ -53,6 +57,30 @@ class ProfileController extends Controller
         $request->user()->save();
 
         return to_route('profile.edit');
+    }
+
+    /**
+     * Update the user's avatar.
+     */
+    public function updateAvatar(Request $request): RedirectResponse
+    {
+        $request->validate([
+            'avatar' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
+        ]);
+
+        $user = $request->user();
+
+        // Delete old avatar if exists and is not LINE picture
+        if ($user->avatar && !str_starts_with($user->avatar, 'http') && Storage::disk('public')->exists($user->avatar)) {
+            Storage::disk('public')->delete($user->avatar);
+        }
+
+        $avatarPath = $request->file('avatar')->store('avatars', 'public');
+        
+        /** @var \App\Models\User $user */
+        $user->update(['avatar' => $avatarPath]);
+
+        return back()->with('status', 'avatar-updated');
     }
 
     /**

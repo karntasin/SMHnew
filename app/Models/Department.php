@@ -16,4 +16,9 @@ class Department extends Model
     protected $casts = [
         'is_active' => 'boolean',
     ];
+
+    public function receivedDocuments()
+    {
+        return $this->hasMany(DocumentAction::class, 'receiver_department_id');
+    }
 }

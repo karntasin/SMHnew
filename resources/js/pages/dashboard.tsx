@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Head, router } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
-import { type BreadcrumbItem } from '@/types';
+import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import WelcomeModal from '@/components/WelcomeModal';
 import { 
   Activity, 
   Users, 
@@ -80,8 +81,23 @@ interface DashboardProps {
 
 export default function Dashboard({ filter, stats }: DashboardProps) {
   const { t } = useTranslation();
+  const { auth } = usePage<SharedData>().props;
   const [startDate, setStartDate] = useState(filter?.start_date || '');
   const [endDate, setEndDate] = useState(filter?.end_date || '');
+  const [showWelcome, setShowWelcome] = useState(false);
+
+  // Check if should show welcome modal (only once per session)
+  useEffect(() => {
+    const hasSeenWelcome = sessionStorage.getItem('hasSeenWelcome');
+    if (!hasSeenWelcome) {
+      // Small delay to make the animation smoother
+      const timer = setTimeout(() => {
+        setShowWelcome(true);
+        sessionStorage.setItem('hasSeenWelcome', 'true');
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, []);
 
   useEffect(() => {
     setStartDate(filter?.start_date || '');
@@ -129,6 +145,14 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
   return (
     <AppLayout breadcrumbs={breadcrumbs}>
       <Head title="Dashboard" />
+      
+      {/* Welcome Modal */}
+      <WelcomeModal 
+        userName={auth.user.name} 
+        isOpen={showWelcome} 
+        onClose={() => setShowWelcome(false)} 
+      />
+      
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
         <div className="p-6 space-y-6">
           {/* Header with gradient */}

@@ -19,6 +19,32 @@ class User extends Authenticatable implements HasMedia
     {
         return $this->belongsToMany(Position::class, 'position_user');
     }
+
+    /**
+     * Single department relationship (legacy)
+     */
+    public function department()
+    {
+        return $this->belongsTo(Department::class);
+    }
+
+    /**
+     * Many-to-many relationship: User departments (สามารถอยู่ได้หลายแผนก)
+     */
+    public function departments()
+    {
+        return $this->belongsToMany(Department::class, 'department_user')
+                    ->withPivot('is_primary')
+                    ->withTimestamps();
+    }
+
+    /**
+     * Get primary department (แผนกหลัก)
+     */
+    public function primaryDepartment()
+    {
+        return $this->departments()->wherePivot('is_primary', true)->first();
+    }
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable, HasRoles, InteractsWithMedia;
 
@@ -32,7 +58,10 @@ class User extends Authenticatable implements HasMedia
         'email',
         'password',
         'line_id',
+        'line_display_name',
         'avatar',
+        'line_picture_url',
+        'profile_completed',
         'position',
         'department_id',
     ];
@@ -57,7 +86,27 @@ class User extends Authenticatable implements HasMedia
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'profile_completed' => 'boolean',
         ];
+    }
+
+    /**
+     * Get the avatar URL (prioritize uploaded avatar, fallback to LINE picture)
+     */
+    public function getAvatarUrlAttribute(): ?string
+    {
+        if ($this->avatar && !str_starts_with($this->avatar, 'http')) {
+            return asset('storage/' . $this->avatar);
+        }
+        return $this->avatar ?? $this->line_picture_url;
+    }
+
+    /**
+     * Get display name (prioritize real name, fallback to LINE display name)
+     */
+    public function getDisplayNameAttribute(): string
+    {
+        return $this->name ?: $this->line_display_name ?: 'Unknown';
     }
 
     public function mediaFolders()

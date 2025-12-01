@@ -26,11 +26,32 @@ class ShareMenus
             // Recursive builder (filtered by permission)
             $buildTree = function ($parentId = null) use (&$buildTree, $indexed, $user) {
                 return $indexed
-                    ->filter(
-                        fn($menu) =>
-                        $menu->parent_id === $parentId &&
-                            (!$menu->permission_name || $user->can($menu->permission_name))
-                    )
+                    ->filter(function ($menu) use ($parentId, $user) {
+                        if ($menu->parent_id !== $parentId) return false;
+
+                        // Hide specific menus requested by user
+                        $hiddenTitles = ['ระบบแจ้งซ่อม', 'ใบงานซ่อมบำรุง'];
+                        if (in_array($menu->title, $hiddenTitles)) {
+                            return false;
+                        }
+
+                        // Special check for Technician menu
+                        if ($menu->route === '/technician/work-orders') {
+                            $technicianPositions = ['ช่างส่งกำลัง', 'ช่างIT', 'ช่างไฟฟ้า', 'ช่างประปา', 'ช่างทั่วไป'];
+                            $userPositions = $user->positions->pluck('name')->toArray();
+                            
+                            // Debug logging
+                            // \Illuminate\Support\Facades\Log::info('Checking technician menu for user: ' . $user->name);
+                            // \Illuminate\Support\Facades\Log::info('User positions: ' . implode(', ', $userPositions));
+                            // \Illuminate\Support\Facades\Log::info('Intersect: ' . implode(', ', array_intersect($technicianPositions, $userPositions)));
+
+                            if (!empty(array_intersect($technicianPositions, $userPositions))) {
+                                return true;
+                            }
+                        }
+
+                        return !$menu->permission_name || $user->can($menu->permission_name);
+                    })
                     ->map(function ($menu) use (&$buildTree) {
                         $menu->children = $buildTree($menu->id)->values();
                         return $menu;

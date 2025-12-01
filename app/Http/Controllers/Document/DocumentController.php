@@ -4,82 +4,38 @@ namespace App\Http\Controllers\Document;
 
 use App\Http\Controllers\Controller;
 use App\Models\Document;
-use App\Models\DocumentApproval;
-use App\Models\DocumentDistribution;
+use App\Models\DocumentAction;
+use App\Models\DocumentCircularRecipient;
 use App\Models\User;
 use App\Models\Department;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Notification;
+use App\Notifications\DocumentNotification;
 
 class DocumentController extends Controller
 {
-    public function drafts()
-    {
-        return redirect()->route('documents.index', ['status' => 'draft']);
-    }
-
-    public function receive()
-    {
-        return $this->create();
-    }
-
-    public function import()
-    {
-        return redirect()->route('documents.dashboard')->with('message', 'Import feature is coming soon.');
-    }
-
-    public function settings()
-    {
-        return redirect()->route('documents.dashboard')->with('message', 'Settings feature is coming soon.');
-    }
-
-    public function templates()
-    {
-        return redirect()->route('documents.dashboard')->with('message', 'Templates feature is coming soon.');
-    }
-
-    public function inbox(Request $request)
-    {
-        $user = Auth::user();
-        $query = DocumentDistribution::with(['document.createdBy', 'department'])
-            ->where(function ($q) use ($user) {
-                $q->where('user_id', $user->id);
-                if ($user->department) {
-                    $q->orWhere('department_id', $user->department);
-                }
-            });
-
-        if ($request->status === 'history') {
-            $query->where('status', 'acknowledged');
-        } else {
-            $query->where('status', 'pending');
-        }
-
-        $distributions = $query->latest()->paginate(10);
-
-        return Inertia::render('documents/Inbox', [
-            'distributions' => $distributions,
-            'status' => $request->status ?? 'pending',
-        ]);
-    }
-
     public function index(Request $request)
     {
-        $query = Document::with(['createdBy', 'currentHolder', 'approvals', 'distributions'])
+        $user = Auth::user();
+        $query = Document::with(['creator', 'department', 'actions.sender', 'actions.receiverUser', 'actions.receiverDepartment'])
             ->latest();
 
         if ($request->has('status')) {
             $query->where('status', $request->status);
         }
 
-        // Filter by user involvement (created by, sent to, or distributed to)
-        $user = Auth::user();
-        // For now, show all for admin, or filter for users. 
-        // Let's just show all for simplicity in this iteration, or maybe filter by created_by
-        // $query->where('created_by', $user->id); 
-
+        // Filter logic:
+        // 1. Created by me
+        // 2. Sent to my department
+        // 3. Sent to me specifically
+        // 4. Circulars
+        
+        // For simplicity in this iteration, showing all public documents or related to user
+        // In a real app, complex permission logic is needed.
+        
         $documents = $query->paginate(10);
 
         return Inertia::render('documents/Index', [
@@ -91,202 +47,343 @@ class DocumentController extends Controller
     public function create()
     {
         return Inertia::render('documents/Create', [
-            'users' => User::all(), // For selecting approver/receiver
-            'departments' => Department::all(), // For distribution
+            'departments' => Department::all(),
+            'users' => User::all(), // Ideally filter by role (e.g., Boss)
         ]);
     }
 
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'subject' => 'required|string|max:255',
-            'document_number' => 'required|string|unique:documents,document_number',
+            'title' => 'required|string|max:255',
+            'document_number' => 'nullable|string|max:50',
             'document_date' => 'required|date',
-            'content' => 'nullable|string',
-            'urgency' => 'required|in:normal,urgent,very_urgent',
-            'confidentiality' => 'required|in:normal,confidential,secret',
-            'attachment' => 'nullable|file|mimes:pdf,doc,docx,jpg,jpeg,png|max:10240',
-            'approver_id' => 'nullable|exists:users,id', // Director to sign
+            'origin_type' => 'required|in:internal,external',
+            'sender_name' => 'nullable|required_if:origin_type,external|string',
+            'department_id' => 'nullable|required_if:origin_type,internal|exists:departments,id',
+            'description' => 'nullable|string',
+            'file' => 'nullable|file|max:10240', // 10MB
+            'type' => 'required|in:normal,circular',
         ]);
 
         $path = null;
-        if ($request->hasFile('attachment')) {
-            $path = $request->file('attachment')->store('documents', 'public');
+        if ($request->hasFile('file')) {
+            $path = $request->file('file')->store('documents', 'public');
         }
 
         $document = Document::create([
+            'title' => $validated['title'],
             'document_number' => $validated['document_number'],
             'document_date' => $validated['document_date'],
-            'subject' => $validated['subject'],
-            'content' => $validated['content'],
-            'urgency' => $validated['urgency'],
-            'confidentiality' => $validated['confidentiality'],
-            'status' => 'draft',
-            'created_by' => Auth::id(),
-            'current_holder_id' => Auth::id(),
+            'origin_type' => $validated['origin_type'],
+            'sender_name' => $validated['sender_name'],
+            'department_id' => $validated['department_id'],
+            'description' => $validated['description'],
             'file_path' => $path,
+            'type' => $validated['type'],
+            'status' => 'pending', // Initial status
+            'user_id' => Auth::id(),
         ]);
 
-        if (!empty($validated['approver_id'])) {
-            // Create approval request
-            DocumentApproval::create([
-                'document_id' => $document->id,
-                'approver_id' => $validated['approver_id'],
-                'action' => 'sign', // Waiting for sign
-            ]);
-            $document->update(['status' => 'pending_approval']);
-        }
+        // Initial Action Log
+        DocumentAction::create([
+            'document_id' => $document->id,
+            'sender_id' => Auth::id(),
+            'action_type' => 'register',
+            'comment' => 'ลงทะเบียนรับหนังสือ',
+            'status' => 'completed',
+        ]);
 
-        return redirect()->route('documents.index')->with('success', 'Document created successfully.');
+        return redirect()->route('documents.show', $document->id)
+            ->with('success', 'ลงทะเบียนหนังสือเรียบร้อยแล้ว');
     }
 
     public function show(Document $document)
     {
-        $document->load(['createdBy', 'approvals.approver', 'distributions.department', 'distributions.user']);
-        
+        $document->load([
+            'creator', 
+            'department', 
+            'actions.sender', 
+            'actions.receiverUser', 
+            'actions.receiverDepartment',
+            'actions.acknowledgedByUser',
+            'circularRecipients.user'
+        ]);
+
         return Inertia::render('documents/Show', [
             'document' => $document,
-            'users' => User::all(),
             'departments' => Department::all(),
-            'auth' => [
-                'user' => Auth::user(),
-                'can_approve' => $document->approvals->where('approver_id', Auth::id())->where('approved_at', null)->isNotEmpty(),
-            ]
+            'users' => User::all(), // Optimize in production
+            'currentUser' => Auth::user(),
         ]);
     }
 
-    public function kasien(Request $request, Document $document)
+    // 2. Send to Departments (Forward)
+    public function forward(Request $request, Document $document)
     {
-        $request->validate([
-            'comment' => 'required|string',
-            'next_user_id' => 'nullable|exists:users,id',
-        ]);
-
-        // Add comment/kasien record
-        DocumentApproval::create([
-            'document_id' => $document->id,
-            'approver_id' => Auth::id(),
-            'action' => 'comment',
-            'comment' => $request->comment,
-            'approved_at' => now(), // It's just a comment, so it's "done" immediately
-        ]);
-
-        // If sending to next person
-        if ($request->next_user_id) {
-            $document->update(['current_holder_id' => $request->next_user_id]);
-            
-            // Create a pending approval/action for the next person if needed
-            // Or just rely on current_holder_id. 
-            // Let's create a pending approval so they see it in "Waiting for me"
-            DocumentApproval::create([
-                'document_id' => $document->id,
-                'approver_id' => $request->next_user_id,
-                'action' => 'review', // Waiting for review/kasien/approve
-            ]);
-        }
-
-        return back()->with('success', 'Document routed successfully.');
-    }
-
-    public function approve(Request $request, Document $document)
-    {
-        $request->validate([
-            'signature' => 'required|string', // Base64 signature or path
+        $validated = $request->validate([
+            'department_ids' => 'required|array',
+            'department_ids.*' => 'exists:departments,id',
             'comment' => 'nullable|string',
         ]);
 
-        $approval = $document->approvals()
-            ->where('approver_id', Auth::id())
-            ->whereNull('approved_at')
-            ->firstOrFail();
+        foreach ($validated['department_ids'] as $deptId) {
+            $action = DocumentAction::create([
+                'document_id' => $document->id,
+                'sender_id' => Auth::id(),
+                'receiver_department_id' => $deptId,
+                'action_type' => 'forward',
+                'comment' => $validated['comment'],
+                'status' => 'pending',
+            ]);
+            
+            // Send Notification to users in that department
+            $users = User::where('department_id', $deptId)->get();
+            Notification::send($users, new DocumentNotification($document, 'forward', Auth::user()->name));
+        }
 
-        $approval->update([
-            'action' => 'approve',
-            'comment' => $request->comment,
-            'signature_path' => $request->signature, // Save signature
-            'approved_at' => now(),
-        ]);
+        $document->update(['status' => 'in_progress']);
 
-        // Check if all approvals are done (if multiple)
-        // For now, single approval
-        $document->update([
-            'status' => 'approved',
-            'approved_by' => Auth::id(),
-            'approved_at' => now(),
-        ]);
-
-        return back()->with('success', 'Document approved and signed.');
+        return back()->with('success', 'ส่งหนังสือไปยังแผนกเรียบร้อยแล้ว');
     }
 
-    public function distribute(Request $request, Document $document)
+    // Acknowledge Document Receipt (รับทราบหนังสือ)
+    public function acknowledgeDocument(Request $request, DocumentAction $action)
+    {
+        $user = Auth::user();
+        
+        // Verify user is in the receiving department or is the specific receiver
+        $canAcknowledge = false;
+        
+        if ($action->receiver_department_id && $user->department_id == $action->receiver_department_id) {
+            $canAcknowledge = true;
+        }
+        
+        if ($action->receiver_user_id && $user->id == $action->receiver_user_id) {
+            $canAcknowledge = true;
+        }
+        
+        if (!$canAcknowledge) {
+            abort(403, 'คุณไม่มีสิทธิ์รับทราบหนังสือนี้');
+        }
+        
+        // Already acknowledged?
+        if ($action->acknowledged_at) {
+            return back()->with('info', 'หนังสือนี้ได้รับการรับทราบแล้ว');
+        }
+        
+        // Update action with acknowledgment info
+        $action->update([
+            'acknowledged_at' => now(),
+            'acknowledged_by' => $user->id,
+            'status' => 'completed',
+        ]);
+        
+        // Notify the sender that document has been acknowledged
+        $sender = $action->sender;
+        if ($sender) {
+            $document = $action->document;
+            $sender->notify(new DocumentNotification($document, 'acknowledged', $user->name));
+        }
+        
+        return back()->with('success', 'รับทราบหนังสือเรียบร้อยแล้ว');
+    }
+    
+    // Get pending acknowledgments for current user (for popup/notification)
+    public function getPendingAcknowledgments()
+    {
+        $user = Auth::user();
+        
+        $pendingActions = DocumentAction::with(['document', 'sender'])
+            ->where(function ($query) use ($user) {
+                // Actions sent to user's department
+                $query->where('receiver_department_id', $user->department_id);
+            })
+            ->orWhere('receiver_user_id', $user->id)
+            ->whereNull('acknowledged_at')
+            ->where('action_type', 'forward')
+            ->where('status', 'pending')
+            ->get();
+        
+        return response()->json([
+            'pending' => $pendingActions,
+            'count' => $pendingActions->count(),
+        ]);
+    }
+    
+    // Get overdue documents (more than 3 hours without acknowledgment)
+    public function getOverdueDocuments()
+    {
+        $user = Auth::user();
+        $threeHoursAgo = now()->subHours(3);
+        
+        // Documents sent BY user that haven't been acknowledged
+        $sentOverdue = DocumentAction::with(['document', 'receiverDepartment', 'receiverUser'])
+            ->where('sender_id', $user->id)
+            ->where('action_type', 'forward')
+            ->whereNull('acknowledged_at')
+            ->where('created_at', '<', $threeHoursAgo)
+            ->get();
+        
+        // Documents sent TO user's department that haven't been acknowledged
+        $receivedOverdue = DocumentAction::with(['document', 'sender'])
+            ->where(function ($query) use ($user) {
+                $query->where('receiver_department_id', $user->department_id)
+                    ->orWhere('receiver_user_id', $user->id);
+            })
+            ->where('action_type', 'forward')
+            ->whereNull('acknowledged_at')
+            ->where('created_at', '<', $threeHoursAgo)
+            ->get();
+        
+        return response()->json([
+            'sent_overdue' => $sentOverdue,
+            'received_overdue' => $receivedOverdue,
+            'has_overdue' => $sentOverdue->count() > 0 || $receivedOverdue->count() > 0,
+        ]);
+    }
+
+    // 3. Submit to Boss (Director)
+    public function submitBoss(Request $request, Document $document)
     {
         $validated = $request->validate([
-            'department_ids' => 'array',
-            'department_ids.*' => 'exists:departments,id',
-            'user_ids' => 'array',
-            'user_ids.*' => 'exists:users,id',
-            'note' => 'nullable|string',
+            'boss_id' => 'required|exists:users,id',
+            'comment' => 'nullable|string',
         ]);
 
-        if (!empty($validated['department_ids'])) {
-            foreach ($validated['department_ids'] as $deptId) {
-                DocumentDistribution::create([
-                    'document_id' => $document->id,
-                    'department_id' => $deptId,
-                    'status' => 'pending',
-                    'note' => $validated['note'] ?? null,
-                ]);
-            }
-        }
-
-        if (!empty($validated['user_ids'])) {
-            foreach ($validated['user_ids'] as $userId) {
-                DocumentDistribution::create([
-                    'document_id' => $document->id,
-                    'user_id' => $userId,
-                    'status' => 'pending',
-                    'note' => $validated['note'] ?? null,
-                ]);
-            }
-        }
-
-        $document->update(['status' => 'sent']);
-
-        return back()->with('success', 'Document distributed successfully.');
-    }
-
-    public function acknowledge(DocumentDistribution $distribution)
-    {
-        $user = Auth::user();
-        
-        // Check permission
-        if ($distribution->user_id && $distribution->user_id !== $user->id) {
-            abort(403, 'Unauthorized');
-        }
-        
-        if ($distribution->department_id && $distribution->department_id != $user->department) {
-            abort(403, 'Unauthorized (Department mismatch)');
-        }
-
-        $distribution->update([
-            'status' => 'acknowledged',
-            'acknowledged_at' => now(),
+        DocumentAction::create([
+            'document_id' => $document->id,
+            'sender_id' => Auth::id(),
+            'receiver_user_id' => $validated['boss_id'],
+            'action_type' => 'submit_boss',
+            'comment' => $validated['comment'],
+            'status' => 'pending',
         ]);
 
-        return back()->with('success', 'Document acknowledged.');
+        // Send Notification to Boss
+        $boss = User::find($validated['boss_id']);
+        if ($boss) {
+            $boss->notify(new DocumentNotification($document, 'submit_boss', Auth::user()->name));
+        }
+
+        return back()->with('success', 'นำเรียนผู้อำนวยการเรียบร้อยแล้ว');
     }
 
-    public function sent(Request $request)
+    // Boss Approves/Signs
+    public function approve(Request $request, Document $document, DocumentAction $action)
     {
-        $user = Auth::user();
-        $query = Document::with(['distributions.user', 'distributions.department'])
-            ->where('created_by', $user->id)
-            ->latest();
+        // Verify user is the receiver of the action
+        if (Auth::id() !== $action->receiver_user_id) {
+            abort(403);
+        }
 
-        $documents = $query->paginate(10);
+        $validated = $request->validate([
+            'comment' => 'nullable|string', // "เกษียนหนังสือ" / Order details
+            'status' => 'required|in:approved,rejected',
+        ]);
 
-        return Inertia::render('documents/Sent', [
-            'documents' => $documents,
+        $action->update([
+            'status' => 'completed',
+            'comment' => $validated['comment'], // Update with boss's comment
+        ]);
+
+        // Log the approval action itself
+        DocumentAction::create([
+            'document_id' => $document->id,
+            'sender_id' => Auth::id(),
+            'action_type' => $validated['status'] === 'approved' ? 'approve' : 'reject',
+            'comment' => $validated['comment'],
+            'status' => 'completed',
+        ]);
+
+        if ($validated['status'] === 'approved') {
+            $document->update(['status' => 'approved']);
+        }
+
+        // Notify the creator
+        if ($document->creator) {
+            $document->creator->notify(new DocumentNotification(
+                $document, 
+                $validated['status'] === 'approved' ? 'approve' : 'reject', 
+                Auth::user()->name
+            ));
+        }
+
+        return back()->with('success', 'บันทึกการสั่งการเรียบร้อยแล้ว');
+    }
+
+    // 4. Distribute as Circular (หนังสือเวียน)
+    public function distributeCircular(Request $request, Document $document)
+    {
+        // Create recipients for ALL users (or filtered)
+        $users = User::all();
+        
+        foreach ($users as $user) {
+            DocumentCircularRecipient::firstOrCreate([
+                'document_id' => $document->id,
+                'user_id' => $user->id,
+            ]);
+            
+            // Send Notification
+            // To avoid spamming DB with individual notifications in loop, we might want to queue this or send in bulk if possible.
+            // For now, let's just notify.
+        }
+        
+        // Bulk notification
+        Notification::send($users, new DocumentNotification($document, 'circular', Auth::user()->name));
+
+        $document->update(['type' => 'circular', 'status' => 'distributed']);
+
+        return back()->with('success', 'ส่งหนังสือเวียนแจ้งทราบเรียบร้อยแล้ว');
+    }
+
+    // User Acknowledges Circular
+    public function acknowledge(Request $request, Document $document)
+    {
+        $recipient = DocumentCircularRecipient::where('document_id', $document->id)
+            ->where('user_id', Auth::id())
+            ->first();
+
+        if ($recipient) {
+            $recipient->update(['read_at' => now()]);
+        } else {
+            // If not in list (maybe new user), create it
+            DocumentCircularRecipient::create([
+                'document_id' => $document->id,
+                'user_id' => Auth::id(),
+                'read_at' => now(),
+            ]);
+        }
+
+        return back()->with('success', 'รับทราบเรียบร้อยแล้ว');
+    }
+    
+    // Dashboard
+    public function dashboard()
+    {
+        // Global Stats
+        $total = Document::count();
+        $pending = Document::where('status', 'pending')->count();
+        $completed = Document::where('status', 'completed')->count();
+        
+        // Stats by Department (Inbound/Outbound)
+        // Count documents where the department is the receiver in actions
+        $deptStats = Department::withCount(['receivedDocuments' => function ($query) {
+            $query->where('action_type', 'forward');
+        }])->get()->map(function ($dept) {
+            return [
+                'name' => $dept->name,
+                'received_count' => $dept->received_documents_count,
+            ];
+        });
+
+        // Recent
+        $recent = Document::latest()->take(5)->get();
+
+        return Inertia::render('documents/Dashboard', [
+            'stats' => compact('total', 'pending', 'completed'),
+            'deptStats' => $deptStats,
+            'recent' => $recent
         ]);
     }
 }

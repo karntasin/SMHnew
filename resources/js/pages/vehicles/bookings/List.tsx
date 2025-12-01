@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Calendar, Clock, MapPin, User, Car } from 'lucide-react';
+import { Plus, Calendar, Clock, MapPin, User, Car, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
 
@@ -37,6 +37,9 @@ export default function List({ bookings, stats, filters }) {
                 <div className="flex justify-between items-center">
                     <h1 className="text-2xl font-bold">รายการขอใช้รถ</h1>
                     <div className="space-x-2">
+                        <Link href={route('vehicles.bookings.my')}>
+                            <Button variant="outline"><FileText className="mr-2 h-4 w-4" /> รายการของฉัน</Button>
+                        </Link>
                         <Link href={route('vehicles.calendar')}>
                             <Button variant="outline"><Calendar className="mr-2 h-4 w-4" /> ปฏิทิน</Button>
                         </Link>

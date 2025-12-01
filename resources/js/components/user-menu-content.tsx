@@ -12,6 +12,12 @@ interface UserMenuContentProps {
 export function UserMenuContent({ user }: UserMenuContentProps) {
     const cleanup = useMobileNavigation();
 
+    const handleLogout = () => {
+        // Clear welcome modal flag so it shows again on next login
+        sessionStorage.removeItem('hasSeenWelcome');
+        cleanup();
+    };
+
     return (
         <>
             <DropdownMenuLabel className="p-0 font-normal">
@@ -30,7 +36,7 @@ export function UserMenuContent({ user }: UserMenuContentProps) {
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-                <Link className="block w-full" method="post" href={route('logout')} as="button" onClick={cleanup}>
+                <Link className="block w-full" method="post" href={route('logout')} as="button" onClick={handleLogout}>
                     <LogOut className="mr-2" />
                     Log out
                 </Link>

@@ -34,6 +34,9 @@ export interface User {
     email: string;
     avatar?: string;
     line_id?: string | null;
+    line_display_name?: string | null;
+    line_picture_url?: string | null;
+    profile_completed?: boolean;
     email_verified_at: string | null;
     created_at: string;
     updated_at: string;

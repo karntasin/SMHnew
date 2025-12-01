@@ -7,6 +7,7 @@ import { AppSidebarHeader } from '@/components/app-sidebar-header';
 import { type BreadcrumbItem } from '@/types';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
+import UrgentNotificationPopup from '@/components/UrgentNotificationPopup';
 
 interface Props {
   children: React.ReactNode;
@@ -95,6 +96,9 @@ export default function AppSidebarLayout({
       </div>
 
       <Toaster />
+      
+      {/* Urgent Notification Popup - check every 1 minute */}
+      <UrgentNotificationPopup checkInterval={60000} />
     </>
   );
 }

@@ -87,7 +87,10 @@ class LineAuthController extends Controller
             /** @var \App\Models\User $currentUser */
             $currentUser->update([
                 'line_id' => $lineUserId,
-                'avatar' => $pictureUrl,
+                'line_display_name' => $displayName,
+                'line_picture_url' => $pictureUrl,
+                // Keep avatar if already set, otherwise use LINE picture
+                'avatar' => $currentUser->avatar ?: $pictureUrl,
             ]);
 
             return redirect()->route('profile.edit')->with('status', 'line-linked');
@@ -114,7 +117,9 @@ class LineAuthController extends Controller
                 if ($user) {
                     $user->update([
                         'line_id' => $lineUserId,
-                        'avatar' => $pictureUrl,
+                        'line_display_name' => $displayName,
+                        'line_picture_url' => $pictureUrl,
+                        'avatar' => $user->avatar ?: $pictureUrl,
                     ]);
                 }
             }
@@ -132,22 +137,33 @@ class LineAuthController extends Controller
             }
 
             $user = User::create([
-                'name' => $displayName,
+                'name' => '', // Leave empty, will be filled in complete-profile
+                'line_display_name' => $displayName,
                 'email' => $email,
                 'password' => bcrypt(Str::random(16)), // Random password
                 'line_id' => $lineUserId,
                 'avatar' => $pictureUrl,
+                'line_picture_url' => $pictureUrl,
+                'profile_completed' => false,
             ]);
             
             $user->assignRole('user');
         } else {
-            // Update avatar if changed
-            if ($user->avatar !== $pictureUrl) {
-                $user->update(['avatar' => $pictureUrl]);
-            }
+            // Update LINE info if changed
+            $user->update([
+                'line_display_name' => $displayName,
+                'line_picture_url' => $pictureUrl,
+                // Only update avatar if not custom uploaded
+                'avatar' => ($user->avatar === $user->line_picture_url || !$user->avatar) ? $pictureUrl : $user->avatar,
+            ]);
         }
 
         Auth::login($user);
+
+        // Redirect to complete profile if not completed
+        if (!$user->profile_completed) {
+            return redirect()->route('profile.complete');
+        }
 
         return redirect()->intended(route('dashboard'));
     }

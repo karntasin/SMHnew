@@ -9,6 +9,6 @@ class AdminHubController extends Controller
 {
     public function index()
     {
-        return Inertia::render('admin/Index');
+        return Inertia::render('AdminHub/Index');
     }
 }

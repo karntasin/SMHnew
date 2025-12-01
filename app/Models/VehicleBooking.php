@@ -16,6 +16,8 @@ class VehicleBooking extends Model
         'vehicle_category_id',
         'user_id',
         'driver_id',
+        'driver_confirmed_at',
+        'driver_rejection_reason',
         'approved_by',
         'approval_reason',
         'purpose',
@@ -38,6 +40,7 @@ class VehicleBooking extends Model
         'rejected_at',
         'cancelled_at',
         'completed_at',
+        'completed_by',
     ];
 
     protected $casts = [
@@ -49,6 +52,7 @@ class VehicleBooking extends Model
         'rejected_at' => 'datetime',
         'cancelled_at' => 'datetime',
         'completed_at' => 'datetime',
+        'driver_confirmed_at' => 'datetime',
     ];
 
     public function user()
@@ -74,5 +78,10 @@ class VehicleBooking extends Model
     public function approver()
     {
         return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function completedBy()
+    {
+        return $this->belongsTo(User::class, 'completed_by');
     }
 }
