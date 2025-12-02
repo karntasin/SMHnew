@@ -153,7 +153,7 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
         onClose={() => setShowWelcome(false)} 
       />
       
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
         <div className="p-6 space-y-6">
           {/* Header with gradient */}
           <div className="relative overflow-hidden rounded-lg bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 p-6 text-white shadow-xl">
@@ -493,7 +493,7 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
                         </svg>
 
                         {/* Y-axis labels */}
-                        <div className="absolute left-0 top-0 h-full flex flex-col justify-between text-xs text-gray-500 pr-2">
+                        <div className="absolute left-0 top-0 h-full flex flex-col justify-between text-xs text-gray-500 dark:text-gray-400 pr-2">
                           {(() => {
                             const data = stats.charts.visits_monthly.slice(-6);
                             const maxValueOpd = Math.max(...data.map(v => v.opd));
@@ -523,11 +523,11 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
                       <div className="flex justify-center gap-6 mt-4">
                         <div className="flex items-center gap-2">
                           <div className="w-8 h-0.5 bg-blue-500"></div>
-                          <span className="text-sm text-gray-600">OPD</span>
+                          <span className="text-sm text-gray-600 dark:text-gray-300">OPD</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="w-8 h-0.5 bg-purple-500 border-dashed"></div>
-                          <span className="text-sm text-gray-600">IPD</span>
+                          <span className="text-sm text-gray-600 dark:text-gray-300">IPD</span>
                         </div>
                       </div>
                     </CardContent>
@@ -661,7 +661,7 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
                         </svg>
 
                         {/* Y-axis labels */}
-                        <div className="absolute left-0 top-0 h-full flex flex-col justify-between text-xs text-gray-500 pr-2">
+                        <div className="absolute left-0 top-0 h-full flex flex-col justify-between text-xs text-gray-500 dark:text-gray-400 pr-2">
                           {(() => {
                             const data = stats.charts.visits_monthly.slice(-6);
                             const maxValue = Math.max(...data.map(v => v.er));
@@ -674,11 +674,11 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
                         </div>
 
                         {/* X-axis labels */}
-                        <div className="absolute bottom-0 left-0 right-0 flex justify-between text-xs text-gray-600 pt-2">
+                        <div className="absolute bottom-0 left-0 right-0 flex justify-between text-xs text-gray-600 dark:text-gray-300 pt-2">
                           {stats.charts.visits_monthly.slice(-6).map((v, i) => (
                             <div key={i} className="flex flex-col items-center">
                               <div className="font-medium">{String(v.label)}</div>
-                              <div className="text-[10px] text-red-600">{formatNumber(Number(v.er))} ครั้ง</div>
+                              <div className="text-[10px] text-red-600 dark:text-red-400">{formatNumber(Number(v.er))} ครั้ง</div>
                             </div>
                           ))}
                         </div>
@@ -720,15 +720,15 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
                         return (
                           <div key={index} className="space-y-1">
                             <div className="flex items-center justify-between text-sm">
-                              <span className="font-medium flex items-center gap-2">
-                                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 text-xs font-bold">
+                              <span className="font-medium flex items-center gap-2 dark:text-gray-200">
+                                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-700 text-xs font-bold dark:text-gray-200">
                                   {index + 1}
                                 </span>
                                 {String(disease.icd10)}
                               </span>
                               <span className="text-muted-foreground font-semibold">{formatNumber(disease.total)}</span>
                             </div>
-                            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                            <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                               <div 
                                 className={`h-full bg-gradient-to-r ${colors[index]} rounded-full transition-all duration-500`}
                                 style={{ width: `${percentage}%` }}
@@ -760,13 +760,13 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
                         return (
                           <div key={index} className="space-y-1">
                             <div className="flex items-center justify-between text-sm">
-                              <span className="font-medium flex items-center gap-2">
+                              <span className="font-medium flex items-center gap-2 dark:text-gray-200">
                                 <Calendar className="h-4 w-4 text-emerald-600" />
                                 ปี {Number(cost.y) + 543}
                               </span>
-                              <span className="text-emerald-700 font-bold">{formatCurrency(cost.total)}</span>
+                              <span className="text-emerald-700 dark:text-emerald-400 font-bold">{formatCurrency(cost.total)}</span>
                             </div>
-                            <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                            <div className="h-3 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                               <div 
                                 className="h-full bg-gradient-to-r from-emerald-400 to-green-600 rounded-full transition-all duration-500"
                                 style={{ width: `${percentage}%` }}
@@ -787,8 +787,8 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
                 {/* Section Header with Download Button */}
                 <div className="flex items-center justify-between">
                   <div>
-                    <h2 className="text-2xl font-bold text-gray-900">Thai ASCVD Risk Assessment</h2>
-                    <p className="text-sm text-gray-600 mt-1">การประเมินความเสี่ยงโรคหัวใจและหลอดเลือด</p>
+                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Thai ASCVD Risk Assessment</h2>
+                    <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">การประเมินความเสี่ยงโรคหัวใจและหลอดเลือด</p>
                   </div>
                   <a
                     href={route('dashboard.cv-risk-report', { format: 'excel' })}
@@ -813,7 +813,7 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
                     <CardContent className="pt-6">
                       <div className="relative h-80">
                         {/* Y-axis labels */}
-                        <div className="absolute left-0 top-0 bottom-8 w-12 flex flex-col justify-between text-xs text-gray-500">
+                        <div className="absolute left-0 top-0 bottom-8 w-12 flex flex-col justify-between text-xs text-gray-500 dark:text-gray-400">
                           {(() => {
                             const maxValue = Math.max(...(stats.charts.cv_risk_high_monthly.map((r: any) => r.total) || [1]));
                             const step = Math.ceil(maxValue / 4);
@@ -828,7 +828,7 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
                           {/* Grid lines */}
                           <div className="absolute inset-0 flex flex-col justify-between">
                             {[0, 1, 2, 3, 4].map((i) => (
-                              <div key={i} className="border-b border-gray-200"></div>
+                              <div key={i} className="border-b border-gray-200 dark:border-gray-700"></div>
                             ))}
                           </div>
 
@@ -922,7 +922,7 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
                         </div>
 
                         {/* X-axis labels */}
-                        <div className="absolute left-12 right-0 bottom-0 h-8 flex justify-between items-start text-xs text-gray-500">
+                        <div className="absolute left-12 right-0 bottom-0 h-8 flex justify-between items-start text-xs text-gray-500 dark:text-gray-400">
                           {stats.charts.cv_risk_high_monthly.map((risk: any, index: number) => (
                             <div key={index} className="flex flex-col items-center">
                               <div className="font-medium text-rose-600">{formatNumber(Number(risk.total))}</div>
@@ -933,7 +933,7 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
                       </div>
 
                       {/* Summary stats */}
-                      <div className="mt-6 pt-4 border-t grid grid-cols-3 gap-4">
+                      <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700 grid grid-cols-3 gap-4">
                         {(() => {
                           const data = stats.charts.cv_risk_high_monthly;
                           const total = data.reduce((sum: number, r: any) => sum + r.total, 0);
@@ -945,17 +945,17 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
                             <>
                               <div className="text-center">
                                 <div className="text-2xl font-bold text-rose-600">{formatNumber(avg)}</div>
-                                <div className="text-xs text-gray-500">เฉลี่ย/เดือน</div>
+                                <div className="text-xs text-gray-500 dark:text-gray-400">เฉลี่ย/เดือน</div>
                               </div>
                               <div className="text-center">
-                                <div className="text-2xl font-bold text-red-600">{formatNumber(max)}</div>
-                                <div className="text-xs text-gray-500">สูงสุด</div>
+                                <div className="text-2xl font-bold text-red-600 dark:text-red-400">{formatNumber(max)}</div>
+                                <div className="text-xs text-gray-500 dark:text-gray-400">สูงสุด</div>
                               </div>
                               <div className="text-center">
-                                <div className={`text-2xl font-bold ${trend >= 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                                <div className={`text-2xl font-bold ${trend >= 0 ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400'}`}>
                                   {trend >= 0 ? '+' : ''}{formatNumber(trend)}
                                 </div>
-                                <div className="text-xs text-gray-500">แนวโน้ม</div>
+                                <div className="text-xs text-gray-500 dark:text-gray-400">แนวโน้ม</div>
                               </div>
                             </>
                           );
@@ -982,17 +982,17 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
                           
                           return (
                             <div key={index} className="space-y-3">
-                              <div className="font-medium text-sm text-gray-700">
+                              <div className="font-medium text-sm text-gray-700 dark:text-gray-200">
                                 {String(dist.label || `${dist.m}/${dist.y}`)} (รวม {total} คน)
                               </div>
                               
                               {/* 0-9% - Low Risk (Green) */}
                               <div className="space-y-1">
                                 <div className="flex items-center justify-between text-xs">
-                                  <span className="text-green-600">0-9% (เสี่ยงต่ำ)</span>
-                                  <span className="font-semibold">{Number(dist.s0_9 || 0)} คน</span>
+                                  <span className="text-green-600 dark:text-green-400">0-9% (เสี่ยงต่ำ)</span>
+                                  <span className="font-semibold dark:text-gray-200">{Number(dist.s0_9 || 0)} คน</span>
                                 </div>
-                                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                                   <div 
                                     className="h-full bg-gradient-to-r from-green-400 to-green-600 rounded-full transition-all duration-500"
                                     style={{ width: total > 0 ? `${((dist.s0_9 || 0) / total) * 100}%` : '0%' }}
@@ -1003,10 +1003,10 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
                               {/* 10-19% - Moderate Risk (Yellow) */}
                               <div className="space-y-1">
                                 <div className="flex items-center justify-between text-xs">
-                                  <span className="text-yellow-600">10-19% (เสี่ยงปานกลาง)</span>
-                                  <span className="font-semibold">{Number(dist.s10_19 || 0)} คน</span>
+                                  <span className="text-yellow-600 dark:text-yellow-400">10-19% (เสี่ยงปานกลาง)</span>
+                                  <span className="font-semibold dark:text-gray-200">{Number(dist.s10_19 || 0)} คน</span>
                                 </div>
-                                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                                   <div 
                                     className="h-full bg-gradient-to-r from-yellow-400 to-yellow-600 rounded-full transition-all duration-500"
                                     style={{ width: total > 0 ? `${((dist.s10_19 || 0) / total) * 100}%` : '0%' }}
@@ -1017,10 +1017,10 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
                               {/* 20-29% - High Risk (Orange) */}
                               <div className="space-y-1">
                                 <div className="flex items-center justify-between text-xs">
-                                  <span className="text-orange-600">20-29% (เสี่ยงสูง)</span>
-                                  <span className="font-semibold">{Number(dist.s20_29 || 0)} คน</span>
+                                  <span className="text-orange-600 dark:text-orange-400">20-29% (เสี่ยงสูง)</span>
+                                  <span className="font-semibold dark:text-gray-200">{Number(dist.s20_29 || 0)} คน</span>
                                 </div>
-                                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                                   <div 
                                     className="h-full bg-gradient-to-r from-orange-400 to-orange-600 rounded-full transition-all duration-500"
                                     style={{ width: total > 0 ? `${((dist.s20_29 || 0) / total) * 100}%` : '0%' }}
@@ -1031,10 +1031,10 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
                               {/* 30-39% - Very High Risk (Red) */}
                               <div className="space-y-1">
                                 <div className="flex items-center justify-between text-xs">
-                                  <span className="text-red-600">30-39% (เสี่ยงสูงมาก)</span>
-                                  <span className="font-semibold">{Number(dist.s30_39 || 0)} คน</span>
+                                  <span className="text-red-600 dark:text-red-400">30-39% (เสี่ยงสูงมาก)</span>
+                                  <span className="font-semibold dark:text-gray-200">{Number(dist.s30_39 || 0)} คน</span>
                                 </div>
-                                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                                   <div 
                                     className="h-full bg-gradient-to-r from-red-400 to-red-600 rounded-full transition-all duration-500"
                                     style={{ width: total > 0 ? `${((dist.s30_39 || 0) / total) * 100}%` : '0%' }}
@@ -1045,10 +1045,10 @@ export default function Dashboard({ filter, stats }: DashboardProps) {
                               {/* 40%+ - Critical Risk (Dark Red) */}
                               <div className="space-y-1">
                                 <div className="flex items-center justify-between text-xs">
-                                  <span className="text-rose-700">40%+ (วิกฤต)</span>
-                                  <span className="font-semibold">{Number(dist.s40p || 0)} คน</span>
+                                  <span className="text-rose-700 dark:text-rose-400">40%+ (วิกฤต)</span>
+                                  <span className="font-semibold dark:text-gray-200">{Number(dist.s40p || 0)} คน</span>
                                 </div>
-                                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                                   <div 
                                     className="h-full bg-gradient-to-r from-rose-500 to-rose-700 rounded-full transition-all duration-500"
                                     style={{ width: total > 0 ? `${((dist.s40p || 0) / total) * 100}%` : '0%' }}

@@ -1,16 +1,19 @@
 import { usePage } from '@inertiajs/react';
 import { cn } from '@/lib/utils';
+import { useState } from 'react';
 
 interface AppLogoProps {
   className?: string;
   iconClassName?: string;
+  collapsed?: boolean;
 }
 
-export default function AppLogo({ className, iconClassName }: AppLogoProps) {
+export default function AppLogo({ className, iconClassName, collapsed = false }: AppLogoProps) {
   const setting = usePage().props.setting as {
     nama_app?: string;
     logo?: string;
   } | null;
+  const [isHovered, setIsHovered] = useState(false);
 
   const defaultAppName = 'SMH';
   const defaultLogo = '';
@@ -19,23 +22,73 @@ export default function AppLogo({ className, iconClassName }: AppLogoProps) {
   const logo = setting?.logo || defaultLogo;
 
   return (
-    <div className={cn("flex items-center gap-3 overflow-hidden py-1", className)}>
-      <div className={cn("relative flex aspect-square size-14 shrink-0 items-center justify-center rounded-xl bg-white/90 dark:bg-sidebar-primary/10 shadow-sm ring-1 ring-black/5 dark:ring-white/10 transition-all duration-300 hover:scale-105 hover:shadow-md group", iconClassName)}>
-        <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-indigo-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+    <div 
+      className={cn("flex items-center gap-4 overflow-hidden py-1", className)}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      {/* Simple Single Border Logo Container */}
+      <div className={cn(
+        "relative flex shrink-0 items-center justify-center transition-all duration-500",
+        collapsed ? "h-12 w-12" : "h-[72px] w-[72px]",
+        // Single clean border with gradient
+        "rounded-2xl",
+        "bg-gradient-to-br from-white via-white to-gray-50",
+        "dark:from-gray-800 dark:via-gray-700 dark:to-gray-800",
+        // Border - using border instead of ring for better visibility
+        "border-2 border-blue-500/70 dark:border-blue-400/70",
+        // Shadow
+        "shadow-lg shadow-blue-500/20 dark:shadow-blue-400/30",
+        // Hover effects
+        "hover:border-blue-500 dark:hover:border-blue-400",
+        "hover:shadow-xl hover:shadow-blue-500/30",
+        "hover:scale-105",
+        iconClassName
+      )}>
+        {/* Subtle inner glow on hover */}
+        <div className={cn(
+          "absolute inset-0 rounded-2xl transition-opacity duration-500",
+          "bg-gradient-to-br from-blue-500/5 via-transparent to-purple-500/5",
+          isHovered ? "opacity-100" : "opacity-0"
+        )} />
+        
+        {/* Logo image - BIGGER */}
         <img
           src={logo ? `/storage/${logo}` : '/logosmh.png'}
           alt="Logo"
-          className="size-10 object-contain drop-shadow-sm transition-transform group-hover:rotate-3"
+          className={cn(
+            "relative z-10 object-contain transition-all duration-500",
+            collapsed ? "h-9 w-9" : "h-14 w-14",
+            "drop-shadow-md",
+            isHovered && "scale-110"
+          )}
         />
       </div>
-      <div className="grid flex-1 text-left leading-tight">
-        <span className="truncate font-bold text-xl tracking-tight bg-gradient-to-r from-indigo-600 to-purple-600 dark:from-indigo-400 dark:to-purple-400 bg-clip-text text-transparent">
-          {appName}
-        </span>
-        <span className="truncate text-xs font-medium text-muted-foreground">
-          Hospital Dashboard
-        </span>
-      </div>
+
+      {/* App Name */}
+      {!collapsed && (
+        <div className="grid flex-1 text-left leading-tight overflow-hidden">
+          {/* Main app name */}
+          <span className={cn(
+            "truncate font-black text-2xl tracking-tight transition-all duration-300",
+            "bg-gradient-to-r bg-clip-text text-transparent bg-[length:200%_auto]",
+            "from-blue-600 via-purple-600 to-blue-600",
+            "dark:from-blue-400 dark:via-purple-400 dark:to-blue-400",
+            isHovered && "animate-gradient-x"
+          )}>
+            {appName}
+          </span>
+          
+          {/* Subtitle */}
+          <span className={cn(
+            "truncate text-xs font-semibold tracking-wide uppercase transition-all duration-300",
+            "text-gray-500 dark:text-gray-400",
+            isHovered && "text-blue-600 dark:text-blue-400"
+          )}>
+            Hospital Dashboard
+          </span>
+        </div>
+      )}
     </div>
   );
 }

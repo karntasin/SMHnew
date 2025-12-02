@@ -73,7 +73,7 @@ export default function QualityHub() {
       href: '/mra',
       links: [
         { label: 'Dashboard', href: '/mra/dashboard' },
-        { label: t('Search Patient'), href: '/mra/search-patient' },
+        { label: t('New Audit'), href: '/mra/create' },
         { label: t('Checklist'), href: '/mra' },
       ]
     },

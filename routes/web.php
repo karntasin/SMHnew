@@ -304,23 +304,79 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
 
     // Medical Record Accuracy (MRA)
     Route::prefix('mra')->name('mra.')->group(function () {
+        // API endpoints
         Route::get('/search-patient', [App\Http\Controllers\Mra\MraController::class, 'searchPatient'])->name('search-patient');
+        Route::get('/visit-data', [App\Http\Controllers\Mra\MraController::class, 'getVisitData'])->name('visit-data');
+        Route::get('/criteria', [App\Http\Controllers\Mra\MraController::class, 'getCriteria'])->name('criteria');
+        Route::get('/auto-check', [App\Http\Controllers\Mra\MraController::class, 'autoCheck'])->name('auto-check');
+        Route::get('/statistics', [App\Http\Controllers\Mra\MraController::class, 'statistics'])->name('statistics');
+        
+        // Pages
         Route::get('/', [App\Http\Controllers\Mra\MraController::class, 'index'])->name('index');
         Route::get('/dashboard', [App\Http\Controllers\Mra\MraController::class, 'dashboard'])->name('dashboard');
+        Route::get('/reports', [App\Http\Controllers\Mra\MraController::class, 'reports'])->name('reports');
+        Route::get('/settings', [App\Http\Controllers\Mra\MraController::class, 'settings'])->name('settings');
         Route::get('/create', [App\Http\Controllers\Mra\MraController::class, 'create'])->name('create');
         Route::post('/', [App\Http\Controllers\Mra\MraController::class, 'store'])->name('store');
         Route::get('/{audit}', [App\Http\Controllers\Mra\MraController::class, 'show'])->name('show');
+        Route::get('/{audit}/audit', [App\Http\Controllers\Mra\MraController::class, 'audit'])->name('audit');
+        Route::post('/{audit}/audit', [App\Http\Controllers\Mra\MraController::class, 'saveAuditResults'])->name('audit.save');
         Route::put('/{audit}', [App\Http\Controllers\Mra\MraController::class, 'update'])->name('update');
+        Route::delete('/{audit}', [App\Http\Controllers\Mra\MraController::class, 'destroy'])->name('destroy');
     });
 
     // Infection Control (IC)
     Route::prefix('ic')->name('ic.')->group(function () {
+        // Dashboard
         Route::get('/', [IcController::class, 'index'])->name('index');
+        
+        // Surveillance
         Route::get('/surveillance', [IcController::class, 'surveillance'])->name('surveillance');
         Route::get('/surveillance/search', [IcController::class, 'searchAdmissions'])->name('surveillance.search');
         Route::post('/surveillance', [IcController::class, 'storeSurveillance'])->name('surveillance.store');
+        Route::put('/surveillance/{log}', [IcController::class, 'updateSurveillance'])->name('surveillance.update');
+        
+        // Incidents
         Route::get('/incidents', [IcController::class, 'incidents'])->name('incidents');
         Route::post('/incidents', [IcController::class, 'storeIncident'])->name('incidents.store');
+        Route::put('/incidents/{incident}', [IcController::class, 'updateIncident'])->name('incidents.update');
+        
+        // Hand Hygiene
+        Route::get('/hand-hygiene', [IcController::class, 'handHygiene'])->name('hand-hygiene');
+        Route::post('/hand-hygiene', [IcController::class, 'storeHandHygiene'])->name('hand-hygiene.store');
+        
+        // Environment Check
+        Route::get('/environment', [IcController::class, 'environment'])->name('environment');
+        Route::post('/environment', [IcController::class, 'storeEnvironment'])->name('environment.store');
+        
+        // Device Days
+        Route::get('/device-days', [IcController::class, 'deviceDays'])->name('device-days');
+        Route::post('/device-days', [IcController::class, 'storeDeviceDays'])->name('device-days.store');
+        
+        // Antibiotic Stewardship
+        Route::get('/antibiotic', [IcController::class, 'antibiotic'])->name('antibiotic');
+        Route::post('/antibiotic', [IcController::class, 'storeAntibiotic'])->name('antibiotic.store');
+        Route::post('/antibiotic/{antibioticUse}/review', [IcController::class, 'reviewAntibiotic'])->name('antibiotic.review');
+        Route::get('/antibiotic/search-drugs', [IcController::class, 'searchDrugs'])->name('antibiotic.search-drugs');
+        
+        // Outbreak Management
+        Route::get('/outbreak', [IcController::class, 'outbreak'])->name('outbreak');
+        Route::post('/outbreak', [IcController::class, 'storeOutbreak'])->name('outbreak.store');
+        Route::put('/outbreak/{outbreak}', [IcController::class, 'updateOutbreak'])->name('outbreak.update');
+        Route::post('/outbreak/{outbreak}/case', [IcController::class, 'storeOutbreakCase'])->name('outbreak.case.store');
+        
+        // Education & Training
+        Route::get('/education', [IcController::class, 'education'])->name('education');
+        Route::post('/education', [IcController::class, 'storeEducation'])->name('education.store');
+        Route::post('/education/{education}/attendee', [IcController::class, 'storeEducationAttendee'])->name('education.attendee.store');
+        
+        // Reports
+        Route::get('/reports', [IcController::class, 'reports'])->name('reports');
+        Route::get('/reports/export', [IcController::class, 'exportReports'])->name('reports.export');
+        
+        // Settings
+        Route::get('/settings', [IcController::class, 'settings'])->name('settings');
+        Route::post('/settings', [IcController::class, 'updateSettings'])->name('settings.update');
     });
 
     // Administrative Hub
