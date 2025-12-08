@@ -23,27 +23,31 @@ class ShareMenus
             // Index berdasarkan ID
             $indexed = $allMenus->keyBy('id');
 
+            // Helper function to convert route name to URL
+            $getRouteUrl = function ($routeName) {
+                if (!$routeName) return null;
+                // If already a URL path, return as-is
+                if (str_starts_with($routeName, '/') || str_starts_with($routeName, 'http')) {
+                    return $routeName;
+                }
+                // Try to convert route name to URL
+                try {
+                    return route($routeName, [], false); // false = relative URL
+                } catch (\Exception $e) {
+                    return null;
+                }
+            };
+
             // Recursive builder (filtered by permission)
-            $buildTree = function ($parentId = null) use (&$buildTree, $indexed, $user) {
+            $buildTree = function ($parentId = null) use (&$buildTree, $indexed, $user, $getRouteUrl) {
                 return $indexed
-                    ->filter(function ($menu) use ($parentId, $user) {
+                    ->filter(function ($menu) use ($parentId, $user, $getRouteUrl) {
                         if ($menu->parent_id !== $parentId) return false;
 
-                        // Hide specific menus requested by user
-                        $hiddenTitles = ['ระบบแจ้งซ่อม', 'ใบงานซ่อมบำรุง'];
-                        if (in_array($menu->title, $hiddenTitles)) {
-                            return false;
-                        }
-
                         // Special check for Technician menu
-                        if ($menu->route === '/technician/work-orders') {
+                        if ($menu->route === 'technician.work-orders.index') {
                             $technicianPositions = ['ช่างส่งกำลัง', 'ช่างIT', 'ช่างไฟฟ้า', 'ช่างประปา', 'ช่างทั่วไป'];
                             $userPositions = $user->positions->pluck('name')->toArray();
-                            
-                            // Debug logging
-                            // \Illuminate\Support\Facades\Log::info('Checking technician menu for user: ' . $user->name);
-                            // \Illuminate\Support\Facades\Log::info('User positions: ' . implode(', ', $userPositions));
-                            // \Illuminate\Support\Facades\Log::info('Intersect: ' . implode(', ', array_intersect($technicianPositions, $userPositions)));
 
                             if (!empty(array_intersect($technicianPositions, $userPositions))) {
                                 return true;
@@ -52,26 +56,24 @@ class ShareMenus
 
                         return !$menu->permission_name || $user->can($menu->permission_name);
                     })
-                    ->map(function ($menu) use (&$buildTree) {
-                        $menu->children = $buildTree($menu->id)->values();
-                        return $menu;
+                    ->map(function ($menu) use (&$buildTree, $getRouteUrl) {
+                        $menuData = [
+                            'id' => $menu->id,
+                            'title' => $menu->title,
+                            'icon' => $menu->icon,
+                            'route' => $getRouteUrl($menu->route),
+                            'children' => $buildTree($menu->id)->values(),
+                        ];
+                        return (object) $menuData;
                     })
                     ->filter(
                         fn($menu) =>
-                        $menu->route || $menu->children->isNotEmpty()
+                        $menu->route || (isset($menu->children) && count($menu->children) > 0)
                     )
                     ->values();
             };
 
             $menus = $buildTree();
-
-            // Force specific menus to be leaf nodes (no dropdown)
-            $menus->transform(function ($menu) {
-                if (in_array($menu->route, ['/quality', '/admin-hub'])) {
-                    $menu->children = collect([]);
-                }
-                return $menu;
-            });
 
             return $menus;
         });

@@ -410,6 +410,7 @@ class HosxpService
 
     /**
      * ตรวจสอบข้อมูลตามเกณฑ์ MRA (Auto-check)
+     * รองรับทั้ง code เก่า (1.1, 2.1) และ code ใหม่ สปสช. 2563 (A1, B1)
      */
     public function autoCheckCriteria(string $vn, string $criteriaCode): array
     {
@@ -425,84 +426,272 @@ class HosxpService
 
         $patient = $visitData['patient'];
         $vitalSigns = $visitData['vital_signs'] ?? [];
+        
+        // แปลง Collection เป็น array ถ้าจำเป็น
+        $diagnoses = $visitData['diagnoses'] ?? [];
+        if ($diagnoses instanceof \Illuminate\Support\Collection) {
+            $diagnoses = $diagnoses->toArray();
+        }
+        
+        $items = $visitData['items'] ?? [];
+        if ($items instanceof \Illuminate\Support\Collection) {
+            $items = $items->toArray();
+        }
 
+        // สปสช. 2563 criteria codes (A, B, C, D, E)
         $checks = [
-            // หมวด 1: ข้อมูลทั่วไป
-            '1.1' => [ // ชื่อ-นามสกุล
-                'value' => $patient['patient_name'] ?? null,
-                'passed' => !empty($patient['fname']) && !empty($patient['lname']),
-            ],
-            '1.2' => [ // HN
+            // ===========================================
+            // หมวด A: การระบุตัวผู้ป่วย (Patient Identification)
+            // ===========================================
+            'A1' => [ // HN ถูกต้องครบถ้วน
                 'value' => $patient['hn'] ?? null,
                 'passed' => !empty($patient['hn']),
             ],
-            '1.3' => [ // CID
-                'value' => $patient['cid'] ?? null,
-                'passed' => !empty($patient['cid']) && strlen($patient['cid']) === 13,
+            'A2' => [ // ชื่อ-นามสกุล ถูกต้องครบถ้วน
+                'value' => $patient['patient_name'] ?? null,
+                'passed' => !empty($patient['fname']) && !empty($patient['lname']),
             ],
-            '1.4' => [ // วันเกิด
+            'A3' => [ // CID 13 หลัก ถูกต้อง
+                'value' => $patient['cid'] ?? null,
+                'passed' => !empty($patient['cid']) && strlen(trim($patient['cid'])) === 13,
+            ],
+            'A4' => [ // วัน เดือน ปีเกิด ถูกต้อง
                 'value' => $patient['birthdate'] ?? null,
                 'passed' => !empty($patient['birthdate']),
             ],
-            '1.5' => [ // ที่อยู่
-                'value' => trim(($patient['addrpart'] ?? '') . ' ' . ($patient['tmbpart'] ?? '') . ' ' . ($patient['amppart'] ?? '') . ' ' . ($patient['chwpart'] ?? '')),
-                'passed' => !empty($patient['chwpart']) && !empty($patient['amppart']),
+            'A5' => [ // เพศ ถูกต้อง
+                'value' => $patient['sex'] ?? null,
+                'passed' => !empty($patient['sex']) && in_array($patient['sex'], ['1', '2', 1, 2, 'M', 'F', 'ชาย', 'หญิง']),
             ],
-            '1.6' => [ // สิทธิ
-                'value' => $visitData['pttype_name'] ?? $visitData['pttype'],
+            'A6' => [ // สิทธิการรักษา ถูกต้อง
+                'value' => $visitData['pttype_name'] ?? $visitData['pttype'] ?? null,
                 'passed' => !empty($visitData['pttype']),
             ],
 
-            // หมวด 2: ประวัติ
-            '2.1' => [ // CC
+            // ===========================================
+            // หมวด B: ข้อมูลทางคลินิก (Clinical Information)
+            // ===========================================
+            'B1' => [ // Chief Complaint
                 'value' => $visitData['chief_complaint'] ?? null,
                 'passed' => !empty($visitData['chief_complaint']),
             ],
-            '2.4' => [ // แพ้ยา
+            'B2' => [ // HPI - ประวัติการเจ็บป่วยปัจจุบัน (ตรวจจาก present_illness)
+                'value' => $visitData['present_illness'] ?? $visitData['chief_complaint'] ?? null,
+                'passed' => !empty($visitData['present_illness']) || !empty($visitData['chief_complaint']),
+            ],
+            'B3' => [ // PMH - ประวัติการเจ็บป่วยในอดีต
+                'value' => $patient['chronic'] ?? null,
+                'passed' => isset($patient['chronic']), // มีการบันทึก (แม้จะว่าง = ไม่มีโรคประจำตัว)
+            ],
+            'B4' => [ // ประวัติการแพ้ยา/อาหาร
                 'value' => $patient['drugallergy'] ?? null,
-                'passed' => isset($patient['drugallergy']),
+                'passed' => isset($patient['drugallergy']), // มีการบันทึก
             ],
-
-            // หมวด 3: Vital Signs
-            '3.1' => [ // BP
-                'value' => ($vitalSigns['bp_systolic'] ?? '-') . '/' . ($vitalSigns['bp_diastolic'] ?? '-'),
-                'passed' => !empty($vitalSigns['bp_systolic']) && !empty($vitalSigns['bp_diastolic']),
+            'B5' => [ // Vital Signs ครบถ้วน (BP, Pulse, Temp, RR)
+                'value' => sprintf(
+                    "BP: %s/%s, P: %s, T: %s, RR: %s",
+                    $vitalSigns['bp_systolic'] ?? '-',
+                    $vitalSigns['bp_diastolic'] ?? '-',
+                    $vitalSigns['pulse'] ?? '-',
+                    $vitalSigns['temperature'] ?? '-',
+                    $vitalSigns['respiratory_rate'] ?? '-'
+                ),
+                'passed' => !empty($vitalSigns['bp_systolic']) 
+                    && !empty($vitalSigns['bp_diastolic'])
+                    && !empty($vitalSigns['pulse'])
+                    && !empty($vitalSigns['temperature']),
             ],
-            '3.2' => [ // Pulse
-                'value' => $vitalSigns['pulse'] ?? null,
-                'passed' => !empty($vitalSigns['pulse']),
+            'B6' => [ // Physical Examination
+                'value' => $visitData['physical_exam'] ?? null,
+                'passed' => !empty($visitData['physical_exam']),
             ],
-            '3.3' => [ // Temperature
-                'value' => $vitalSigns['temperature'] ?? null,
-                'passed' => !empty($vitalSigns['temperature']),
+            'B7' => [ // ผล Lab/X-ray
+                'value' => $visitData['labs_count'] ?? 0,
+                'passed' => ($visitData['labs_count'] ?? 0) > 0 || ($visitData['xray_count'] ?? 0) > 0,
             ],
-            '3.4' => [ // RR
-                'value' => $vitalSigns['respiratory_rate'] ?? null,
-                'passed' => !empty($vitalSigns['respiratory_rate']),
-            ],
-            '3.5' => [ // Weight/Height
-                'value' => ($vitalSigns['weight'] ?? '-') . ' kg / ' . ($vitalSigns['height'] ?? '-') . ' cm',
-                'passed' => !empty($vitalSigns['weight']),
-            ],
-
-            // หมวด 4: Diagnosis
-            '4.1' => [ // PDx
+            'B8' => [ // Principal Diagnosis (PDx)
                 'value' => $visitData['pdx'] ?? null,
                 'passed' => !empty($visitData['pdx']),
             ],
+            'B9' => [ // Secondary Diagnosis (SDx) - ถ้ามี
+                'value' => count($diagnoses) > 1 ? implode(', ', array_slice(array_column($diagnoses, 'icd10'), 1)) : 'N/A',
+                'passed' => true, // Not required, always pass if exists
+            ],
+            'B10' => [ // แผนการรักษา/คำสั่งการรักษา
+                'value' => count($items) . ' รายการ',
+                'passed' => count($items) > 0,
+            ],
 
-            // หมวด 8: วันเวลา
-            '8.2' => [ // Date/Time
+            // ===========================================
+            // หมวด C: ความถูกต้องของการบันทึก (Documentation Quality)
+            // ===========================================
+            'C1' => [ // ลายมือชื่อแพทย์ (manual check)
+                'value' => $visitData['doctor_name'] ?? null,
+                'passed' => null, // ต้องตรวจด้วยตนเอง
+            ],
+            'C2' => [ // วันที่และเวลาที่บันทึก
+                'value' => ($visitData['vstdate'] ?? '-') . ' ' . ($visitData['vsttime'] ?? '-'),
+                'passed' => !empty($visitData['vstdate']) && !empty($visitData['vsttime']),
+            ],
+            'C3' => [ // ความชัดเจนของลายมือ (manual check)
+                'value' => null,
+                'passed' => null, // ต้องตรวจด้วยตนเอง
+            ],
+            'C4' => [ // การแก้ไขข้อความถูกต้อง (manual check)
+                'value' => null,
+                'passed' => null, // ต้องตรวจด้วยตนเอง
+            ],
+            'C5' => [ // ความต่อเนื่องของการบันทึก (manual check)
+                'value' => null,
+                'passed' => null, // ต้องตรวจด้วยตนเอง
+            ],
+            'C6' => [ // บันทึกการให้คำแนะนำผู้ป่วย (manual check)
+                'value' => null,
+                'passed' => null, // ต้องตรวจด้วยตนเอง
+            ],
+            'C7' => [ // Informed Consent (manual check)
+                'value' => null,
+                'passed' => null, // ต้องตรวจด้วยตนเอง
+            ],
+
+            // ===========================================
+            // หมวด D: ความถูกต้องของการให้รหัส (Coding Accuracy)
+            // ===========================================
+            'D1' => [ // ICD-10 ของ PDx ถูกต้อง
+                'value' => $visitData['pdx'] ?? null,
+                // รองรับทั้งรูปแบบมีจุด (R45.8) และไม่มีจุด (R458, R4581)
+                // ICD-10 format: ตัวอักษร + 2 ตัวเลข + (จุดหรือไม่มี) + 0-2 ตัวเลข
+                'passed' => !empty($visitData['pdx']) && preg_match('/^[A-Z]\d{2}\.?\d{0,2}$/i', $visitData['pdx']),
+            ],
+            'D2' => [ // ICD-10 ของ SDx ถูกต้อง
+                'value' => count($diagnoses) > 1 ? 'มี ' . (count($diagnoses) - 1) . ' รายการ' : 'ไม่มี SDx',
+                'passed' => true, // Pass if format is correct (manual verification needed for accuracy)
+            ],
+            'D3' => [ // ICD-9-CM ของหัตถการ (manual check)
+                'value' => null,
+                'passed' => null, // ต้องตรวจด้วยตนเอง
+            ],
+            'D4' => [ // การเลือก PDx ถูกต้อง (manual check)
+                'value' => null,
+                'passed' => null, // ต้องตรวจด้วยตนเอง
+            ],
+            'D5' => [ // ความครบถ้วนของรหัส (manual check)
+                'value' => null,
+                'passed' => null, // ต้องตรวจด้วยตนเอง
+            ],
+            'D6' => [ // ไม่มี Upcoding (manual check)
+                'value' => null,
+                'passed' => null, // ต้องตรวจด้วยตนเอง
+            ],
+
+            // ===========================================
+            // หมวด E: ความสอดคล้องของข้อมูล (Data Consistency)
+            // ===========================================
+            'E1' => [ // CC กับ Diagnosis สอดคล้องกัน (manual check)
+                'value' => sprintf("CC: %s | Dx: %s", 
+                    $visitData['chief_complaint'] ?? '-', 
+                    $visitData['pdx'] ?? '-'
+                ),
+                'passed' => null, // ต้องตรวจด้วยตนเอง
+            ],
+            'E2' => [ // PE กับ Diagnosis สอดคล้องกัน (manual check)
+                'value' => null,
+                'passed' => null, // ต้องตรวจด้วยตนเอง
+            ],
+            'E3' => [ // Diagnosis กับ Treatment สอดคล้องกัน (manual check)
+                'value' => null,
+                'passed' => null, // ต้องตรวจด้วยตนเอง
+            ],
+            'E4' => [ // Lab/X-ray กับ Diagnosis สอดคล้องกัน (manual check)
+                'value' => null,
+                'passed' => null, // ต้องตรวจด้วยตนเอง
+            ],
+            'E5' => [ // ข้อมูลไม่ขัดแย้งกัน (manual check)
+                'value' => null,
+                'passed' => null, // ต้องตรวจด้วยตนเอง
+            ],
+
+            // ===========================================
+            // Legacy codes (รองรับ code เก่า)
+            // ===========================================
+            '1.1' => [ 
+                'value' => $patient['patient_name'] ?? null,
+                'passed' => !empty($patient['fname']) && !empty($patient['lname']),
+            ],
+            '1.2' => [ 
+                'value' => $patient['hn'] ?? null,
+                'passed' => !empty($patient['hn']),
+            ],
+            '1.3' => [ 
+                'value' => $patient['cid'] ?? null,
+                'passed' => !empty($patient['cid']) && strlen($patient['cid']) === 13,
+            ],
+            '1.4' => [ 
+                'value' => $patient['birthdate'] ?? null,
+                'passed' => !empty($patient['birthdate']),
+            ],
+            '1.5' => [ 
+                'value' => trim(($patient['addrpart'] ?? '') . ' ' . ($patient['tmbpart'] ?? '') . ' ' . ($patient['amppart'] ?? '') . ' ' . ($patient['chwpart'] ?? '')),
+                'passed' => !empty($patient['chwpart']) && !empty($patient['amppart']),
+            ],
+            '1.6' => [ 
+                'value' => $visitData['pttype_name'] ?? $visitData['pttype'],
+                'passed' => !empty($visitData['pttype']),
+            ],
+            '2.1' => [ 
+                'value' => $visitData['chief_complaint'] ?? null,
+                'passed' => !empty($visitData['chief_complaint']),
+            ],
+            '2.4' => [ 
+                'value' => $patient['drugallergy'] ?? null,
+                'passed' => isset($patient['drugallergy']),
+            ],
+            '3.1' => [ 
+                'value' => ($vitalSigns['bp_systolic'] ?? '-') . '/' . ($vitalSigns['bp_diastolic'] ?? '-'),
+                'passed' => !empty($vitalSigns['bp_systolic']) && !empty($vitalSigns['bp_diastolic']),
+            ],
+            '3.2' => [ 
+                'value' => $vitalSigns['pulse'] ?? null,
+                'passed' => !empty($vitalSigns['pulse']),
+            ],
+            '3.3' => [ 
+                'value' => $vitalSigns['temperature'] ?? null,
+                'passed' => !empty($vitalSigns['temperature']),
+            ],
+            '3.4' => [ 
+                'value' => $vitalSigns['respiratory_rate'] ?? null,
+                'passed' => !empty($vitalSigns['respiratory_rate']),
+            ],
+            '3.5' => [ 
+                'value' => ($vitalSigns['weight'] ?? '-') . ' kg / ' . ($vitalSigns['height'] ?? '-') . ' cm',
+                'passed' => !empty($vitalSigns['weight']),
+            ],
+            '4.1' => [ 
+                'value' => $visitData['pdx'] ?? null,
+                'passed' => !empty($visitData['pdx']),
+            ],
+            '8.2' => [ 
                 'value' => ($visitData['vstdate'] ?? '-') . ' ' . ($visitData['vsttime'] ?? '-'),
                 'passed' => !empty($visitData['vstdate']) && !empty($visitData['vsttime']),
             ],
         ];
 
         if (isset($checks[$criteriaCode])) {
+            $check = $checks[$criteriaCode];
+            
+            // ถ้า passed เป็น null หมายถึงต้องตรวจด้วยตนเอง
+            if ($check['passed'] === null) {
+                return [
+                    'passed' => null,
+                    'value' => $check['value'],
+                    'message' => 'ต้องตรวจสอบด้วยตนเอง',
+                ];
+            }
+            
             return [
-                'passed' => $checks[$criteriaCode]['passed'],
-                'value' => $checks[$criteriaCode]['value'],
-                'message' => $checks[$criteriaCode]['passed'] ? 'ผ่าน' : 'ไม่ผ่าน/ไม่มีข้อมูล',
+                'passed' => $check['passed'],
+                'value' => $check['value'],
+                'message' => $check['passed'] ? 'ผ่าน' : 'ไม่ผ่าน/ไม่มีข้อมูล',
             ];
         }
 

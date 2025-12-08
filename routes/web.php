@@ -45,6 +45,12 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
     Route::resource('users', UserController::class);
     Route::put('/users/{user}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');
     Route::put('/users/{user}/roles', [UserController::class, 'updateRoles'])->name('users.update-roles');
+    
+    // Settings Hub
+    Route::get('/settings-hub', function () {
+        return Inertia::render('settingapp/Hub');
+    })->name('settings.hub');
+    
     Route::get('/settingsapp', [SettingAppController::class, 'edit'])->name('setting.edit');
     Route::post('/settingsapp', [SettingAppController::class, 'update'])->name('setting.update');
     Route::post('/settingsapp/check-path', [SettingAppController::class, 'checkPath'])->name('setting.check-path');
