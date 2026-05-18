@@ -1,3 +1,4 @@
+import fs from 'fs';
 import react from '@vitejs/plugin-react';
 import laravel from 'laravel-vite-plugin';
 import {
@@ -25,9 +26,16 @@ export default defineConfig({
         jsx: 'automatic',
     },
     server: {
-        host: '127.0.0.1',
+        host: true,
+        port: 5174,
+        https: {
+            key: fs.readFileSync('./localhost+2-key.pem'),
+            cert: fs.readFileSync('./localhost+2.pem'),
+        },
         hmr: {
-            host: '127.0.0.1',
+            protocol: 'wss',
+            host: process.env.VITE_HMR_HOST || '127.0.0.1',
+            port: 5174,
         },
     },
 });
