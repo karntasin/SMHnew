@@ -2,6 +2,7 @@
 
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\HelpController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\CvRiskReportController;
 use App\Http\Controllers\MenuController;
@@ -15,18 +16,22 @@ use App\Http\Controllers\SettingAppController;
 use App\Http\Controllers\MediaFolderController;
 use App\Http\Controllers\QualityDocumentController;
 use App\Http\Controllers\RoomBookingController;
+use App\Http\Controllers\MeetingRoomController;
 use App\Http\Controllers\LanguageController;
 use App\Http\Controllers\Vehicle\VehicleBookingController;
 use App\Http\Controllers\Vehicle\VehicleController;
 use App\Http\Controllers\Vehicle\VehicleSettingController;
 use App\Http\Controllers\Ic\IcController;
 
-Route::redirect('/', '/login')->name('home');
+Route::get('/', fn () => redirect()->route('login'))->name('home');
 
 Route::middleware(['auth', 'menu.permission'])->group(function () {
     Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('help', [HelpController::class, 'index'])->name('help.index');
+    Route::get('help/download-pdf', [HelpController::class, 'downloadPdf'])->name('help.download-pdf');
     Route::get('dashboard/stats', [DashboardController::class, 'stats'])->name('dashboard.stats');
     Route::get('dashboard/monthly-visits', [DashboardController::class, 'monthlyVisits'])->name('dashboard.monthly-visits');
+    Route::get('dashboard/pdf', [DashboardController::class, 'exportPdf'])->name('dashboard.pdf');
     Route::get('dashboard/cv-risk-report', [CvRiskReportController::class, 'export'])->name('dashboard.cv-risk-report');
 
     // Notifications
@@ -117,23 +122,28 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
     // Administration -> Meeting rooms / bookings (งานธุรการ -> จองห้องประชุม)
     Route::prefix('administration/rooms')->name('rooms.')->group(function () {
         Route::get('/', [RoomBookingController::class, 'index'])->name('index');
-        // Calendar page (Inertia) — renders the React page
+        Route::get('/bookings', [RoomBookingController::class, 'bookings'])->name('bookings');
         Route::get('/calendar', function () {
             return Inertia::render('AdminHub/rooms/Calendar');
         })->name('calendar');
-        // Calendar events API (returns JSON for FullCalendar)
         Route::get('/calendar/events', [RoomBookingController::class, 'calendar'])->name('calendar.events');
-    Route::get('/meeting-rooms', [RoomBookingController::class, 'meetingRooms'])->name('meeting-rooms');
+        Route::get('/api/meeting-rooms', [RoomBookingController::class, 'meetingRooms'])->name('meeting-rooms');
         Route::get('/my', [RoomBookingController::class, 'myBookings'])->name('my');
         Route::post('/bookings', [RoomBookingController::class, 'store'])->name('bookings.store');
         Route::post('/bookings/{booking}/approve', [RoomBookingController::class, 'approve'])->name('bookings.approve');
         Route::get('/bookings/{booking}', [RoomBookingController::class, 'show'])->name('bookings.show');
         Route::put('/bookings/{booking}', [RoomBookingController::class, 'update'])->name('bookings.update');
         Route::delete('/bookings/{booking}', [RoomBookingController::class, 'destroy'])->name('bookings.destroy');
+
+        Route::get('/settings', [MeetingRoomController::class, 'index'])->name('settings');
+        Route::post('/settings', [MeetingRoomController::class, 'store'])->name('settings.store');
+        Route::post('/settings/{meetingRoom}', [MeetingRoomController::class, 'update'])->name('settings.update');
+        Route::delete('/settings/{meetingRoom}', [MeetingRoomController::class, 'destroy'])->name('settings.destroy');
     });
 
     // Vehicle Booking System (ระบบจองรถ)
     Route::prefix('vehicles')->name('vehicles.')->group(function () {
+        Route::get('/', [VehicleBookingController::class, 'select'])->name('index');
         Route::get('/bookings', [VehicleBookingController::class, 'index'])->name('bookings.index');
         Route::get('/bookings/my', [VehicleBookingController::class, 'myRequests'])->name('bookings.my');
         Route::get('/bookings/create', [VehicleBookingController::class, 'create'])->name('bookings.create');
@@ -155,8 +165,11 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         // Vehicle Management
         Route::resource('manage', VehicleController::class);
 
-        // Vehicle Settings
+        // Vehicle Settings (ตั้งค่ารถ + ประเภท)
         Route::get('/settings', [VehicleSettingController::class, 'index'])->name('settings.index');
+        Route::post('/settings/vehicles', [VehicleSettingController::class, 'storeVehicle'])->name('settings.vehicles.store');
+        Route::post('/settings/vehicles/{vehicle}', [VehicleSettingController::class, 'updateVehicle'])->name('settings.vehicles.update');
+        Route::delete('/settings/vehicles/{vehicle}', [VehicleSettingController::class, 'destroyVehicle'])->name('settings.vehicles.destroy');
         Route::post('/settings/categories', [VehicleSettingController::class, 'storeCategory'])->name('settings.categories.store');
         Route::put('/settings/categories/{category}', [VehicleSettingController::class, 'updateCategory'])->name('settings.categories.update');
         Route::delete('/settings/categories/{category}', [VehicleSettingController::class, 'destroyCategory'])->name('settings.categories.destroy');
@@ -172,6 +185,14 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::get('/pending-acknowledgments', [App\Http\Controllers\Document\DocumentController::class, 'getPendingAcknowledgments'])->name('pendingAcknowledgments');
         Route::get('/overdue', [App\Http\Controllers\Document\DocumentController::class, 'getOverdueDocuments'])->name('overdue');
         
+        Route::post('/signatures', [App\Http\Controllers\Document\DocumentController::class, 'uploadSignatures'])->name('signatures.upload');
+
+        Route::get('/pending-review', [App\Http\Controllers\Document\DocumentController::class, 'pendingReview'])->name('pendingReview');
+        Route::prefix('director')->name('director.')->group(function () {
+            Route::get('/', [App\Http\Controllers\Document\DocumentController::class, 'directorInbox'])->name('index');
+            Route::get('/{document}', [App\Http\Controllers\Document\DocumentController::class, 'directorShow'])->name('show');
+        });
+        
         Route::get('/', [App\Http\Controllers\Document\DocumentController::class, 'index'])->name('index');
         Route::get('/create', [App\Http\Controllers\Document\DocumentController::class, 'create'])->name('create');
         Route::post('/', [App\Http\Controllers\Document\DocumentController::class, 'store'])->name('store');
@@ -186,6 +207,7 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         
         // Acknowledgment for forwarded documents
         Route::post('/action/{action}/acknowledge', [App\Http\Controllers\Document\DocumentController::class, 'acknowledgeDocument'])->name('acknowledgeDocument');
+        Route::post('/action/{action}/implementation', [App\Http\Controllers\Document\DocumentController::class, 'updateImplementation'])->name('updateImplementation');
     });
 
     // Maintenance System (ระบบแจ้งซ่อม)
@@ -214,6 +236,34 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::delete('/settings/priorities/{priority}', [App\Http\Controllers\MaintenanceSettingController::class, 'destroyPriority'])->name('settings.priorities.destroy');
     });
 
+    // Medical Equipment Borrowing (ระบบยืมอุปกรณ์แพทย์)
+    Route::prefix('equipment-borrowing')->name('equipment-borrowing.')->group(function () {
+        Route::get('/dashboard', [App\Http\Controllers\MedicalEquipmentDashboardController::class, 'index'])->name('dashboard');
+
+        Route::get('/borrowings/export', [App\Http\Controllers\MedicalEquipmentBorrowingController::class, 'exportExcel'])->name('borrowings.export');
+        Route::get('/borrowings', [App\Http\Controllers\MedicalEquipmentBorrowingController::class, 'index'])->name('borrowings.index');
+        Route::get('/borrowings/my', [App\Http\Controllers\MedicalEquipmentBorrowingController::class, 'my'])->name('borrowings.my');
+        Route::get('/borrowings/create', [App\Http\Controllers\MedicalEquipmentBorrowingController::class, 'create'])->name('borrowings.create');
+        Route::post('/borrowings', [App\Http\Controllers\MedicalEquipmentBorrowingController::class, 'store'])->name('borrowings.store');
+        Route::get('/borrowings/{borrowing}', [App\Http\Controllers\MedicalEquipmentBorrowingController::class, 'show'])->name('borrowings.show');
+        Route::post('/borrowings/{borrowing}/approve', [App\Http\Controllers\MedicalEquipmentBorrowingController::class, 'approve'])->name('borrowings.approve');
+        Route::post('/borrowings/{borrowing}/reject', [App\Http\Controllers\MedicalEquipmentBorrowingController::class, 'reject'])->name('borrowings.reject');
+        Route::post('/borrowings/{borrowing}/issue', [App\Http\Controllers\MedicalEquipmentBorrowingController::class, 'issue'])->name('borrowings.issue');
+        Route::post('/borrowings/{borrowing}/return', [App\Http\Controllers\MedicalEquipmentBorrowingController::class, 'returnItem'])->name('borrowings.return');
+        Route::post('/borrowings/{borrowing}/cancel', [App\Http\Controllers\MedicalEquipmentBorrowingController::class, 'cancel'])->name('borrowings.cancel');
+
+        Route::get('/equipment', [App\Http\Controllers\MedicalEquipmentController::class, 'index'])->name('equipment.index');
+        Route::post('/equipment', [App\Http\Controllers\MedicalEquipmentController::class, 'store'])->name('equipment.store');
+        Route::put('/equipment/{equipment}', [App\Http\Controllers\MedicalEquipmentController::class, 'update'])->name('equipment.update');
+        Route::delete('/equipment/{equipment}', [App\Http\Controllers\MedicalEquipmentController::class, 'destroy'])->name('equipment.destroy');
+        Route::get('/equipment/{equipment}/history', [App\Http\Controllers\MedicalEquipmentController::class, 'history'])->name('equipment.history');
+
+        Route::get('/settings', [App\Http\Controllers\MedicalEquipmentSettingController::class, 'index'])->name('settings.index');
+        Route::post('/settings/categories', [App\Http\Controllers\MedicalEquipmentSettingController::class, 'storeCategory'])->name('settings.categories.store');
+        Route::put('/settings/categories/{category}', [App\Http\Controllers\MedicalEquipmentSettingController::class, 'updateCategory'])->name('settings.categories.update');
+        Route::delete('/settings/categories/{category}', [App\Http\Controllers\MedicalEquipmentSettingController::class, 'destroyCategory'])->name('settings.categories.destroy');
+    });
+
     // Technician Work Orders (ระบบใบงานสำหรับช่าง)
     Route::prefix('technician')->name('technician.')->group(function () {
         Route::get('/work-orders', [App\Http\Controllers\TechnicianWorkOrderController::class, 'index'])->name('work-orders.index');
@@ -225,6 +275,97 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
 
     // Finance Dashboard
     Route::get('/finance-dashboard', [App\Http\Controllers\FinanceDashboardController::class, 'index'])->name('finance.dashboard');
+    Route::get('/finance/revenue', [App\Http\Controllers\FinanceRevenueController::class, 'index'])->name('finance.revenue');
+    Route::get('/finance/revenue/export', [App\Http\Controllers\FinanceRevenueController::class, 'exportExcel'])->name('finance.revenue.export');
+    Route::get('/finance/revenue/export-pdf', [App\Http\Controllers\FinanceRevenueController::class, 'exportPdf'])->name('finance.revenue.export-pdf');
+
+    // RDU Reports (Rational Drug Use)
+    Route::get('/rdu', [App\Http\Controllers\RduReportController::class, 'index'])->name('rdu.index');
+    Route::get('/rdu/cases', [App\Http\Controllers\RduReportController::class, 'cases'])->name('rdu.cases');
+    Route::get('/rdu/export', [App\Http\Controllers\RduReportController::class, 'export'])->name('rdu.export');
+    Route::post('/rdu/audits', [App\Http\Controllers\RduReportController::class, 'storeAudit'])->name('rdu.audits.store');
+    Route::get('/rdu/drugs', [App\Http\Controllers\RduReportController::class, 'drugs'])->name('rdu.drugs');
+    Route::get('/rdu/drugs/antibiotics', [App\Http\Controllers\RduReportController::class, 'antibiotics'])->name('rdu.drugs.antibiotics');
+    Route::get('/rdu/drugs/by-department', [App\Http\Controllers\RduReportController::class, 'drugsByDepartment'])->name('rdu.drugs.by-department');
+    Route::get('/rdu/drugs/export', [App\Http\Controllers\RduReportController::class, 'exportDrugs'])->name('rdu.drugs.export');
+
+    // Drug Usage Reports (รายงานยาและการใช้ยา)
+    Route::get('/drug-usage', [App\Http\Controllers\DrugUsageController::class, 'index'])->name('drug-usage.index');
+    Route::get('/drug-usage/report', [App\Http\Controllers\DrugUsageController::class, 'report'])->name('drug-usage.report');
+    Route::get('/drug-usage/export', [App\Http\Controllers\DrugUsageController::class, 'export'])->name('drug-usage.export');
+    Route::get('/drug-usage/export-pdf', [App\Http\Controllers\DrugUsageController::class, 'exportPdf'])->name('drug-usage.export-pdf');
+
+    // IM - IT Management (งานสารสนเทศ HAIT) ภายใต้ศูนย์คุณภาพ
+    Route::prefix('im')->name('im.')->group(function () {
+        Route::get('/', [App\Http\Controllers\Im\ImHubController::class, 'index'])->name('index');
+        Route::get('/manual', [App\Http\Controllers\Im\ImHubController::class, 'manual'])->name('manual');
+
+        // หมวด 1: Master Plan & Strategy
+        Route::get('/master-plan', [App\Http\Controllers\Im\MasterPlanController::class, 'index'])->name('master-plan');
+        Route::post('/master-plan/plans', [App\Http\Controllers\Im\MasterPlanController::class, 'storePlan'])->name('master-plan.plans.store');
+        Route::put('/master-plan/plans/{plan}', [App\Http\Controllers\Im\MasterPlanController::class, 'updatePlan'])->name('master-plan.plans.update');
+        Route::delete('/master-plan/plans/{plan}', [App\Http\Controllers\Im\MasterPlanController::class, 'destroyPlan'])->name('master-plan.plans.destroy');
+        Route::post('/master-plan/mappings', [App\Http\Controllers\Im\MasterPlanController::class, 'storeMapping'])->name('master-plan.mappings.store');
+        Route::put('/master-plan/mappings/{mapping}', [App\Http\Controllers\Im\MasterPlanController::class, 'updateMapping'])->name('master-plan.mappings.update');
+        Route::delete('/master-plan/mappings/{mapping}', [App\Http\Controllers\Im\MasterPlanController::class, 'destroyMapping'])->name('master-plan.mappings.destroy');
+        Route::post('/master-plan/actions', [App\Http\Controllers\Im\MasterPlanController::class, 'storeAction'])->name('master-plan.actions.store');
+        Route::put('/master-plan/actions/{action}', [App\Http\Controllers\Im\MasterPlanController::class, 'updateAction'])->name('master-plan.actions.update');
+        Route::delete('/master-plan/actions/{action}', [App\Http\Controllers\Im\MasterPlanController::class, 'destroyAction'])->name('master-plan.actions.destroy');
+
+        // หมวด 2: Risk Management
+        Route::get('/risk', [App\Http\Controllers\Im\RiskController::class, 'index'])->name('risk');
+        Route::post('/risk', [App\Http\Controllers\Im\RiskController::class, 'store'])->name('risk.store');
+        Route::put('/risk/{risk}', [App\Http\Controllers\Im\RiskController::class, 'update'])->name('risk.update');
+        Route::delete('/risk/{risk}', [App\Http\Controllers\Im\RiskController::class, 'destroy'])->name('risk.destroy');
+
+        // หมวด 3: Security, PDPA & BCP
+        Route::get('/security', [App\Http\Controllers\Im\SecurityController::class, 'index'])->name('security');
+        Route::post('/security/policies', [App\Http\Controllers\Im\SecurityController::class, 'storePolicy'])->name('security.policies.store');
+        Route::post('/security/policies/{policy}', [App\Http\Controllers\Im\SecurityController::class, 'updatePolicy'])->name('security.policies.update');
+        Route::delete('/security/policies/{policy}', [App\Http\Controllers\Im\SecurityController::class, 'destroyPolicy'])->name('security.policies.destroy');
+        Route::post('/security/awareness', [App\Http\Controllers\Im\SecurityController::class, 'storeAwareness'])->name('security.awareness.store');
+        Route::delete('/security/awareness/{record}', [App\Http\Controllers\Im\SecurityController::class, 'destroyAwareness'])->name('security.awareness.destroy');
+        Route::post('/security/drills', [App\Http\Controllers\Im\SecurityController::class, 'storeDrill'])->name('security.drills.store');
+        Route::delete('/security/drills/{drill}', [App\Http\Controllers\Im\SecurityController::class, 'destroyDrill'])->name('security.drills.destroy');
+        Route::post('/security/backups', [App\Http\Controllers\Im\SecurityController::class, 'storeBackup'])->name('security.backups.store');
+        Route::delete('/security/backups/{backup}', [App\Http\Controllers\Im\SecurityController::class, 'destroyBackup'])->name('security.backups.destroy');
+
+        // หมวด 4: Service Desk & Incident
+        Route::get('/service-desk', [App\Http\Controllers\Im\ServiceDeskController::class, 'index'])->name('service-desk');
+        Route::post('/service-desk/tickets', [App\Http\Controllers\Im\ServiceDeskController::class, 'storeTicket'])->name('service-desk.tickets.store');
+        Route::put('/service-desk/tickets/{ticket}', [App\Http\Controllers\Im\ServiceDeskController::class, 'updateTicket'])->name('service-desk.tickets.update');
+        Route::delete('/service-desk/tickets/{ticket}', [App\Http\Controllers\Im\ServiceDeskController::class, 'destroyTicket'])->name('service-desk.tickets.destroy');
+        Route::post('/service-desk/incidents', [App\Http\Controllers\Im\ServiceDeskController::class, 'storeIncident'])->name('service-desk.incidents.store');
+        Route::put('/service-desk/incidents/{incident}', [App\Http\Controllers\Im\ServiceDeskController::class, 'updateIncident'])->name('service-desk.incidents.update');
+        Route::delete('/service-desk/incidents/{incident}', [App\Http\Controllers\Im\ServiceDeskController::class, 'destroyIncident'])->name('service-desk.incidents.destroy');
+        Route::post('/service-desk/timesheets', [App\Http\Controllers\Im\ServiceDeskController::class, 'storeTimesheet'])->name('service-desk.timesheets.store');
+        Route::delete('/service-desk/timesheets/{timesheet}', [App\Http\Controllers\Im\ServiceDeskController::class, 'destroyTimesheet'])->name('service-desk.timesheets.destroy');
+
+        // หมวด 5: Medical Record Quality Control
+        Route::get('/medical-record', [App\Http\Controllers\Im\MedicalRecordController::class, 'index'])->name('medical-record');
+        Route::post('/medical-record', [App\Http\Controllers\Im\MedicalRecordController::class, 'store'])->name('medical-record.store');
+        Route::put('/medical-record/{audit}', [App\Http\Controllers\Im\MedicalRecordController::class, 'update'])->name('medical-record.update');
+        Route::delete('/medical-record/{audit}', [App\Http\Controllers\Im\MedicalRecordController::class, 'destroy'])->name('medical-record.destroy');
+
+        // หมวด 6: Software Development QA
+        Route::get('/software-qa', [App\Http\Controllers\Im\SoftwareQaController::class, 'index'])->name('software-qa');
+        Route::post('/software-qa/documents', [App\Http\Controllers\Im\SoftwareQaController::class, 'storeDocument'])->name('software-qa.documents.store');
+        Route::delete('/software-qa/documents/{document}', [App\Http\Controllers\Im\SoftwareQaController::class, 'destroyDocument'])->name('software-qa.documents.destroy');
+        Route::post('/software-qa/reviews', [App\Http\Controllers\Im\SoftwareQaController::class, 'storeReview'])->name('software-qa.reviews.store');
+        Route::delete('/software-qa/reviews/{review}', [App\Http\Controllers\Im\SoftwareQaController::class, 'destroyReview'])->name('software-qa.reviews.destroy');
+
+        // หมวด 7: IT Resource, Competency & Change
+        Route::get('/resource', [App\Http\Controllers\Im\ResourceController::class, 'index'])->name('resource');
+        Route::post('/resource/assets', [App\Http\Controllers\Im\ResourceController::class, 'storeAsset'])->name('resource.assets.store');
+        Route::put('/resource/assets/{asset}', [App\Http\Controllers\Im\ResourceController::class, 'updateAsset'])->name('resource.assets.update');
+        Route::delete('/resource/assets/{asset}', [App\Http\Controllers\Im\ResourceController::class, 'destroyAsset'])->name('resource.assets.destroy');
+        Route::post('/resource/competencies', [App\Http\Controllers\Im\ResourceController::class, 'storeCompetency'])->name('resource.competencies.store');
+        Route::put('/resource/competencies/{competency}', [App\Http\Controllers\Im\ResourceController::class, 'updateCompetency'])->name('resource.competencies.update');
+        Route::delete('/resource/competencies/{competency}', [App\Http\Controllers\Im\ResourceController::class, 'destroyCompetency'])->name('resource.competencies.destroy');
+        Route::post('/resource/changes', [App\Http\Controllers\Im\ResourceController::class, 'storeChange'])->name('resource.changes.store');
+        Route::put('/resource/changes/{change}/status', [App\Http\Controllers\Im\ResourceController::class, 'updateChangeStatus'])->name('resource.changes.status');
+        Route::delete('/resource/changes/{change}', [App\Http\Controllers\Im\ResourceController::class, 'destroyChange'])->name('resource.changes.destroy');
+    });
 
     // Quality Assurance System (ระบบติดตามการทบทวน)
     Route::prefix('quality-assurance')->name('quality-assurance.')->group(function () {
@@ -390,7 +531,20 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
 
     // HOSxP Reports
     Route::get('/hosxp-reports', [App\Http\Controllers\HosxpReportController::class, 'index'])->name('hosxp-reports.index');
+    Route::get('/hosxp-reports/preview', [App\Http\Controllers\HosxpReportController::class, 'preview'])->name('hosxp-reports.preview');
     Route::get('/hosxp-reports/generate', [App\Http\Controllers\HosxpReportController::class, 'generate'])->name('hosxp-reports.generate');
+    Route::get('/hosxp-reports/generate-pdf', [App\Http\Controllers\HosxpReportController::class, 'generatePdf'])->name('hosxp-reports.generate-pdf');
+    Route::get('/hosxp-reports/check-connection', [App\Http\Controllers\HosxpReportController::class, 'checkConnection'])->name('hosxp-reports.check-connection');
+    Route::post('/hosxp-reports/presets', [App\Http\Controllers\HosxpReportController::class, 'storePreset'])->name('hosxp-reports.presets.store');
+    Route::delete('/hosxp-reports/presets/{preset}', [App\Http\Controllers\HosxpReportController::class, 'destroyPreset'])->name('hosxp-reports.presets.destroy');
+    Route::post('/hosxp-reports/scheduled', [App\Http\Controllers\HosxpReportController::class, 'storeScheduled'])->name('hosxp-reports.scheduled.store');
+    Route::delete('/hosxp-reports/scheduled/{scheduled}', [App\Http\Controllers\HosxpReportController::class, 'destroyScheduled'])->name('hosxp-reports.scheduled.destroy');
+    Route::get('/hosxp-reports/scheduled/{scheduled}/download', [App\Http\Controllers\HosxpReportController::class, 'downloadScheduled'])->name('hosxp-reports.download-scheduled');
+
+    // Server Monitor (HOSxP / 192.168.1.191)
+    Route::get('/server-monitor', [App\Http\Controllers\ServerMonitorController::class, 'index'])->name('server-monitor.index');
+    Route::get('/server-monitor/metrics', [App\Http\Controllers\ServerMonitorController::class, 'metrics'])->name('server-monitor.metrics');
+    Route::post('/server-monitor/check-now', [App\Http\Controllers\ServerMonitorController::class, 'checkNow'])->name('server-monitor.check-now');
 });
 
 // Locale switcher (outside auth)

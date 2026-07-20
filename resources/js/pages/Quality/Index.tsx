@@ -13,7 +13,9 @@ import {
   Leaf,
   Users,
   ChevronRight,
-  Sparkles
+  Sparkles,
+  Pill,
+  MonitorCog
 } from 'lucide-react';
 import { useTranslation } from '@/hooks/use-translation';
 import { cn } from '@/lib/utils';
@@ -89,6 +91,50 @@ export default function QualityHub() {
         { label: 'Dashboard', href: '/ic' },
         { label: t('Surveillance'), href: '/ic/surveillance' },
         { label: t('Incident Report'), href: '/ic/incidents' },
+      ]
+    },
+    {
+      title: 'รายงาน RDU',
+      description: 'ติดตาม Rational Drug Use, case audit, drug utilization และ antibiotic report',
+      icon: Pill,
+      color: 'text-emerald-600',
+      bg: 'bg-emerald-100',
+      gradient: 'from-emerald-500 to-teal-500',
+      href: '/rdu',
+      links: [
+        { label: 'RDU Dashboard', href: '/rdu' },
+        { label: 'Case Audit', href: '/rdu/cases' },
+        { label: 'Drug Utilization', href: '/rdu/drugs' },
+        { label: 'Antibiotic Report', href: '/rdu/drugs/antibiotics' },
+      ]
+    },
+    {
+      title: 'รายงานยาและการใช้ยา',
+      description: 'Dashboard และรายงานสรุปข้อมูลยา จำนวนและมูลค่าการจ่ายจาก HOSxP',
+      icon: Pill,
+      color: 'text-cyan-600',
+      bg: 'bg-cyan-100',
+      gradient: 'from-cyan-500 to-sky-500',
+      href: '/drug-usage',
+      links: [
+        { label: 'ภาพรวมการใช้ยา', href: '/drug-usage' },
+        { label: 'รายงานรายการยา', href: '/drug-usage/report' },
+      ]
+    },
+    {
+      title: 'งานสารสนเทศ (IM)',
+      description: 'บริหารงานเทคโนโลยีสารสนเทศตามมาตรฐาน HAIT ครบ 7 หมวด แผนแม่บท ความเสี่ยง ความปลอดภัย และคุณภาพ',
+      icon: MonitorCog,
+      color: 'text-sky-600',
+      bg: 'bg-sky-100',
+      gradient: 'from-sky-500 to-blue-600',
+      href: '/im',
+      links: [
+        { label: 'ภาพรวม IM', href: '/im' },
+        { label: 'แผนแม่บท IT & กลยุทธ์', href: '/im/master-plan' },
+        { label: 'บริหารความเสี่ยง IT', href: '/im/risk' },
+        { label: 'Service Desk & Incident', href: '/im/service-desk' },
+        { label: 'คู่มือการใช้งาน', href: '/im/manual' },
       ]
     },
     {
