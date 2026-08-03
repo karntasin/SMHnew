@@ -34,6 +34,14 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
     Route::get('dashboard/pdf', [DashboardController::class, 'exportPdf'])->name('dashboard.pdf');
     Route::get('dashboard/cv-risk-report', [CvRiskReportController::class, 'export'])->name('dashboard.cv-risk-report');
 
+    // Department data dashboards (ข้อมูลรายแผนก)
+    Route::prefix('department-data')->name('department-data.')->group(function () {
+        Route::get('/', [App\Http\Controllers\DepartmentDataController::class, 'index'])->name('index');
+        Route::get('/{code}/export-pdf', [App\Http\Controllers\DepartmentDataController::class, 'exportPdf'])->name('export-pdf');
+        Route::get('/{code}/export-pdf/{section}', [App\Http\Controllers\DepartmentDataController::class, 'exportSectionPdf'])->name('export-section-pdf');
+        Route::get('/{code}', [App\Http\Controllers\DepartmentDataController::class, 'show'])->name('show');
+    });
+
     // Notifications
     Route::get('/notifications', [App\Http\Controllers\NotificationController::class, 'page'])->name('notifications.index');
     Route::get('/notifications/api', [App\Http\Controllers\NotificationController::class, 'index'])->name('notifications.api');
@@ -65,6 +73,8 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         ->names('settings.positions');
     
     // TeamHA Settings (CRUD)
+    Route::get('settings/teamha/export-pdf', [App\Http\Controllers\TeamhaController::class, 'exportPdf'])
+        ->name('settings.teamha.export-pdf');
     Route::resource('settings/teamha', App\Http\Controllers\TeamhaController::class)
         ->names('settings.teamha');
     
@@ -113,10 +123,27 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::get('/', [App\Http\Controllers\QualityIndicatorController::class, 'index'])->name('index');
         Route::post('/', [App\Http\Controllers\QualityIndicatorController::class, 'store'])->name('store');
         Route::get('/dashboard', [App\Http\Controllers\QualityIndicatorController::class, 'dashboard'])->name('dashboard');
+        Route::get('/export-pdf', [App\Http\Controllers\QualityIndicatorController::class, 'exportGroupPdf'])->name('export-pdf');
+
+        Route::get('/import', [App\Http\Controllers\QualityIndicatorImportController::class, 'index'])->name('import.index');
+        Route::get('/import/template', [App\Http\Controllers\QualityIndicatorImportController::class, 'template'])->name('import.template');
+        Route::post('/import/preview', [App\Http\Controllers\QualityIndicatorImportController::class, 'preview'])->name('import.preview');
+        Route::post('/import/{log}/confirm', [App\Http\Controllers\QualityIndicatorImportController::class, 'confirm'])->name('import.confirm');
+        Route::post('/import/{log}/cancel', [App\Http\Controllers\QualityIndicatorImportController::class, 'cancel'])->name('import.cancel');
+        Route::get('/import/{log}', [App\Http\Controllers\QualityIndicatorImportController::class, 'show'])->name('import.show');
+
+        Route::get('/guide', [App\Http\Controllers\QualityIndicatorGuideController::class, 'show'])->name('guide');
+        Route::get('/guide/edit', [App\Http\Controllers\QualityIndicatorGuideController::class, 'edit'])->name('guide.edit');
+        Route::put('/guide', [App\Http\Controllers\QualityIndicatorGuideController::class, 'update'])->name('guide.update');
+        Route::post('/guide/reset', [App\Http\Controllers\QualityIndicatorGuideController::class, 'reset'])->name('guide.reset');
+
+        Route::get('/{indicator}/export-pdf', [App\Http\Controllers\QualityIndicatorController::class, 'exportIndicatorPdf'])->name('export-indicator-pdf');
         Route::get('/{indicator}', [App\Http\Controllers\QualityIndicatorController::class, 'show'])->name('show');
         Route::put('/{indicator}', [App\Http\Controllers\QualityIndicatorController::class, 'update'])->name('update');
         Route::delete('/{indicator}', [App\Http\Controllers\QualityIndicatorController::class, 'destroy'])->name('destroy');
         Route::post('/{indicator}/entries', [App\Http\Controllers\QualityIndicatorController::class, 'storeEntry'])->name('entries.store');
+        Route::put('/{indicator}/entries/{entry}', [App\Http\Controllers\QualityIndicatorController::class, 'updateEntry'])->name('entries.update');
+        Route::delete('/{indicator}/entries/{entry}', [App\Http\Controllers\QualityIndicatorController::class, 'destroyEntry'])->name('entries.destroy');
     });
 
     // Administration -> Meeting rooms / bookings (งานธุรการ -> จองห้องประชุม)
@@ -187,6 +214,9 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         
         Route::post('/signatures', [App\Http\Controllers\Document\DocumentController::class, 'uploadSignatures'])->name('signatures.upload');
 
+        Route::get('/inbox', [App\Http\Controllers\Document\DocumentController::class, 'inbox'])->name('inbox');
+        Route::get('/outbox', [App\Http\Controllers\Document\DocumentController::class, 'outbox'])->name('outbox');
+
         Route::get('/pending-review', [App\Http\Controllers\Document\DocumentController::class, 'pendingReview'])->name('pendingReview');
         Route::prefix('director')->name('director.')->group(function () {
             Route::get('/', [App\Http\Controllers\Document\DocumentController::class, 'directorInbox'])->name('index');
@@ -202,6 +232,7 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::post('/{document}/forward', [App\Http\Controllers\Document\DocumentController::class, 'forward'])->name('forward');
         Route::post('/{document}/submit-boss', [App\Http\Controllers\Document\DocumentController::class, 'submitBoss'])->name('submitBoss');
         Route::post('/{document}/approve/{action}', [App\Http\Controllers\Document\DocumentController::class, 'approve'])->name('approve');
+        Route::post('/{document}/archive', [App\Http\Controllers\Document\DocumentController::class, 'archive'])->name('archive');
         Route::post('/{document}/distribute-circular', [App\Http\Controllers\Document\DocumentController::class, 'distributeCircular'])->name('distributeCircular');
         Route::post('/{document}/acknowledge', [App\Http\Controllers\Document\DocumentController::class, 'acknowledge'])->name('acknowledge');
         
@@ -273,11 +304,45 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::post('/work-orders/{workOrder}/update-status', [App\Http\Controllers\TechnicianWorkOrderController::class, 'updateStatus'])->name('work-orders.update-status');
     });
 
-    // Finance Dashboard
+    // Finance Dashboard (BMS / Revenue — อยู่ภายใต้ Finance Reports)
     Route::get('/finance-dashboard', [App\Http\Controllers\FinanceDashboardController::class, 'index'])->name('finance.dashboard');
     Route::get('/finance/revenue', [App\Http\Controllers\FinanceRevenueController::class, 'index'])->name('finance.revenue');
     Route::get('/finance/revenue/export', [App\Http\Controllers\FinanceRevenueController::class, 'exportExcel'])->name('finance.revenue.export');
     Route::get('/finance/revenue/export-pdf', [App\Http\Controllers\FinanceRevenueController::class, 'exportPdf'])->name('finance.revenue.export-pdf');
+
+    // Financial Data Hub — ศูนย์ข้อมูลการเงิน
+    Route::get('/finance/data-hub', [App\Http\Controllers\FinanceDataHubController::class, 'index'])->name('finance.data-hub');
+
+    // จ่ายตรง กรมบัญชีกลาง (พร้อมใช้งาน)
+    Route::prefix('finance/data-hub/cgd-claim')->name('finance.cgd.')->group(function () {
+        Route::get('/', [App\Http\Controllers\FinanceCgdClaimController::class, 'index'])->name('dashboard');
+        Route::get('/import', [App\Http\Controllers\FinanceCgdClaimController::class, 'importForm'])->name('import');
+        Route::post('/import', [App\Http\Controllers\FinanceCgdClaimController::class, 'import'])->name('import.store');
+        Route::get('/{batch}', [App\Http\Controllers\FinanceCgdClaimController::class, 'show'])->name('show');
+        Route::post('/{batch}/reconcile', [App\Http\Controllers\FinanceCgdClaimController::class, 'reconcile'])->name('reconcile');
+        Route::delete('/{batch}', [App\Http\Controllers\FinanceCgdClaimController::class, 'destroy'])->name('destroy');
+        Route::get('/{batch}/export', [App\Http\Controllers\FinanceCgdClaimController::class, 'exportExcel'])->name('export');
+        Route::get('/{batch}/export-pdf', [App\Http\Controllers\FinanceCgdClaimController::class, 'exportPdf'])->name('export-pdf');
+    });
+
+    // โมดูลย่อยเตรียมรองรับ — อปท. / ประกันสังคม / บัตรทอง (นำเข้าแยกหน้า)
+    foreach (['lgo', 'sso', 'uc'] as $scheme) {
+        Route::prefix("finance/data-hub/{$scheme}")->name("finance.{$scheme}.")->group(function () use ($scheme) {
+            Route::get('/', [App\Http\Controllers\FinanceDataHubSchemeController::class, 'dashboard'])
+                ->defaults('scheme', $scheme)
+                ->name('dashboard');
+            Route::get('/import', [App\Http\Controllers\FinanceDataHubSchemeController::class, 'import'])
+                ->defaults('scheme', $scheme)
+                ->name('import');
+        });
+    }
+
+    // redirect เส้นทางเดิม → Data Hub
+    Route::redirect('/finance/cgd-claim', '/finance/data-hub/cgd-claim', 301);
+    Route::redirect('/finance/cgd-claim/import', '/finance/data-hub/cgd-claim/import', 301);
+    Route::get('/finance/cgd-claim/{any}', function (string $any) {
+        return redirect('/finance/data-hub/cgd-claim/'.$any, 301);
+    })->where('any', '.*');
 
     // RDU Reports (Rational Drug Use)
     Route::get('/rdu', [App\Http\Controllers\RduReportController::class, 'index'])->name('rdu.index');
@@ -340,6 +405,14 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::delete('/service-desk/incidents/{incident}', [App\Http\Controllers\Im\ServiceDeskController::class, 'destroyIncident'])->name('service-desk.incidents.destroy');
         Route::post('/service-desk/timesheets', [App\Http\Controllers\Im\ServiceDeskController::class, 'storeTimesheet'])->name('service-desk.timesheets.store');
         Route::delete('/service-desk/timesheets/{timesheet}', [App\Http\Controllers\Im\ServiceDeskController::class, 'destroyTimesheet'])->name('service-desk.timesheets.destroy');
+
+        // หมวด 4: ประเมินเจ้าหน้าที่ IT (ภายใต้ Service Desk)
+        Route::get('/service-desk/evaluation', [App\Http\Controllers\Im\StaffEvaluationController::class, 'index'])->name('service-desk.evaluation');
+        Route::post('/service-desk/evaluation/topics', [App\Http\Controllers\Im\StaffEvaluationController::class, 'storeTopic'])->name('service-desk.evaluation.topics.store');
+        Route::put('/service-desk/evaluation/topics/{topic}', [App\Http\Controllers\Im\StaffEvaluationController::class, 'updateTopic'])->name('service-desk.evaluation.topics.update');
+        Route::delete('/service-desk/evaluation/topics/{topic}', [App\Http\Controllers\Im\StaffEvaluationController::class, 'destroyTopic'])->name('service-desk.evaluation.topics.destroy');
+        Route::post('/service-desk/evaluation', [App\Http\Controllers\Im\StaffEvaluationController::class, 'storeEvaluation'])->name('service-desk.evaluation.store');
+        Route::delete('/service-desk/evaluation/{evaluation}', [App\Http\Controllers\Im\StaffEvaluationController::class, 'destroyEvaluation'])->name('service-desk.evaluation.destroy');
 
         // หมวด 5: Medical Record Quality Control
         Route::get('/medical-record', [App\Http\Controllers\Im\MedicalRecordController::class, 'index'])->name('medical-record');
@@ -463,6 +536,7 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::get('/dashboard', [App\Http\Controllers\Mra\MraController::class, 'dashboard'])->name('dashboard');
         Route::get('/reports', [App\Http\Controllers\Mra\MraController::class, 'reports'])->name('reports');
         Route::get('/settings', [App\Http\Controllers\Mra\MraController::class, 'settings'])->name('settings');
+        Route::get('/guide', [App\Http\Controllers\Mra\MraController::class, 'guide'])->name('guide');
         Route::get('/create', [App\Http\Controllers\Mra\MraController::class, 'create'])->name('create');
         Route::post('/', [App\Http\Controllers\Mra\MraController::class, 'store'])->name('store');
         Route::get('/{audit}', [App\Http\Controllers\Mra\MraController::class, 'show'])->name('show');
