@@ -4,6 +4,8 @@ import { FormEventHandler, useState } from 'react';
 
 import InputError from '@/components/input-error';
 import TextLink from '@/components/text-link';
+import LineLoginButton from '@/components/line-login-button';
+import LineQrLogin from '@/components/line-qr-login';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -19,9 +21,11 @@ interface LoginForm {
 interface LoginProps {
     status?: string;
     canResetPassword: boolean;
+    lineLoginEnabled?: boolean;
+    lineQr?: { ticket: string; scanUrl: string } | null;
 }
 
-export default function Login({ status, canResetPassword }: LoginProps) {
+export default function Login({ status, canResetPassword, lineLoginEnabled, lineQr }: LoginProps) {
     const { data, setData, post, processing, errors, reset } = useForm<LoginForm>({
         email: '',
         password: '',
@@ -49,6 +53,17 @@ export default function Login({ status, canResetPassword }: LoginProps) {
             )}
 
             <form className="flex flex-col gap-5" onSubmit={submit}>
+                {lineLoginEnabled && (
+                    <>
+                        {lineQr?.scanUrl && <LineQrLogin scanUrl={lineQr.scanUrl} />}
+                        <LineLoginButton intent="login" label="หรือเข้าด้วยอีเมล/บัญชี LINE บนเครื่องนี้" />
+                        <div className="flex items-center gap-3 text-xs text-gray-400">
+                            <span className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+                            หรือเข้าด้วยอีเมล
+                            <span className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+                        </div>
+                    </>
+                )}
                 <div className="grid gap-5">
                     {/* Email Field */}
                     <div className="grid gap-2">
@@ -140,7 +155,7 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                     {/* Login Button */}
                     <Button 
                         type="submit" 
-                        className="mt-2 w-full h-12 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98]" 
+                        className="mt-2 w-full h-12 rounded-xl bg-gradient-to-r from-violet-700 to-purple-700 hover:from-violet-800 hover:to-purple-800 text-white font-semibold shadow-lg shadow-purple-700/30 hover:shadow-purple-700/50 transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98]" 
                         tabIndex={4} 
                         disabled={processing}
                     >
@@ -152,31 +167,6 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                                 เข้าสู่ระบบ
                             </>
                         )}
-                    </Button>
-
-                    {/* Divider */}
-                    <div className="relative my-2">
-                        <div className="absolute inset-0 flex items-center">
-                            <span className="w-full border-t border-gray-200 dark:border-gray-700" />
-                        </div>
-                        <div className="relative flex justify-center text-xs uppercase">
-                            <span className="bg-white dark:bg-gray-800 px-4 text-gray-400 dark:text-gray-500 font-medium">
-                                หรือเข้าสู่ระบบด้วย
-                            </span>
-                        </div>
-                    </div>
-
-                    {/* LINE Login Button */}
-                    <Button
-                        variant="outline"
-                        type="button"
-                        className="w-full h-12 rounded-xl bg-[#06C755] text-white hover:bg-[#05B34C] hover:text-white border-none font-semibold shadow-lg shadow-green-500/30 hover:shadow-green-500/50 transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98]"
-                        onClick={() => (window.location.href = route('auth.line'))}
-                    >
-                        <svg className="mr-2 h-6 w-6" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M20.5 10.5c0-4.8-4.6-8.7-10.3-8.7S0 5.7 0 10.5c0 4.3 3.8 7.9 8.6 8.6.3 0 .7.1.8.3.1.2.1.5 0 .8-.1.3-.2.8-.2 1.2 0 .4.2 1.5 1.3.8 5.5-3.2 10-6.8 10-11.7z" />
-                        </svg>
-                        เข้าสู่ระบบด้วย LINE
                     </Button>
                 </div>
 

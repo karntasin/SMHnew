@@ -1,0 +1,12 @@
+# ตัวอย่าง Named Tunnel — คัดลอกเป็น config.yml แล้วแก้ค่า
+# สร้าง tunnel:  cloudflared tunnel create smh-hospital
+# ใส่ credentials ตาม path ที่ cloudflared แจ้ง
+
+tunnel: REPLACE-TUNNEL-UUID
+credentials-file: C:\Users\YOUR_USER\.cloudflared\REPLACE-TUNNEL-UUID.json
+
+ingress:
+  # subdomain ที่ตั้งใน Zero Trust → Public Hostname
+  - hostname: smh.yourdomain.com
+    service: http://127.0.0.1:8081
+  - service: http_status:404

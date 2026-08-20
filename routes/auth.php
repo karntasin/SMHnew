@@ -10,11 +10,16 @@ use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Auth\VerifyEmailController;
 use App\Http\Controllers\LineAuthController;
 use App\Http\Controllers\CompleteProfileController;
+use App\Http\Controllers\LineWebhookController;
 use Illuminate\Support\Facades\Route;
 
 // LINE Authentication Routes (Accessible by both guests and authenticated users)
 Route::get('auth/line', [LineAuthController::class, 'redirectToProvider'])->name('auth.line');
 Route::get('auth/line/callback', [LineAuthController::class, 'handleProviderCallback'])->name('auth.line.callback');
+Route::get('auth/line/qr/status', [LineAuthController::class, 'qrStatus'])->name('auth.line.qr.status');
+Route::get('auth/line/qr/claim', [LineAuthController::class, 'qrClaim'])->name('auth.line.qr.claim');
+Route::get('auth/line/transfer', [LineAuthController::class, 'transfer'])->name('auth.line.transfer');
+Route::post('line/webhook', LineWebhookController::class)->name('line.webhook');
 
 Route::middleware('guest')->group(function () {
     Route::get('register', [RegisteredUserController::class, 'create'])

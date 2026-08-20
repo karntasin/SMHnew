@@ -18,6 +18,8 @@
 /storage/*.key
 /storage/pail
 /vendor
+/cloudflared.exe
+/cloudflared.exe.download
 auth.json
 Homestead.json
 Homestead.yaml

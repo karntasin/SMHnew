@@ -35,8 +35,13 @@ return [
     ],
 
     'line' => [
+        'enabled' => env('LINE_INTEGRATION_ENABLED', false),
         'client_id' => env('LINE_LOGIN_CHANNEL_ID'),
         'client_secret' => env('LINE_LOGIN_CHANNEL_SECRET'),
         'redirect' => env('LINE_OAUTH_REDIRECT'),
+        'messaging_token' => env('LINE_MESSAGING_CHANNEL_ACCESS_TOKEN'),
+        'messaging_secret' => env('LINE_MESSAGING_CHANNEL_SECRET'),
+        'welcome_message' => env('LINE_WELCOME_MESSAGE'),
+        'add_friend_url' => env('LINE_OA_ADD_FRIEND_URL'),
     ],
 ];

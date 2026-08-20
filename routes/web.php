@@ -86,6 +86,9 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
     Route::get('/settingsapp/database', [App\Http\Controllers\DBSettingsController::class, 'edit'])->name('setting.database');
     Route::post('/settingsapp/database', [App\Http\Controllers\DBSettingsController::class, 'update'])->name('setting.database.update');
     Route::post('/settingsapp/database/test', [App\Http\Controllers\DBSettingsController::class, 'testConnection'])->name('setting.database.test');
+    Route::get('/settingsapp/ngrok/status', [App\Http\Controllers\DBSettingsController::class, 'ngrokStatus'])->name('setting.ngrok.status');
+    Route::post('/settingsapp/ngrok/start', [App\Http\Controllers\DBSettingsController::class, 'ngrokStart'])->name('setting.ngrok.start');
+    Route::post('/settingsapp/ngrok/stop', [App\Http\Controllers\DBSettingsController::class, 'ngrokStop'])->name('setting.ngrok.stop');
 
     Route::get('/audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');
     Route::get('/backup', [BackupController::class, 'index'])->name('backup.index');

@@ -19,6 +19,10 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->trustProxies(at: '*');
+        $middleware->redirectGuestsTo(fn () => route('login'));
+        $middleware->validateCsrfTokens(except: [
+            'line/webhook',
+        ]);
         
         $middleware->web(append: [
             SetLocale::class,
