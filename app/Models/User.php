@@ -74,6 +74,11 @@ class User extends Authenticatable implements HasMedia
     protected $hidden = [
         'password',
         'remember_token',
+        'cid',
+    ];
+
+    protected $appends = [
+        'cid_masked',
     ];
 
     /**
@@ -88,6 +93,11 @@ class User extends Authenticatable implements HasMedia
             'password' => 'hashed',
             'profile_completed' => 'boolean',
         ];
+    }
+
+    public function getCidMaskedAttribute(): ?string
+    {
+        return \App\Support\PiiMask::cid($this->attributes['cid'] ?? null);
     }
 
     /**

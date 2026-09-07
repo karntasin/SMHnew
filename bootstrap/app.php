@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\MaskPiiResponse;
+use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\ShareMenus;
 use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\CheckMenuPermission;
@@ -23,12 +25,15 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->validateCsrfTokens(except: [
             'line/webhook',
         ]);
-        
+
+        $middleware->append(SecurityHeaders::class);
+
         $middleware->web(append: [
             SetLocale::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
             ShareMenus::class,
+            MaskPiiResponse::class,
         ]);
 
         // Append EnsureProfileIsCompleted after auth middleware

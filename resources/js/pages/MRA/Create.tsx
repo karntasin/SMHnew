@@ -17,6 +17,7 @@ import {
 import axios from 'axios';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { maskCid, maskPatientName } from '@/lib/pii';
 
 // Helper function แปลงวันที่เป็นภาษาไทย
 const formatThaiDate = (dateStr: string | null | undefined): string => {
@@ -315,7 +316,7 @@ export default function MraCreate() {
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-3">
-                        <h4 className="text-lg font-semibold text-gray-900 dark:text-white">{patient.patient_name}</h4>
+                        <h4 className="text-lg font-semibold text-gray-900 dark:text-white">{maskPatientName(patient.patient_name)}</h4>
                         <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
                           <CheckCircle2 className="h-3 w-3 mr-1" />
                           พบข้อมูล
@@ -328,7 +329,7 @@ export default function MraCreate() {
                         </div>
                         <div className="bg-white/60 dark:bg-gray-800/60 p-3 rounded-lg">
                           <span className="text-xs text-muted-foreground block mb-1">เลขบัตรประชาชน</span>
-                          <p className="font-mono text-sm">{patient.cid || '-'}</p>
+                          <p className="font-mono text-sm">{maskCid(patient.cid)}</p>
                         </div>
                         <div className="bg-white/60 dark:bg-gray-800/60 p-3 rounded-lg">
                           <span className="text-xs text-muted-foreground block mb-1">วันเกิด</span>
@@ -660,9 +661,9 @@ export default function MraCreate() {
                   <Label htmlFor="patient_name">ชื่อ-นามสกุล ผู้ป่วย</Label>
                   <Input
                     id="patient_name"
-                    value={data.patient_name}
-                    onChange={(e) => setData('patient_name', e.target.value)}
-                    className={errors.patient_name ? 'border-red-500' : ''}
+                    value={maskPatientName(data.patient_name)}
+                    readOnly
+                    className={errors.patient_name ? 'border-red-500' : 'bg-muted/40'}
                   />
                   {errors.patient_name && <p className="text-sm text-red-500">{errors.patient_name}</p>}
                 </div>

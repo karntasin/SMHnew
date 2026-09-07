@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
+import { maskPatientName } from '@/lib/pii';
 import { QualityPage, StatCard, Panel, StatusPill, EmptyState, qualityInput } from '@/components/quality/quality-ui';
 import MraSubNav, { mraBreadcrumbs } from './MraSubNav';
 
@@ -290,7 +291,7 @@ export default function MraIndex({ audits, filters, stats }: Props) {
                           {audit.an && <div className="text-xs text-violet-600">AN: {audit.an}</div>}
                         </td>
                         <td className="py-2.5 pr-3">
-                          <div className="font-medium text-slate-800">{audit.patient_name}</div>
+                          <div className="font-medium text-slate-800">{maskPatientName(audit.patient_name)}</div>
                           {audit.doctor_name && <div className="text-xs text-slate-400">แพทย์: {audit.doctor_name}</div>}
                         </td>
                         <td className="py-2.5 pr-3">

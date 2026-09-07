@@ -41,6 +41,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { maskPatientName } from '@/lib/pii';
 
 interface Criteria {
   id: number;
@@ -220,7 +221,7 @@ export default function MraShow({ audit, categories }: Props) {
                   <Sparkles className="h-6 w-6 text-yellow-300" />
                 </h1>
                 <div className="flex items-center gap-3 mt-2 text-cyan-100">
-                  <span className="font-semibold">{audit.patient_name}</span>
+                  <span className="font-semibold">{maskPatientName(audit.patient_name)}</span>
                   <span className="opacity-50">•</span>
                   <span className="font-mono bg-white/20 px-2 py-0.5 rounded">HN: {audit.hn}</span>
                   <span className="opacity-50">•</span>
@@ -280,7 +281,7 @@ export default function MraShow({ audit, categories }: Props) {
               )}
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">ชื่อ:</span>
-                <span className="font-medium">{audit.patient_name}</span>
+                <span className="font-medium">{maskPatientName(audit.patient_name)}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">วันที่:</span>

@@ -29,6 +29,7 @@ import {
 import axios from 'axios';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { maskPatientName } from '@/lib/pii';
 
 interface Criteria {
   id: number;
@@ -311,7 +312,7 @@ export default function MraAuditForm({ audit, categories, existingResults }: Pro
             <div>
               <h1 className="text-2xl font-bold tracking-tight">ตรวจสอบคุณภาพเวชระเบียน</h1>
               <p className="text-muted-foreground">
-                {audit.patient_name} | HN: {audit.hn} | VN: {audit.vn}
+                {maskPatientName(audit.patient_name)} | HN: {audit.hn} | VN: {audit.vn}
               </p>
             </div>
           </div>

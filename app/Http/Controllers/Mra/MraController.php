@@ -361,7 +361,7 @@ class MraController extends Controller
             'vn' => 'nullable|string',
             'an' => 'nullable|string',
             'hn' => 'required|string',
-            'cid' => 'nullable|string|size:13',
+            'cid' => 'nullable|string|max:32',
             'patient_name' => 'required|string',
             'birthdate' => 'nullable|date',
             'pttype' => 'nullable|string',
@@ -382,6 +382,23 @@ class MraController extends Controller
             'respiratory_rate' => 'nullable|integer',
             'audit_type' => 'required|in:opd,ipd',
         ]);
+
+        // ใช้ HN จาก HOSxP เป็นหลัก และดึงชื่อ/CID เต็มฝั่งเซิร์ฟเวอร์ (ไม่เชื่อค่าจากเบราว์เซอร์ที่ถูก mask)
+        $hosxpPatient = $this->hosxpService->findPatient($validated['hn']);
+        if ($hosxpPatient) {
+            if (! empty($hosxpPatient['hn'])) {
+                $validated['hn'] = $hosxpPatient['hn'];
+            }
+            if (! empty($hosxpPatient['patient_name'])) {
+                $validated['patient_name'] = $hosxpPatient['patient_name'];
+            }
+            if (! empty($hosxpPatient['cid'])) {
+                $validated['cid'] = preg_replace('/\D+/', '', (string) $hosxpPatient['cid']);
+            }
+        }
+        if (! empty($validated['cid']) && (strlen((string) $validated['cid']) !== 13 || str_contains((string) $validated['cid'], '*'))) {
+            $validated['cid'] = null;
+        }
 
         $audit = MraAudit::create([
             ...$validated,
