@@ -129,6 +129,20 @@ return [
             'strict' => false,
             'engine' => null,
         ],
+
+        'hosxp_backup' => [
+            'driver' => 'mysql',
+            'host' => env('HOSXP_BACKUP_DB_HOST', '127.0.0.1'),
+            'port' => env('HOSXP_BACKUP_DB_PORT', '3306'),
+            'database' => env('HOSXP_BACKUP_DB_DATABASE', 'hos'),
+            'username' => env('HOSXP_BACKUP_DB_USERNAME', ''),
+            'password' => env('HOSXP_BACKUP_DB_PASSWORD', ''),
+            'charset' => env('HOSXP_BACKUP_DB_CHARSET', 'tis620'),
+            'collation' => env('HOSXP_BACKUP_DB_COLLATION', 'tis620_thai_ci'),
+            'prefix' => '',
+            'strict' => false,
+            'engine' => null,
+        ],
     ],
 
     /*

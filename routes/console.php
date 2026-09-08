@@ -10,3 +10,6 @@ Artisan::command('inspire', function () {
 
 // Schedule document reminders every 15 minutes
 Schedule::command('documents:send-reminders')->everyFifteenMinutes();
+Schedule::command('hosxp:backup')->dailyAt('00:10')->timezone('Asia/Bangkok');
+Schedule::command('appdb:backup')->dailyAt('05:00')->timezone('Asia/Bangkok');
+
