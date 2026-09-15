@@ -2,10 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use Inertia\Inertia;
+use App\Models\MaintenanceCategory;
 use App\Models\MaintenanceRequest;
-use Illuminate\Support\Facades\DB;
+use Inertia\Inertia;
 
 class MaintenanceDashboardController extends Controller
 {
@@ -18,49 +17,26 @@ class MaintenanceDashboardController extends Controller
             'completed' => MaintenanceRequest::where('status', 'completed')->count(),
         ];
 
-        // Monthly Stats (Last 12 months)
-        $monthlyStats = MaintenanceRequest::select(
-            DB::raw('DATE_FORMAT(created_at, "%Y-%m") as month'),
-            DB::raw('count(*) as count')
-        )
-            ->where('created_at', '>=', now()->subMonths(12))
-            ->groupBy('month')
-            ->orderBy('month')
-            ->get()
-            ->map(function ($item) {
-                // Convert YYYY-MM to Thai Month Name if needed, or just keep it simple for now
-                // Let's return the raw data and format in frontend or here.
-                // Let's format here for simplicity in frontend
-                $date = \Carbon\Carbon::createFromFormat('Y-m', $item->month);
-                return [
-                    'name' => $date->locale('th')->isoFormat('MMM YY'), // e.g., ม.ค. 68
-                    'count' => $item->count,
-                    'full_date' => $item->month
-                ];
-            });
+        $categories = MaintenanceCategory::where('is_active', true)
+            ->orderBy('order')
+            ->get();
 
-        // Category Stats
-        $categoryStats = MaintenanceRequest::select('category_id', DB::raw('count(*) as count'))
-            ->with('category')
-            ->groupBy('category_id')
-            ->get()
-            ->map(function ($item) {
-                return [
-                    'name' => $item->category ? $item->category->name : 'ไม่ระบุ',
-                    'count' => $item->count
-                ];
-            });
-
-        $recentRequests = MaintenanceRequest::with(['category', 'priority', 'requester'])
+        $recentRequests = MaintenanceRequest::with(['category', 'priority', 'requester', 'images'])
             ->latest()
-            ->take(5)
+            ->take(8)
+            ->get();
+
+        $pendingRequests = MaintenanceRequest::with(['category', 'priority', 'requester', 'images'])
+            ->where('status', 'pending')
+            ->latest()
+            ->take(8)
             ->get();
 
         return Inertia::render('maintenance/Dashboard', [
             'stats' => $stats,
+            'categories' => $categories,
             'recentRequests' => $recentRequests,
-            'monthlyStats' => $monthlyStats,
-            'categoryStats' => $categoryStats,
+            'pendingRequests' => $pendingRequests,
         ]);
     }
 }

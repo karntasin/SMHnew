@@ -94,31 +94,18 @@ export default function QualityHub() {
       ]
     },
     {
-      title: 'รายงาน RDU',
-      description: 'ติดตาม Rational Drug Use, case audit, drug utilization และ antibiotic report',
+      title: 'เภสัชกรรม',
+      description: 'แจ้งเตือนการใช้ยาตาม eGFR, รายงาน RDU และรายงานยาและการใช้ยา',
       icon: Pill,
-      color: 'text-emerald-600',
-      bg: 'bg-emerald-100',
-      gradient: 'from-emerald-500 to-teal-500',
-      href: '/rdu',
+      color: 'text-teal-600',
+      bg: 'bg-teal-100',
+      gradient: 'from-teal-500 to-cyan-500',
+      href: '/pharmacy',
       links: [
-        { label: 'RDU Dashboard', href: '/rdu' },
-        { label: 'Case Audit', href: '/rdu/cases' },
-        { label: 'Drug Utilization', href: '/rdu/drugs' },
-        { label: 'Antibiotic Report', href: '/rdu/drugs/antibiotics' },
-      ]
-    },
-    {
-      title: 'รายงานยาและการใช้ยา',
-      description: 'Dashboard และรายงานสรุปข้อมูลยา จำนวนและมูลค่าการจ่ายจาก HOSxP',
-      icon: Pill,
-      color: 'text-cyan-600',
-      bg: 'bg-cyan-100',
-      gradient: 'from-cyan-500 to-sky-500',
-      href: '/drug-usage',
-      links: [
-        { label: 'ภาพรวมการใช้ยา', href: '/drug-usage' },
-        { label: 'รายงานรายการยา', href: '/drug-usage/report' },
+        { label: 'ภาพรวมเภสัชกรรม', href: '/pharmacy' },
+        { label: 'แจ้งเตือนการใช้ยา', href: '/pharmacy/drug-alerts' },
+        { label: 'รายงาน RDU', href: '/rdu' },
+        { label: 'รายงานยาและการใช้ยา', href: '/drug-usage' },
       ]
     },
     {

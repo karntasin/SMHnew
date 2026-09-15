@@ -14,10 +14,10 @@ class DataHubSchemes
                 'key' => 'cgd',
                 'title' => 'ตรวจเบิกจ่ายตรง กรมบัญชีกลาง',
                 'short' => 'จ่ายตรง',
-                'subtitle' => 'CGD · STM',
-                'description' => 'เปรียบเทียบ Visit HOSxP กับไฟล์ Statement จ่ายตรงกรมบัญชีกลาง (STM) และรายงานยอดขาด',
-                'import_label' => 'นำเข้า STM',
-                'import_hint' => 'อัปโหลดไฟล์ STM จาก e-Claim / สปสช.',
+                'subtitle' => 'CGD · REP',
+                'description' => 'เปรียบเทียบ Visit HOSxP กับไฟล์ Statement จ่ายตรงกรมบัญชีกลาง (REP) และรายงานยอดขาด',
+                'import_label' => 'นำเข้า REP',
+                'import_hint' => 'อัปโหลดไฟล์ REP จาก e-Claim / สปสช.',
                 'icon' => 'ClipboardList',
                 'tone' => 'emerald',
                 'status' => 'ready',
@@ -28,13 +28,13 @@ class DataHubSchemes
                 'key' => 'lgo',
                 'title' => 'ตรวจข้อมูล อปท.',
                 'short' => 'อปท.',
-                'subtitle' => 'Local Government',
-                'description' => 'ตรวจและเปรียบเทียบข้อมูลสิทธิ์องค์กรปกครองส่วนท้องถิ่น (อปท.) กับ Visit HOSxP — เตรียมรองรับ',
-                'import_label' => 'นำเข้า อปท.',
-                'import_hint' => 'อัปโหลดไฟล์ Statement / รายงานสิทธิ์ อปท. (แยกจากสิทธิ์อื่น)',
+                'subtitle' => 'LGO · REP',
+                'description' => 'เปรียบเทียบ Visit HOSxP (pttype 41) กับไฟล์ REP อปท. (OPLGO) จาก e-Claim — ไม่ใช้ STM',
+                'import_label' => 'นำเข้า REP อปท.',
+                'import_hint' => 'อัปโหลดไฟล์ REP ขึ้นต้น OPLGO จาก e-Claim / สปสช.',
                 'icon' => 'Building2',
                 'tone' => 'sky',
-                'status' => 'planned',
+                'status' => 'ready',
                 'dashboard_route' => 'finance.lgo.dashboard',
                 'import_route' => 'finance.lgo.import',
             ],
@@ -87,6 +87,6 @@ class DataHubSchemes
      */
     public static function plannedKeys(): array
     {
-        return ['lgo', 'sso', 'uc'];
+        return ['sso', 'uc'];
     }
 }

@@ -1,0 +1,165 @@
+<?php
+
+namespace Database\Seeders;
+
+use App\Models\LeaveType;
+use Illuminate\Database\Seeder;
+
+class LeaveTypeSeeder extends Seeder
+{
+    public function run(): void
+    {
+        $types = [
+            [
+                'code' => 'SICK',
+                'form_code' => 'ทบ.๑๐๐-๐๐๗',
+                'form_number' => 'แบบ ๓',
+                'name' => 'ลาป่วย',
+                'subject' => 'ขอลาป่วย',
+                'description' => 'ลาป่วยได้ไม่เกิน ๙๐ วันต่อปี (ระเบียบ ทบ. พ.ศ. ๒๕๕๖ ข้อ ๑๒–๒๑) ใบลาใช้แบบ ๓',
+                'max_days_per_year' => 90,
+                'requires_document' => false,
+                'counts_working_days' => false,
+                'is_active' => true,
+                'sort_order' => 1,
+            ],
+            [
+                'code' => 'PERSONAL',
+                'form_code' => 'ทบ.๑๐๐-๐๐๖',
+                'form_number' => 'แบบ ๕',
+                'name' => 'ลากิจ',
+                'subject' => 'ขอลากิจ',
+                'description' => 'ลากิจได้รับเงินเดือน ปีละไม่เกิน ๔๕ วันทำการ (ข้อ ๒๗–๓๘) ใบลาใช้แบบ ๕ ต้องระบุความประสงค์และสถานที่ติดต่อได้',
+                'max_days_per_year' => 45,
+                'requires_document' => false,
+                'counts_working_days' => true,
+                'is_active' => true,
+                'sort_order' => 2,
+            ],
+            [
+                'code' => 'VACATION',
+                'form_code' => 'ทบ.๑๐๐-๑๐๖',
+                'form_number' => 'แบบ ๖',
+                'name' => 'ลาพักผ่อนประจำปี',
+                'subject' => 'ขอลาพักผ่อนประจำปี',
+                'description' => 'ลาพักผ่อนปีละ ๑๐ วันทำการ สะสมรวมไม่เกิน ๒๐ วันทำการ หรือ ๓๐ วันทำการหากรับราชการไม่น้อยกว่า ๑๐ ปี (ข้อ ๓๙–๔๒) ใบลาใช้แบบ ๖',
+                'max_days_per_year' => 10,
+                'requires_document' => false,
+                'counts_working_days' => true,
+                'is_active' => true,
+                'sort_order' => 3,
+            ],
+            [
+                'code' => 'MATERNITY',
+                'form_code' => 'ทบ.๑๐๐-๑๐๕',
+                'form_number' => 'แบบ ๔',
+                'name' => 'ลาคลอดบุตร',
+                'subject' => 'ขอลาคลอดบุตร',
+                'description' => 'ลาคลอดบุตรได้ ๙๐ วัน ไม่ต้องมีใบรับรองแพทย์ (ข้อ ๒๒–๒๕) ใบลาใช้แบบ ๔',
+                'max_days_per_year' => 90,
+                'requires_document' => false,
+                'counts_working_days' => false,
+                'is_active' => true,
+                'sort_order' => 4,
+            ],
+            [
+                'code' => 'PATERNITY',
+                'form_code' => 'ทบ.๑๐๐-๑๑๔',
+                'form_number' => 'แบบ ๑๖',
+                'name' => 'ลาไปช่วยเหลือภริยาที่คลอดบุตร',
+                'subject' => 'ขอลาไปช่วยเหลือภริยาที่คลอดบุตร',
+                'description' => 'ลาไปช่วยเหลือภริยาโดยชอบด้วยกฎหมายที่คลอดบุตร ได้ไม่เกิน ๑๕ วันทำการ ภายใน ๙๐ วันนับแต่วันคลอด (ข้อ ๒๖) ใบลาใช้แบบ ๑๖',
+                'max_days_per_year' => 15,
+                'requires_document' => true,
+                'counts_working_days' => true,
+                'is_active' => true,
+                'sort_order' => 5,
+            ],
+            [
+                'code' => 'ORDINATION',
+                'form_code' => 'ทบ.๑๐๐-๐๐๓',
+                'form_number' => 'แบบ ๗',
+                'name' => 'ลาอุปสมบท',
+                'subject' => 'ขออนุญาตลาอุปสมบท',
+                'description' => 'ลาอุปสมบทได้ไม่เกิน ๑๒๐ วัน ต้องรับราชการติดต่อกันไม่น้อยกว่า ๓ ปี และไม่เคยอุปสมบทมาก่อน (ข้อ ๔๓–๕๘) ใบลาใช้แบบ ๗',
+                'max_days_per_year' => 120,
+                'requires_document' => true,
+                'counts_working_days' => false,
+                'is_active' => true,
+                'sort_order' => 6,
+            ],
+            [
+                'code' => 'HAJJ',
+                'form_code' => 'ทบ.๑๐๐-๑๐๗',
+                'form_number' => 'แบบ ๑๐',
+                'name' => 'ลาไปประกอบพิธีฮัจย์',
+                'subject' => 'ขออนุญาตลาไปประกอบพิธีฮัจย์',
+                'description' => 'ลาไปประกอบพิธีฮัจย์ ณ เมืองเมกกะ ได้ไม่เกิน ๑๒๐ วัน และลาได้เพียงครั้งเดียว (ข้อ ๕๙–๖๓) ใบลาใช้แบบ ๑๐',
+                'max_days_per_year' => 120,
+                'requires_document' => true,
+                'counts_working_days' => false,
+                'is_active' => true,
+                'sort_order' => 7,
+            ],
+            [
+                'code' => 'ABROAD',
+                'form_code' => 'ทบ.๑๐๐-๐๑๑',
+                'form_number' => 'แบบ ๑๑',
+                'name' => 'ลาติดตามคู่สมรส',
+                'subject' => 'ขอลาติดตามคู่สมรส',
+                'description' => 'ลาติดตามคู่สมรสไปปฏิบัติราชการต่างประเทศ ไม่รับเงินเดือน ไม่เกิน ๒ ปี และรวมแล้วไม่เกิน ๔ ปี (ข้อ ๖๔–๖๗) ใบลาใช้แบบ ๑๑',
+                'max_days_per_year' => null,
+                'requires_document' => true,
+                'counts_working_days' => false,
+                'is_active' => true,
+                'sort_order' => 8,
+            ],
+            [
+                'code' => 'REHAB',
+                'form_code' => 'ทบ.๑๐๐-๑๑๕',
+                'form_number' => 'แบบ ๑๗',
+                'name' => 'ลาไปฟื้นฟูสมรรถภาพด้านอาชีพ',
+                'subject' => 'ขอลาไปฟื้นฟูสมรรถภาพด้านอาชีพ',
+                'description' => 'ลาเข้ารับการฝึกอบรมหลักสูตรฟื้นฟูสมรรถภาพด้านอาชีพ ได้ครั้งหนึ่งไม่เกิน ๑๒ เดือน (ข้อ ๗๐–๗๑) ใบลาใช้แบบ ๑๗',
+                'max_days_per_year' => 365,
+                'requires_document' => true,
+                'counts_working_days' => false,
+                'is_active' => true,
+                'sort_order' => 9,
+            ],
+            [
+                'code' => 'MILITARY',
+                'form_code' => null,
+                'form_number' => null,
+                'name' => 'ลารับราชการทหาร',
+                'subject' => 'ขอลารับราชการทหาร',
+                'description' => 'ไม่ใช่ประเภทการลาตามระเบียบ ทบ. พ.ศ. ๒๕๕๖ จึงปิดใช้งาน',
+                'max_days_per_year' => null,
+                'requires_document' => true,
+                'counts_working_days' => false,
+                'is_active' => false,
+                'sort_order' => 90,
+            ],
+            [
+                'code' => 'TRAINING',
+                'form_code' => null,
+                'form_number' => null,
+                'name' => 'ลาศึกษา ฝึกอบรม',
+                'subject' => 'ขอลาศึกษา ฝึกอบรม',
+                'description' => 'ไม่ใช่ประเภทการลาตามระเบียบ ทบ. พ.ศ. ๒๕๕๖ จึงปิดใช้งาน',
+                'max_days_per_year' => null,
+                'requires_document' => true,
+                'counts_working_days' => false,
+                'is_active' => false,
+                'sort_order' => 91,
+            ],
+        ];
+
+        foreach ($types as $type) {
+            LeaveType::query()->updateOrCreate(
+                ['code' => $type['code']],
+                $type
+            );
+        }
+    }
+}

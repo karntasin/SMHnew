@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Middleware\ClearEnvSp3UnlockOutside;
+use App\Http\Middleware\DetectSuspiciousRequests;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\MaskPiiResponse;
 use App\Http\Middleware\SecurityHeaders;
@@ -21,11 +23,14 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->trustProxies(at: '*');
-        $middleware->redirectGuestsTo(fn () => route('login'));
+        $middleware->redirectGuestsTo(fn () => url('/login'));
+        $middleware->redirectUsersTo(fn () => url('/dashboard'));
         $middleware->validateCsrfTokens(except: [
             'line/webhook',
+            'organization-chat/api',
         ]);
-
+        
+        $middleware->prepend(\App\Http\Middleware\RedirectSubdirectoryOnDocumentRoot::class);
         $middleware->append(SecurityHeaders::class);
 
         $middleware->web(append: [
@@ -33,6 +38,8 @@ return Application::configure(basePath: dirname(__DIR__))
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
             ShareMenus::class,
+            ClearEnvSp3UnlockOutside::class,
+            DetectSuspiciousRequests::class,
             MaskPiiResponse::class,
         ]);
 

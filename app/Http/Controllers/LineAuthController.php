@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Services\Auth\UserLineAccountMergeService;
+use App\Services\FshhChat\FshhChatSyncService;
 use App\Services\Line\LineMessagingService;
 use App\Support\LineUrls;
 use App\Support\PostLoginRedirect;
@@ -37,7 +39,7 @@ class LineAuthController extends Controller
         Cache::put('line_oauth:'.$state, [
             'intent' => $intent,
             'ticket' => $ticket,
-            'return_base' => PostLoginRedirect::preferredBase($request),
+            'return_base' => PostLoginRedirect::normalizeBase(PostLoginRedirect::currentBase($request), $request),
             'nonce' => $nonce,
         ], now()->addMinutes(15));
 
@@ -49,8 +51,15 @@ class LineAuthController extends Controller
         $incomingState = (string) $request->input('state', '');
         $existingQr = $incomingState !== '' ? Cache::get('line_qr:'.$incomingState) : null;
         if (is_array($existingQr) && ($existingQr['status'] ?? '') === 'ready') {
-            return $this->renderQrScanDonePage(
-                User::query()->find($existingQr['user_id'] ?? 0)?->display_name
+            $readyUser = User::query()->find($existingQr['user_id'] ?? 0);
+
+            return $this->finishQrTicket(
+                $request,
+                $readyUser,
+                $incomingState,
+                (string) ($existingQr['intent'] ?? 'login'),
+                $messaging,
+                (string) ($readyUser?->line_id ?? ''),
             );
         }
 
@@ -66,19 +75,22 @@ class LineAuthController extends Controller
         } else {
             $intent = (string) session()->pull('line_auth_intent', 'login');
         }
-        $returnBase = is_array($qrPayload) && ! empty($qrPayload['return_base'])
-            ? (string) $qrPayload['return_base']
-            : (is_array($oauthMeta) && ! empty($oauthMeta['return_base'])
-                ? (string) $oauthMeta['return_base']
-                : PostLoginRedirect::preferredBase($request));
+        $returnBase = PostLoginRedirect::normalizeBase(
+            is_array($qrPayload) && ! empty($qrPayload['return_base'])
+                ? (string) $qrPayload['return_base']
+                : (is_array($oauthMeta) && ! empty($oauthMeta['return_base'])
+                    ? (string) $oauthMeta['return_base']
+                    : PostLoginRedirect::preferredBase($request)),
+            $request
+        );
 
         if (! $qrTicket && ! is_array($oauthMeta) && strlen((string) $sessionState) > 0 && $sessionState !== $incomingState) {
-            return redirect()->away(PostLoginRedirect::to('login'))->withErrors(['email' => 'การยืนยัน LINE ไม่ถูกต้อง กรุณาลองใหม่']);
+            return redirect()->away(PostLoginRedirect::toCurrent('login', $request))->withErrors(['email' => 'การยืนยัน LINE ไม่ถูกต้อง กรุณาลองใหม่']);
         }
 
         $code = $request->input('code');
         if (! $code) {
-            return redirect()->away($returnBase.'/login')->withErrors(['email' => 'ยกเลิกหรือเข้าสู่ระบบ LINE ไม่สำเร็จ']);
+            return redirect()->away(PostLoginRedirect::toCurrent('login', $request))->withErrors(['email' => 'ยกเลิกหรือเข้าสู่ระบบ LINE ไม่สำเร็จ']);
         }
 
         $redirectUri = LineUrls::callback();
@@ -96,7 +108,7 @@ class LineAuthController extends Controller
         if ($response->failed()) {
             Log::error('LINE Login Token Error: '.$response->body());
 
-            return redirect()->away($returnBase.'/login')->withErrors(['email' => 'แลก token จาก LINE ไม่สำเร็จ ตรวจ Callback URL ให้ตรงกับ LINE Developers']);
+            return redirect()->away(PostLoginRedirect::toCurrent('login', $request))->withErrors(['email' => 'แลก token จาก LINE ไม่สำเร็จ ตรวจ Callback URL ให้ตรงกับ LINE Developers']);
         }
 
         $tokens = $response->json();
@@ -110,7 +122,7 @@ class LineAuthController extends Controller
         if ($profileResponse->failed()) {
             Log::error('LINE Login Profile Error: '.$profileResponse->body());
 
-            return redirect()->away($returnBase.'/login')->withErrors(['email' => 'ดึงโปรไฟล์จาก LINE ไม่สำเร็จ']);
+            return redirect()->away(PostLoginRedirect::toCurrent('login', $request))->withErrors(['email' => 'ดึงโปรไฟล์จาก LINE ไม่สำเร็จ']);
         }
 
         $profile = $profileResponse->json();
@@ -119,10 +131,11 @@ class LineAuthController extends Controller
         $pictureUrl = $profile['pictureUrl'] ?? null;
 
         if ($lineUserId === '') {
-            return redirect()->away($returnBase.'/login')->withErrors(['email' => 'LINE ไม่ส่งรหัสผู้ใช้มา']);
+            return redirect()->away(PostLoginRedirect::toCurrent('login', $request))->withErrors(['email' => 'LINE ไม่ส่งรหัสผู้ใช้มา']);
         }
 
-        if (Auth::check()) {
+        // QR จากเครื่องเดสก์ท็อป — อย่าใช้เซสชันบนโดเมนอุโมงค์ แล้วเด้งไป /settings/profile ที่ LAN
+        if (Auth::check() && ! $qrTicket) {
             return $this->linkCurrentUser($lineUserId, $displayName, $pictureUrl, $returnBase);
         }
 
@@ -143,9 +156,15 @@ class LineAuthController extends Controller
         }
 
         if (! $user) {
+            if ($intent !== 'register') {
+                return redirect()->away(PostLoginRedirect::toCurrent('login', $request))->withErrors([
+                    'email' => 'ยังไม่มีบัญชีที่ผูก LINE นี้ กรุณาเข้าสู่ระบบด้วยอีเมลแล้วกดเชื่อมต่อ LINE ที่โปรไฟล์ หรือสมัครสมาชิกใหม่ด้วย LINE',
+                ]);
+            }
+
             $email = $email ?: $lineUserId.'@line.login';
             if (User::query()->where('email', $email)->exists()) {
-                return redirect()->away($returnBase.'/login')->withErrors(['email' => 'พบบัญชีอีเมลนี้อยู่แล้ว กรุณาเข้าสู่ระบบแล้วผูก LINE ที่โปรไฟล์']);
+                return redirect()->away(PostLoginRedirect::toCurrent('login', $request))->withErrors(['email' => 'พบบัญชีอีเมลนี้อยู่แล้ว กรุณาเข้าสู่ระบบแล้วผูก LINE ที่โปรไฟล์']);
             }
 
             $user = User::create([
@@ -179,46 +198,10 @@ class LineAuthController extends Controller
                 'return_base' => $returnBase,
             ], now()->addMinutes(8));
 
-            return $this->renderQrScanDonePage($user->display_name);
+            return $this->finishQrTicket($request, $user, (string) $ticket, $intent, $messaging, $lineUserId);
         }
 
-        // Callback มาที่โดเมนอุโมงค์ — ส่งกลับไปโฮสต์เดิม (เช่น 192.168.1.214) ด้วย one-time token
-        if (PostLoginRedirect::isTunnelHost($request->getHost())) {
-            if ($intent === 'register') {
-                $messaging->pushText(
-                    $lineUserId,
-                    'ยืนยันตัวตนด้วย LINE สำเร็จแล้ว กรุณากลับไปกรอกข้อมูลเพิ่มเติมบนเว็บเพื่อสมัครสมาชิกให้ครบ'
-                );
-            }
-
-            $transferUrl = $this->makeLocalTransferUrl($user->id, $returnBase, $intent);
-
-            return response()->view('auth.line-transfer', [
-                'transferUrl' => $transferUrl,
-                'displayName' => $user->display_name,
-            ]);
-        }
-
-        Auth::login($user);
-        $request->session()->regenerate();
-        session()->forget('url.intended');
-
-        if (! $user->profile_completed) {
-            if ($intent === 'register') {
-                $messaging->pushText(
-                    $lineUserId,
-                    'ยืนยันตัวตนด้วย LINE สำเร็จแล้ว กรุณากลับไปกรอกข้อมูลเพิ่มเติมบนเว็บเพื่อสมัครสมาชิกให้ครบ'
-                );
-            }
-
-            return redirect()->away(PostLoginRedirect::to('profile/complete', $request));
-        }
-
-        return redirect()->away(PostLoginRedirect::sanitizeIntended(
-            session()->pull('url.intended'),
-            'dashboard',
-            $request
-        ));
+        return $this->loginOnCurrentHost($request, $user, $intent, $messaging, $lineUserId);
     }
 
     private function linkCurrentUser(string $lineUserId, string $displayName, ?string $pictureUrl, ?string $returnBase = null)
@@ -228,7 +211,12 @@ class LineAuthController extends Controller
         $base = $returnBase ?: PostLoginRedirect::preferredBase();
 
         if ($existingUser) {
-            return redirect()->away($base.'/settings/profile')->withErrors(['email' => 'บัญชี LINE นี้ถูกผูกกับผู้ใช้อื่นแล้ว']);
+            $merge = app(UserLineAccountMergeService::class);
+            if ($merge->isIncompleteLineStub($existingUser)) {
+                $currentUser = $merge->absorbStub($existingUser, $currentUser);
+            } else {
+                    return redirect()->away(PostLoginRedirect::join($base, 'settings/profile'))->withErrors(['line' => 'บัญชี LINE นี้ถูกผูกกับผู้ใช้อื่นแล้ว']);
+            }
         }
 
         $currentUser->update([
@@ -238,7 +226,33 @@ class LineAuthController extends Controller
             'avatar' => $currentUser->avatar ?: $pictureUrl,
         ]);
 
-        return redirect()->away($base.'/settings/profile')->with('status', 'line-linked');
+        if ($currentUser->profile_completed) {
+            $this->syncFshhChat($currentUser);
+        }
+
+        return redirect()->away(PostLoginRedirect::join($base, 'settings/profile'))->with('status', 'line-linked');
+    }
+
+    private function syncFshhChat(User $user): void
+    {
+        try {
+            app(FshhChatSyncService::class)->syncUser($user->fresh(['departments']) ?? $user);
+        } catch (\Throwable $e) {
+            Log::warning('FSHH Chat sync after LINE login failed: '.$e->getMessage());
+        }
+    }
+
+    /**
+     * Only new/incomplete LINE stub accounts must finish the welcome form.
+     * Existing email users who linked LINE keep using the app normally.
+     */
+    private function needsProfileCompletion(User $user): bool
+    {
+        if ($user->profile_completed) {
+            return false;
+        }
+
+        return app(UserLineAccountMergeService::class)->isIncompleteLineStub($user);
     }
 
     private function emailFromIdToken(?string $idToken): ?string
@@ -260,7 +274,10 @@ class LineAuthController extends Controller
     /**
      * QR ชี้ไปที่ LINE Authorize โดยตรง ไม่ผ่านหน้าเว็บ/ngrok ก่อน
      *
-     * @return array{ticket: string, scanUrl: string}
+     * scanUrl = ให้มือถือสแกนแล้วล็อกอินใน LINE
+     * popupUrl = เปิดหน้าต่าง LINE QR บนเดสก์ท็อป
+     *
+     * @return array{ticket: string, scanUrl: string, popupUrl: string}
      */
     public static function createDesktopTicket(string $intent = 'login'): array
     {
@@ -271,14 +288,15 @@ class LineAuthController extends Controller
             'user_id' => null,
             'intent' => $intent,
             'nonce' => $nonce,
-            'return_base' => PostLoginRedirect::preferredBase(request()),
+            'return_base' => PostLoginRedirect::normalizeBase(PostLoginRedirect::currentBase(request())),
         ], now()->addMinutes(8));
         session(['line_qr_ticket' => $ticket]);
         session()->forget('url.intended');
 
         return [
             'ticket' => $ticket,
-            'scanUrl' => self::authorizeUrl($ticket, $nonce, preferLineQr: true),
+            'scanUrl' => self::authorizeUrl($ticket, $nonce, preferLineQr: false),
+            'popupUrl' => self::authorizeUrl($ticket, $nonce, preferLineQr: true),
         ];
     }
 
@@ -348,21 +366,59 @@ class LineAuthController extends Controller
     public function transfer(Request $request)
     {
         $token = (string) $request->query('token', '');
-        $data = $token !== '' ? Cache::pull('line_transfer:'.$token) : null;
+        $cacheKey = $token !== '' ? 'line_transfer:'.$token : '';
+        $data = $cacheKey !== '' ? Cache::get($cacheKey) : null;
 
         if (! is_array($data) || empty($data['user_id'])) {
-            return redirect()->away(PostLoginRedirect::to('login'))
+            if (Auth::check()) {
+                $authed = Auth::user();
+                if ($authed && $this->needsProfileCompletion($authed)) {
+                    return redirect()->away(PostLoginRedirect::toCurrent('profile/complete', $request));
+                }
+
+                return redirect()->away(PostLoginRedirect::toCurrent('dashboard', $request));
+            }
+
+            return redirect()->away(PostLoginRedirect::toCurrent('login', $request))
                 ->withErrors(['email' => 'ลิงก์เข้าสู่ระบบหมดอายุ กรุณาลองใหม่']);
         }
 
+        Cache::forget($cacheKey);
+
         return $this->loginAndRedirectHome($request, (int) $data['user_id'], $data['return_base'] ?? null);
+    }
+
+    private function loginOnCurrentHost(Request $request, User $user, string $intent, LineMessagingService $messaging, string $lineUserId)
+    {
+        Auth::login($user);
+        $request->session()->regenerate();
+        session()->forget('url.intended');
+
+        if ($this->needsProfileCompletion($user)) {
+            if ($intent === 'register') {
+                $messaging->pushText(
+                    $lineUserId,
+                    'ยืนยันตัวตนด้วย LINE สำเร็จแล้ว กรุณากลับไปกรอกข้อมูลเพิ่มเติมบนเว็บเพื่อสมัครสมาชิกให้ครบ'
+                );
+            }
+
+            return redirect()->away(PostLoginRedirect::toCurrent('profile/complete', $request));
+        }
+
+        $this->syncFshhChat($user);
+
+        return redirect()->away(PostLoginRedirect::sanitizeIntendedOnCurrentHost(
+            null,
+            'dashboard',
+            $request
+        ));
     }
 
     private function loginAndRedirectHome(Request $request, int $userId, ?string $returnBase = null)
     {
         $user = User::query()->find($userId);
         if (! $user) {
-            return redirect()->away(PostLoginRedirect::to('login', $request))
+            return redirect()->away(PostLoginRedirect::toCurrent('login', $request))
                 ->withErrors(['email' => 'ไม่พบบัญชีผู้ใช้']);
         }
 
@@ -370,29 +426,94 @@ class LineAuthController extends Controller
         $request->session()->regenerate();
         session()->forget('url.intended');
 
-        $base = $returnBase && ! PostLoginRedirect::isTunnelHost(parse_url($returnBase, PHP_URL_HOST))
-            ? rtrim($returnBase, '/')
-            : PostLoginRedirect::preferredBase($request);
+        $onPublicHost = PostLoginRedirect::isPublicTunnelHost($request->getHost());
+        $base = $onPublicHost
+            ? PostLoginRedirect::currentBase($request)
+            : PostLoginRedirect::normalizeBase(
+                $returnBase ?: PostLoginRedirect::preferredBase($request),
+                $request
+            );
 
-        if (! $user->profile_completed) {
-            return redirect()->away($base.'/profile/complete');
+        if ($this->needsProfileCompletion($user)) {
+            return redirect()->away(PostLoginRedirect::join($base, 'profile/complete', $request));
         }
 
-        return redirect()->away($base.'/dashboard');
+        $this->syncFshhChat($user);
+
+        return redirect()->away(PostLoginRedirect::join($base, 'dashboard', $request));
     }
 
-    private function renderQrScanDonePage(?string $displayName)
+    /**
+     * QR จากเดสก์ท็อป: ถ้าเป็น popup ให้ปิดแล้วให้แท็บเดิม claim
+     * ถ้าเป็นมือถือ/แท็บเดียวกัน (ไม่มี opener) ให้ล็อกอินบนเครื่องนี้แล้วไปกรอกข้อมูลต่อ
+     */
+    private function finishQrTicket(
+        Request $request,
+        ?User $user,
+        string $ticket,
+        string $intent,
+        LineMessagingService $messaging,
+        string $lineUserId,
+    ) {
+        if (! $user) {
+            return redirect()->away(PostLoginRedirect::toCurrent('login', $request))
+                ->withErrors(['email' => 'ไม่พบบัญชีผู้ใช้']);
+        }
+
+        $sameSession = (string) session('line_qr_ticket') === $ticket;
+        if ($sameSession) {
+            session()->forget('line_qr_ticket');
+
+            return $this->loginOnCurrentHost($request, $user, $intent, $messaging, $lineUserId);
+        }
+
+        return $this->renderQrScanDonePage(
+            $user->display_name,
+            $this->makeCurrentHostContinueUrl($user->id, $intent, $request),
+            $intent,
+        );
+    }
+
+    private function renderQrScanDonePage(?string $displayName, string $continueUrl = '', string $intent = 'login')
     {
         return response()->view('auth.line-scan-done', [
             'displayName' => $displayName,
+            'continueUrl' => $continueUrl,
+            'intent' => $intent,
         ]);
+    }
+
+    private function makeCurrentHostContinueUrl(int $userId, string $intent, Request $request): string
+    {
+        $token = Str::random(48);
+        $base = PostLoginRedirect::currentBase($request);
+
+        Cache::put('line_transfer:'.$token, [
+            'user_id' => $userId,
+            'intent' => $intent,
+            'return_base' => $base,
+        ], now()->addMinutes(5));
+
+        return PostLoginRedirect::toCurrent('auth/line/transfer?token='.$token, $request);
+    }
+
+    private function shouldHandoffToReturnBase(Request $request, string $returnBase): bool
+    {
+        $here = strtolower($request->getHost());
+        $returnHost = strtolower((string) (parse_url($returnBase, PHP_URL_HOST) ?: ''));
+
+        if ($returnHost === '' || $returnHost === $here) {
+            return false;
+        }
+
+        return PostLoginRedirect::isPublicTunnelHost($here);
     }
 
     private function makeLocalTransferUrl(int $userId, string $returnBase, string $intent): string
     {
         $token = Str::random(48);
-        $base = rtrim($returnBase, '/');
-        if ($base === '' || PostLoginRedirect::isTunnelHost(parse_url($base, PHP_URL_HOST))) {
+        $base = PostLoginRedirect::normalizeBase($returnBase);
+        if ($base === '' || PostLoginRedirect::isPublicTunnelHost(parse_url($base, PHP_URL_HOST))) {
             $base = PostLoginRedirect::preferredBase();
         }
 
@@ -402,6 +523,6 @@ class LineAuthController extends Controller
             'return_base' => $base,
         ], now()->addMinutes(5));
 
-        return $base.'/auth/line/transfer?token='.$token;
+        return PostLoginRedirect::join($base, 'auth/line/transfer?token='.$token);
     }
 }

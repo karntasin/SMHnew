@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Head, useForm, router } from '@inertiajs/react';
-import AppLayout from '@/layouts/app-layout';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { useForm, router } from '@inertiajs/react';
+import { QualityPage, Panel, EmptyState } from '@/components/quality/quality-ui';
+import IcSubNav from '@/pages/IC/IcSubNav';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,14 +21,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
 import {
     Calendar,
     Plus,
@@ -103,42 +95,13 @@ export default function DeviceDays({ records, monthlySummary, filters }: Props) 
         return ((deviceDays / patientDays) * 100).toFixed(1);
     };
 
-    const breadcrumbs = [
-        { title: 'IC', href: '/ic' },
-        { title: 'Device Days', href: '#' },
-    ];
-
-    return (
-        <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Device Days - IC" />
-
-            <div className="flex flex-col min-h-screen">
-                {/* Hero Header */}
-                <div className="relative overflow-hidden bg-gradient-to-br from-indigo-600 via-blue-600 to-cyan-600 text-white">
-                    <div className="absolute inset-0 bg-grid-white/10"></div>
-                    <div className="absolute -top-24 -right-24 w-96 h-96 bg-white/10 rounded-full blur-3xl"></div>
-
-                    <div className="relative px-6 py-8">
-                        <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-4">
-                                <div className="p-3 bg-white/20 backdrop-blur-sm rounded-2xl">
-                                    <Calendar className="h-10 w-10" />
-                                </div>
-                                <div>
-                                    <h1 className="text-3xl font-bold tracking-tight">
-                                        Device Days Tracking
-                                    </h1>
-                                    <p className="text-white/80 text-lg">
-                                        บันทึก Patient Days และ Device Days สำหรับคำนวณ HAI Rate
-                                    </p>
-                                </div>
-                            </div>
-                            <Dialog open={isOpen} onOpenChange={setIsOpen}>
-                                <DialogTrigger asChild>
-                                    <Button className="gap-2 bg-white text-indigo-600 hover:bg-white/90">
-                                        <Plus className="h-4 w-4" /> บันทึกข้อมูล
-                                    </Button>
-                                </DialogTrigger>
+    const recordDialog = (
+        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+            <DialogTrigger asChild>
+                <Button className="gap-2 rounded-xl bg-rose-600 hover:bg-rose-700">
+                    <Plus className="h-4 w-4" /> บันทึกข้อมูล
+                </Button>
+            </DialogTrigger>
                                 <DialogContent className="max-w-2xl">
                                     <DialogHeader>
                                         <DialogTitle>บันทึก Device Days</DialogTitle>
@@ -242,149 +205,126 @@ export default function DeviceDays({ records, monthlySummary, filters }: Props) 
                                             />
                                         </div>
 
-                                        <Button type="submit" className="w-full" disabled={processing}>
+                                        <Button type="submit" className="w-full rounded-xl bg-rose-600 hover:bg-rose-700" disabled={processing}>
                                             บันทึกข้อมูล
                                         </Button>
                                     </form>
                                 </DialogContent>
-                            </Dialog>
-                        </div>
-                    </div>
-                </div>
+        </Dialog>
+    );
 
-                {/* Main Content */}
-                <div className="flex-1 p-6 space-y-6 bg-gray-50 dark:bg-gray-900">
-                    {/* Monthly Summary */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <TrendingUp className="h-5 w-5 text-blue-500" />
-                                สรุปรายเดือน
-                            </CardTitle>
-                            <CardDescription>
-                                ข้อมูลรวมสำหรับคำนวณ HAI Rate
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="rounded-md border">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>เดือน</TableHead>
-                                            <TableHead className="text-right">Patient Days</TableHead>
-                                            <TableHead className="text-right">Catheter Days</TableHead>
-                                            <TableHead className="text-right">Catheter UR%</TableHead>
-                                            <TableHead className="text-right">Central Line Days</TableHead>
-                                            <TableHead className="text-right">CL UR%</TableHead>
-                                            <TableHead className="text-right">Ventilator Days</TableHead>
-                                            <TableHead className="text-right">Vent UR%</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
+    return (
+        <QualityPage
+            tone="rose"
+            icon={Calendar}
+            badge="ศูนย์พัฒนาคุณภาพ · IC"
+            title="Device Days Tracking"
+            subtitle="บันทึก Patient Days และ Device Days สำหรับคำนวณ HAI Rate"
+            headTitle="Device Days - IC"
+            breadcrumbs={[
+                { title: 'ศูนย์พัฒนาคุณภาพ', href: '/quality' },
+                { title: 'Infection Control (IC)', href: '/ic' },
+                { title: 'Device Days', href: '/ic/device-days' },
+            ]}
+            subNav={<IcSubNav active="ic.device-days" />}
+            actions={recordDialog}
+        >
+                    <Panel title="สรุปรายเดือน" description="ข้อมูลรวมสำหรับคำนวณ HAI Rate">
+                            <div className="overflow-hidden rounded-xl border border-slate-200">
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="border-b border-slate-100 text-left text-xs uppercase text-slate-400">
+                                            <th className="p-3">เดือน</th>
+                                            <th className="p-3 text-right">Patient Days</th>
+                                            <th className="p-3 text-right">Catheter Days</th>
+                                            <th className="p-3 text-right">Catheter UR%</th>
+                                            <th className="p-3 text-right">Central Line Days</th>
+                                            <th className="p-3 text-right">CL UR%</th>
+                                            <th className="p-3 text-right">Ventilator Days</th>
+                                            <th className="p-3 text-right">Vent UR%</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
                                         {monthlySummary.length === 0 ? (
-                                            <TableRow>
-                                                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                                                    ยังไม่มีข้อมูล
-                                                </TableCell>
-                                            </TableRow>
+                                            <tr><td colSpan={8}><EmptyState text="ยังไม่มีข้อมูล" /></td></tr>
                                         ) : (
                                             monthlySummary.map((summary) => (
-                                                <TableRow key={summary.month}>
-                                                    <TableCell className="font-medium">{summary.month}</TableCell>
-                                                    <TableCell className="text-right">{summary.total_patient_days?.toLocaleString() || 0}</TableCell>
-                                                    <TableCell className="text-right">{summary.total_catheter_days?.toLocaleString() || 0}</TableCell>
-                                                    <TableCell className="text-right">
+                                                <tr key={summary.month} className="border-t border-slate-100 hover:bg-slate-50/60">
+                                                    <td className="p-3 font-medium">{summary.month}</td>
+                                                    <td className="p-3 text-right">{summary.total_patient_days?.toLocaleString() || 0}</td>
+                                                    <td className="p-3 text-right">{summary.total_catheter_days?.toLocaleString() || 0}</td>
+                                                    <td className="p-3 text-right">
                                                         <Badge variant="secondary">
                                                             {calculateUtilization(summary.total_catheter_days || 0, summary.total_patient_days || 0)}%
                                                         </Badge>
-                                                    </TableCell>
-                                                    <TableCell className="text-right">{summary.total_central_line_days?.toLocaleString() || 0}</TableCell>
-                                                    <TableCell className="text-right">
+                                                    </td>
+                                                    <td className="p-3 text-right">{summary.total_central_line_days?.toLocaleString() || 0}</td>
+                                                    <td className="p-3 text-right">
                                                         <Badge variant="secondary">
                                                             {calculateUtilization(summary.total_central_line_days || 0, summary.total_patient_days || 0)}%
                                                         </Badge>
-                                                    </TableCell>
-                                                    <TableCell className="text-right">{summary.total_ventilator_days?.toLocaleString() || 0}</TableCell>
-                                                    <TableCell className="text-right">
+                                                    </td>
+                                                    <td className="p-3 text-right">{summary.total_ventilator_days?.toLocaleString() || 0}</td>
+                                                    <td className="p-3 text-right">
                                                         <Badge variant="secondary">
                                                             {calculateUtilization(summary.total_ventilator_days || 0, summary.total_patient_days || 0)}%
                                                         </Badge>
-                                                    </TableCell>
-                                                </TableRow>
+                                                    </td>
+                                                </tr>
                                             ))
                                         )}
-                                    </TableBody>
-                                </Table>
+                                    </tbody>
+                                </table>
                             </div>
-                        </CardContent>
-                    </Card>
+                    </Panel>
 
-                    {/* Daily Records */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>รายการบันทึกประจำวัน</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="rounded-md border">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>วันที่</TableHead>
-                                            <TableHead>หอผู้ป่วย</TableHead>
-                                            <TableHead className="text-right">Patient Days</TableHead>
-                                            <TableHead className="text-right">Catheter</TableHead>
-                                            <TableHead className="text-right">Central Line</TableHead>
-                                            <TableHead className="text-right">Ventilator</TableHead>
-                                            <TableHead className="text-right">Peripheral IV</TableHead>
-                                            <TableHead>ผู้บันทึก</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
+                    <Panel title="รายการบันทึกประจำวัน">
+                            <div className="overflow-hidden rounded-xl border border-slate-200">
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="border-b border-slate-100 text-left text-xs uppercase text-slate-400">
+                                            <th className="p-3">วันที่</th>
+                                            <th className="p-3">หอผู้ป่วย</th>
+                                            <th className="p-3 text-right">Patient Days</th>
+                                            <th className="p-3 text-right">Catheter</th>
+                                            <th className="p-3 text-right">Central Line</th>
+                                            <th className="p-3 text-right">Ventilator</th>
+                                            <th className="p-3 text-right">Peripheral IV</th>
+                                            <th className="p-3">ผู้บันทึก</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
                                         {records.data.length === 0 ? (
-                                            <TableRow>
-                                                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                                                    ยังไม่มีข้อมูล
-                                                </TableCell>
-                                            </TableRow>
+                                            <tr><td colSpan={8}><EmptyState text="ยังไม่มีข้อมูล" /></td></tr>
                                         ) : (
                                             records.data.map((record) => (
-                                                <TableRow key={record.id}>
-                                                    <TableCell>{new Date(record.record_date).toLocaleDateString('th-TH')}</TableCell>
-                                                    <TableCell>{record.ward_name}</TableCell>
-                                                    <TableCell className="text-right font-medium">{record.patient_days}</TableCell>
-                                                    <TableCell className="text-right">{record.urinary_catheter_days}</TableCell>
-                                                    <TableCell className="text-right">{record.central_line_days}</TableCell>
-                                                    <TableCell className="text-right">{record.ventilator_days}</TableCell>
-                                                    <TableCell className="text-right">{record.peripheral_iv_days}</TableCell>
-                                                    <TableCell>{record.reporter?.name || '-'}</TableCell>
-                                                </TableRow>
+                                                <tr key={record.id} className="border-t border-slate-100 hover:bg-slate-50/60">
+                                                    <td className="p-3">{new Date(record.record_date).toLocaleDateString('th-TH')}</td>
+                                                    <td className="p-3">{record.ward_name}</td>
+                                                    <td className="p-3 text-right font-medium">{record.patient_days}</td>
+                                                    <td className="p-3 text-right">{record.urinary_catheter_days}</td>
+                                                    <td className="p-3 text-right">{record.central_line_days}</td>
+                                                    <td className="p-3 text-right">{record.ventilator_days}</td>
+                                                    <td className="p-3 text-right">{record.peripheral_iv_days}</td>
+                                                    <td className="p-3">{record.reporter?.name || '-'}</td>
+                                                </tr>
                                             ))
                                         )}
-                                    </TableBody>
-                                </Table>
+                                    </tbody>
+                                </table>
                             </div>
-                        </CardContent>
-                    </Card>
+                    </Panel>
 
-                    {/* Info Card */}
-                    <Card className="bg-blue-50 border-blue-200">
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2 text-blue-700">
-                                <Info className="h-5 w-5" />
-                                วิธีคำนวณ HAI Rate
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="text-blue-700 space-y-2">
+                    <Panel title="วิธีคำนวณ HAI Rate" className="border-sky-200 bg-sky-50/50">
+                            <div className="space-y-2 text-sky-800">
                             <p><strong>CAUTI Rate</strong> = (จำนวน CAUTI / Catheter Days) × 1,000</p>
                             <p><strong>CLABSI Rate</strong> = (จำนวน CLABSI / Central Line Days) × 1,000</p>
                             <p><strong>VAP Rate</strong> = (จำนวน VAP / Ventilator Days) × 1,000</p>
-                            <p className="text-sm mt-4">
+                            <p className="mt-4 text-sm">
                                 <strong>Device Utilization Ratio (UR)</strong> = (Device Days / Patient Days) × 100
                             </p>
-                        </CardContent>
-                    </Card>
-                </div>
-            </div>
-        </AppLayout>
+                            </div>
+                    </Panel>
+        </QualityPage>
     );
 }

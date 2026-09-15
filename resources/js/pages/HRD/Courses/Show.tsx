@@ -205,7 +205,8 @@ export default function CourseShow({ course, isEnrolled, canEdit }: Props) {
                                                                 >
                                                                     <div className="flex items-center gap-3">
                                                                         {lesson.type === 'video' && <PlayCircle className={`h-5 w-5 ${isCompleted ? 'text-emerald-500' : 'text-blue-500'}`} />}
-                                                                        {lesson.type === 'document' && <FileText className={`h-5 w-5 ${isCompleted ? 'text-emerald-500' : 'text-orange-500'}`} />}
+                                                                        {(lesson.type === 'text' || lesson.type === 'document') && <FileText className={`h-5 w-5 ${isCompleted ? 'text-emerald-500' : 'text-sky-500'}`} />}
+                                                                        {lesson.type === 'file' && <FileText className={`h-5 w-5 ${isCompleted ? 'text-emerald-500' : 'text-orange-500'}`} />}
                                                                         {lesson.type === 'quiz' && <CheckCircle className={`h-5 w-5 ${isCompleted ? 'text-emerald-500' : 'text-purple-500'}`} />}
                                                                         
                                                                         <span className={`font-medium ${isCompleted ? 'text-emerald-700 dark:text-emerald-300' : ''}`}>

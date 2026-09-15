@@ -21,6 +21,7 @@ interface Question {
     question_text: string;
     type: 'multiple_choice' | 'true_false' | 'matching' | 'fill_blank';
     answers: Answer[];
+    matching_options?: string[];
 }
 
 interface Quiz {
@@ -29,6 +30,7 @@ interface Quiz {
     description: string;
     questions: Question[];
     passing_score: number;
+    randomize_questions?: boolean;
 }
 
 interface Course {
@@ -93,8 +95,11 @@ export default function CourseQuiz({ course, quiz }: Props) {
         });
     };
 
-    // Helper to get all matching options for a question (shuffled ideally, but simple list for now)
+    // Helper to get matching options (already shuffled independently on server when randomize is on)
     const getMatchingOptions = (question: Question) => {
+        if (question.matching_options && question.matching_options.length > 0) {
+            return question.matching_options;
+        }
         return question.answers.map(a => a.matching_pair).filter(Boolean) as string[];
     };
 
@@ -156,6 +161,11 @@ export default function CourseQuiz({ course, quiz }: Props) {
                             <span className="bg-gray-100 dark:bg-gray-700 px-3 py-1 rounded-full">
                                 เกณฑ์ผ่าน {quiz.passing_score}%
                             </span>
+                            {quiz.randomize_questions !== false && (
+                                <span className="bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 px-3 py-1 rounded-full">
+                                    สุ่มลำดับคำถามและตัวเลือก
+                                </span>
+                            )}
                         </div>
                     </div>
 
@@ -200,22 +210,29 @@ export default function CourseQuiz({ course, quiz }: Props) {
                                             value={answers[question.id] ?? ""}
                                             className="grid grid-cols-2 gap-4"
                                         >
-                                            <div className={`flex items-center justify-center space-x-2 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                                                answers[question.id] === '1' 
-                                                    ? 'border-emerald-500 bg-emerald-50 text-emerald-700' 
-                                                    : 'border-gray-200 hover:border-emerald-200'
-                                            }`}>
-                                                <RadioGroupItem value="1" id={`q${question.id}-true`} />
-                                                <Label htmlFor={`q${question.id}-true`} className="cursor-pointer font-bold">ถูก (True)</Label>
-                                            </div>
-                                            <div className={`flex items-center justify-center space-x-2 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                                                answers[question.id] === '0' 
-                                                    ? 'border-red-500 bg-red-50 text-red-700' 
-                                                    : 'border-gray-200 hover:border-red-200'
-                                            }`}>
-                                                <RadioGroupItem value="0" id={`q${question.id}-false`} />
-                                                <Label htmlFor={`q${question.id}-false`} className="cursor-pointer font-bold">ผิด (False)</Label>
-                                            </div>
+                                            {question.answers.map((answer) => {
+                                                const isTrue = answer.answer_text === 'ถูก' || answer.answer_text.toLowerCase() === 'true';
+                                                const selected = answers[question.id] === answer.id.toString();
+                                                return (
+                                                    <div
+                                                        key={answer.id}
+                                                        className={`flex items-center justify-center space-x-2 p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                                                            selected
+                                                                ? isTrue
+                                                                    ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                                                                    : 'border-red-500 bg-red-50 text-red-700'
+                                                                : isTrue
+                                                                    ? 'border-gray-200 hover:border-emerald-200'
+                                                                    : 'border-gray-200 hover:border-red-200'
+                                                        }`}
+                                                    >
+                                                        <RadioGroupItem value={answer.id.toString()} id={`q${question.id}-a${answer.id}`} />
+                                                        <Label htmlFor={`q${question.id}-a${answer.id}`} className="cursor-pointer font-bold">
+                                                            {answer.answer_text}
+                                                        </Label>
+                                                    </div>
+                                                );
+                                            })}
                                         </RadioGroup>
                                     )}
 

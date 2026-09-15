@@ -415,7 +415,7 @@
     @endif
 
     <div class="footer">
-        รายงานนี้สร้างจากข้อมูล HOSxP (opitemrece) · {{ $appName ?? 'SMH Hospital Dashboard' }}
+        รายงานนี้สร้างจากข้อมูล HOSxP · OPD: opitemrece (vstdate) · IPD: an_stat.income (dchdate) · {{ $appName ?? 'SMH Hospital Dashboard' }}
     </div>
 </body>
 </html>

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, X, Bell, Clock, Wrench, ExternalLink, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { apiFetch } from '@/lib/asset';
 import { router } from '@inertiajs/react';
 
 interface UrgentNotification {
@@ -36,7 +37,7 @@ export default function UrgentNotificationPopup({
   // Fetch urgent notifications
   const fetchUrgentNotifications = useCallback(async () => {
     try {
-      const response = await fetch('/notifications/urgent', {
+      const response = await apiFetch('/notifications/urgent', {
         headers: {
           'Accept': 'application/json',
           'X-Requested-With': 'XMLHttpRequest',
@@ -72,7 +73,7 @@ export default function UrgentNotificationPopup({
     if (!notificationId) return;
     
     try {
-      await fetch(`/notifications/${notificationId}/read`, {
+      await apiFetch(`/notifications/${notificationId}/read`, {
         method: 'POST',
         headers: {
           'Accept': 'application/json',

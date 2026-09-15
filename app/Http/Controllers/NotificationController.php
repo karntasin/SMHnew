@@ -62,38 +62,28 @@ class NotificationController extends Controller
     {
         try {
             $user = Auth::user();
-            
+            if (! $user) {
+                return response()->json([
+                    'unread_notifications' => [],
+                    'read_notifications' => [],
+                    'unread_count' => 0,
+                    'total_count' => 0,
+                ], 401);
+            }
+
             // Get unread notifications
             $unreadNotifications = $user->unreadNotifications()
                 ->latest()
                 ->take(10)
                 ->get()
-                ->map(function ($notification) {
-                    return [
-                        'id' => $notification->id,
-                        'data' => $notification->data,
-                        'created_at' => $notification->created_at->diffForHumans(),
-                        'created_at_raw' => $notification->created_at->toISOString(),
-                        'read_at' => null,
-                        'is_read' => false,
-                    ];
-                });
+                ->map(fn ($notification) => $this->serializeNotification($notification, false));
 
             // Get recent read notifications (last 10)
             $readNotifications = $user->readNotifications()
                 ->latest()
                 ->take(10)
                 ->get()
-                ->map(function ($notification) {
-                    return [
-                        'id' => $notification->id,
-                        'data' => $notification->data,
-                        'created_at' => $notification->created_at->diffForHumans(),
-                        'created_at_raw' => $notification->created_at->toISOString(),
-                        'read_at' => $notification->read_at->diffForHumans(),
-                        'is_read' => true,
-                    ];
-                });
+                ->map(fn ($notification) => $this->serializeNotification($notification, true));
 
             return response()->json([
                 'unread_notifications' => $unreadNotifications,
@@ -104,7 +94,12 @@ class NotificationController extends Controller
         } catch (\Exception $e) {
             Log::error('Notification API Error: ' . $e->getMessage());
             Log::error($e->getTraceAsString());
-            return response()->json(['error' => $e->getMessage()], 500);
+            return response()->json([
+                'unread_notifications' => [],
+                'read_notifications' => [],
+                'unread_count' => 0,
+                'total_count' => 0,
+            ]);
         }
     }
 
@@ -197,6 +192,29 @@ class NotificationController extends Controller
             Log::error('Urgent Notification Error: ' . $e->getMessage());
             return response()->json(['urgent_notifications' => [], 'urgent_count' => 0]);
         }
+    }
+
+    private function serializeNotification($notification, bool $isRead): array
+    {
+        $data = $notification->data;
+        if (is_string($data)) {
+            $decoded = json_decode($data, true);
+            $data = is_array($decoded) ? $decoded : [];
+        } elseif (! is_array($data)) {
+            $data = [];
+        }
+
+        $createdAt = $notification->created_at;
+        $readAt = $notification->read_at;
+
+        return [
+            'id' => $notification->id,
+            'data' => $data,
+            'created_at' => $createdAt?->diffForHumans() ?? '',
+            'created_at_raw' => $createdAt?->toIso8601String(),
+            'read_at' => $isRead ? ($readAt?->diffForHumans()) : null,
+            'is_read' => $isRead,
+        ];
     }
 
     public function markAsRead(Request $request, $id)

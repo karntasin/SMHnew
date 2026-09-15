@@ -15,6 +15,8 @@ class Document extends Model
 
     protected $casts = [
         'document_date' => 'date',
+        'director_signed_at' => 'datetime',
+        'archived_at' => 'datetime',
     ];
 
     public function actions()

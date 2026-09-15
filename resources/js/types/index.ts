@@ -25,6 +25,12 @@ export interface SharedData {
     name: string;
     quote: { message: string; author: string };
     auth: Auth;
+    errors: Record<string, string>;
+    lineLoginEnabled?: boolean;
+    fshhChat?: {
+        enabled: boolean;
+        openUrl: string;
+    } | null;
     [key: string]: unknown;
 }
 
@@ -35,6 +41,7 @@ export interface User {
     avatar?: string;
     line_id?: string | null;
     line_display_name?: string | null;
+    chat_display_name?: string | null;
     line_picture_url?: string | null;
     profile_completed?: boolean;
     email_verified_at: string | null;

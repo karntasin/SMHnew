@@ -1,14 +1,16 @@
 import React from 'react';
-import { Head } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { 
-    BookOpen, 
-    Clock, 
-    CheckCircle, 
-    Hourglass, 
+import { Button } from '@/components/ui/button';
+import {
+    BookOpen,
+    Clock,
+    CheckCircle,
+    Hourglass,
     Calendar,
-    Award
+    Award,
+    Plus,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -35,6 +37,7 @@ interface DashboardProps {
         start_date: string;
         location: string;
     }>;
+    canEdit?: boolean;
 }
 
 const breadcrumbs = [
@@ -48,7 +51,7 @@ const breadcrumbs = [
     },
 ];
 
-export default function HrdDashboard({ stats, recent_activity, upcoming_courses }: DashboardProps) {
+export default function HrdDashboard({ stats, recent_activity, upcoming_courses, canEdit }: DashboardProps) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="แดชบอร์ด HRD" />
@@ -63,6 +66,20 @@ export default function HrdDashboard({ stats, recent_activity, upcoming_courses 
                                 ติดตามความก้าวหน้าในการฝึกอบรมและพัฒนาศักยภาพของคุณ
                                 เพื่อการเติบโตอย่างยั่งยืนในสายอาชีพ
                             </p>
+                            <div className="flex flex-wrap gap-2 pt-1">
+                                <Link href={route('km.learn.index')}>
+                                    <Button variant="secondary" className="bg-white text-emerald-700 hover:bg-emerald-50">
+                                        <BookOpen className="mr-2 h-4 w-4" /> ดูหลักสูตรทั้งหมด
+                                    </Button>
+                                </Link>
+                                {canEdit && (
+                                    <Link href={route('km.learn.courses.create')}>
+                                        <Button className="border border-white/40 bg-emerald-500/40 text-white hover:bg-emerald-500/60">
+                                            <Plus className="mr-2 h-4 w-4" /> สร้างหลักสูตรใหม่
+                                        </Button>
+                                    </Link>
+                                )}
+                            </div>
                         </div>
                         <div className="hidden md:block relative">
                             <div className="absolute inset-0 bg-emerald-400 blur-3xl opacity-30 rounded-full"></div>

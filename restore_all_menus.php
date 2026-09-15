@@ -36,12 +36,22 @@ $menus[] = [
     'permission_name' => null,
 ];
 
+$menus[] = [
+    'id' => 2,
+    'title' => 'คู่มือการใช้งาน',
+    'icon' => 'BookOpen',
+    'route' => 'help.index',
+    'parent_id' => null,
+    'order' => 2,
+    'permission_name' => null,
+];
+
 // ========================================
-// 2. QUALITY HUB (ศูนย์รวมงานคุณภาพ)
+// 2. QUALITY HUB (ศูนย์พัฒนาคุณภาพ)
 // ========================================
 $menus[] = [
     'id' => 10,
-    'title' => 'ศูนย์คุณภาพ',
+    'title' => 'ศูนย์พัฒนาคุณภาพ',
     'icon' => 'Award',
     'route' => null,
     'parent_id' => null,
@@ -108,6 +118,66 @@ $menus[] = [
     'parent_id' => 10,
     'order' => 6,
     'permission_name' => 'ic.index',
+];
+
+$menus[] = [
+    'id' => 17,
+    'title' => 'รายงาน RDU',
+    'icon' => 'Pill',
+    'route' => null,
+    'parent_id' => 10,
+    'order' => 7,
+    'permission_name' => null,
+];
+
+$menus[] = [
+    'id' => 130,
+    'title' => 'RDU Dashboard',
+    'icon' => 'Activity',
+    'route' => 'rdu.index',
+    'parent_id' => 17,
+    'order' => 1,
+    'permission_name' => 'rdu.index',
+];
+
+$menus[] = [
+    'id' => 131,
+    'title' => 'Case Audit',
+    'icon' => 'ClipboardList',
+    'route' => 'rdu.cases',
+    'parent_id' => 17,
+    'order' => 2,
+    'permission_name' => 'rdu.cases',
+];
+
+$menus[] = [
+    'id' => 132,
+    'title' => 'Drug Utilization',
+    'icon' => 'Pill',
+    'route' => 'rdu.drugs',
+    'parent_id' => 17,
+    'order' => 3,
+    'permission_name' => 'rdu.drugs',
+];
+
+$menus[] = [
+    'id' => 133,
+    'title' => 'Antibiotic Report',
+    'icon' => 'Syringe',
+    'route' => 'rdu.drugs.antibiotics',
+    'parent_id' => 17,
+    'order' => 4,
+    'permission_name' => 'rdu.drugs.antibiotics',
+];
+
+$menus[] = [
+    'id' => 134,
+    'title' => 'Drugs by Department',
+    'icon' => 'Building2',
+    'route' => 'rdu.drugs.by-department',
+    'parent_id' => 17,
+    'order' => 5,
+    'permission_name' => 'rdu.drugs.by-department',
 ];
 
 // ========================================
@@ -231,7 +301,7 @@ $menus[] = [
 // ========================================
 $menus[] = [
     'id' => 40,
-    'title' => 'ระบบหนังสือ',
+    'title' => 'ระบบรับส่งหนังสือ',
     'icon' => 'Mail',
     'route' => null,
     'parent_id' => null,
@@ -242,7 +312,7 @@ $menus[] = [
 $menus[] = [
     'id' => 41,
     'title' => 'แดชบอร์ดหนังสือ',
-    'icon' => 'LayoutDashboard',
+    'icon' => 'Layout',
     'route' => 'documents.dashboard',
     'parent_id' => 40,
     'order' => 1,
@@ -261,12 +331,32 @@ $menus[] = [
 
 $menus[] = [
     'id' => 43,
-    'title' => 'สร้างหนังสือใหม่',
-    'icon' => 'FilePlus',
+    'title' => 'ลงทะเบียนรับหนังสือ',
+    'icon' => 'FileText',
     'route' => 'documents.create',
     'parent_id' => 40,
     'order' => 3,
     'permission_name' => 'documents.create',
+];
+
+$menus[] = [
+    'id' => 44,
+    'title' => 'ระหว่างนำเรียน',
+    'icon' => 'Clock',
+    'route' => 'documents.pendingReview',
+    'parent_id' => 40,
+    'order' => 4,
+    'permission_name' => 'documents.pendingReview',
+];
+
+$menus[] = [
+    'id' => 45,
+    'title' => 'กล่องงานผู้อำนวยการ',
+    'icon' => 'PenTool',
+    'route' => 'documents.director.index',
+    'parent_id' => 40,
+    'order' => 5,
+    'permission_name' => 'documents.director.index',
 ];
 
 // ========================================
@@ -486,12 +576,30 @@ $menus[] = [
 // ========================================
 $menus[] = [
     'id' => 90,
-    'title' => 'รายงานการเงิน',
+    'title' => 'Finance Reports',
     'icon' => 'DollarSign',
-    'route' => 'finance.dashboard',
+    'route' => null,
     'parent_id' => null,
     'order' => 90,
+    'permission_name' => null,
+];
+$menus[] = [
+    'id' => 901,
+    'title' => 'BMS Dashboard',
+    'icon' => 'Layout',
+    'route' => 'finance.dashboard',
+    'parent_id' => 90,
+    'order' => 1,
     'permission_name' => 'finance.dashboard',
+];
+$menus[] = [
+    'id' => 902,
+    'title' => 'HOSxP Revenue by Coverage',
+    'icon' => 'BarChart3',
+    'route' => 'finance.revenue',
+    'parent_id' => 90,
+    'order' => 2,
+    'permission_name' => 'finance.revenue',
 ];
 
 // ========================================
@@ -541,6 +649,16 @@ $menus[] = [
     'parent_id' => 100,
     'order' => 1,
     'permission_name' => 'users.index',
+];
+
+$menus[] = [
+    'id' => 114,
+    'title' => 'จัดการเจ้าหน้าที่',
+    'icon' => 'ClipboardList',
+    'route' => 'settings.staff.index',
+    'parent_id' => 100,
+    'order' => 2,
+    'permission_name' => 'settings.staff.index',
 ];
 
 $menus[] = [
@@ -651,6 +769,16 @@ $menus[] = [
     'parent_id' => 100,
     'order' => 12,
     'permission_name' => 'files.index',
+];
+
+$menus[] = [
+    'id' => 113,
+    'title' => 'ตรวจสอบเซิร์ฟเวอร์',
+    'icon' => 'Activity',
+    'route' => 'server-monitor.index',
+    'parent_id' => 100,
+    'order' => 13,
+    'permission_name' => 'server-monitor.index',
 ];
 
 // Insert all menus - first insert parent menus, then children

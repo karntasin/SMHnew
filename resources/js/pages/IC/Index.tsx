@@ -65,7 +65,7 @@ interface Props {
 }
 
 const IC_BREADCRUMBS = [
-    { title: 'ศูนย์คุณภาพ', href: '/quality' },
+    { title: 'ศูนย์พัฒนาคุณภาพ', href: '/quality' },
     { title: 'Infection Control (IC)', href: '/ic' },
 ];
 
@@ -99,7 +99,7 @@ export default function IcIndex({ stats }: Props) {
         <QualityPage
             tone="rose"
             icon={ShieldAlert}
-            badge="ศูนย์คุณภาพ · IC"
+            badge="ศูนย์พัฒนาคุณภาพ · IC"
             title="ภาพรวมการควบคุมการติดเชื้อ"
             subtitle="ระบบควบคุมและป้องกันการติดเชื้อ | มาตรฐาน สรพ."
             headTitle="ภาพรวม IC - ระบบควบคุมการติดเชื้อ"

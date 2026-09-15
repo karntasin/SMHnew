@@ -21,9 +21,9 @@
         body { font-size: 11px; color: #111827; line-height: 1.4; }
         h1 { font-size: 18px; margin: 0 0 2px 0; color: #047857; font-weight: bold; }
         h2 { font-size: 12px; margin: 12px 0 6px; color: #047857; border-bottom: 2px solid #a7f3d0; padding-bottom: 3px; }
-        .meta { color: #4b5563; font-size: 10px; margin-bottom: 10px; }
-        .kpi { width: 100%; border-collapse: separate; border-spacing: 5px 5px; margin: 0 0 10px; }
-        .kpi td { width: 14.28%; vertical-align: top; }
+        .meta { color: #4b5563; font-size: 10px; margin-bottom: 8px; }
+        .kpi { width: 100%; border-collapse: separate; border-spacing: 5px 5px; margin: 0 0 8px; }
+        .kpi td { width: 12.5%; vertical-align: top; }
         .box { border: 1px solid #d1d5db; border-radius: 6px; padding: 6px 8px; background: #f0fdfa; overflow: hidden; }
         .label { font-size: 8px; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .value { font-size: 11px; font-weight: bold; color: #047857; word-break: break-all; line-height: 1.25; }
@@ -39,51 +39,119 @@
     </style>
 </head>
 <body>
-    <h1>รายงานตรวจสอบเบิกจ่ายตรง กรมบัญชีกลาง</h1>
+    @php
+        $summary = $summary ?? [];
+        $monthly = $monthly ?? [];
+        $byStatus = $byStatus ?? [];
+        $doc = $docLabel ?? ($batch->document_no ?? $batch->filename ?? 'สรุปทุกไฟล์');
+    @endphp
+
+    <h1>รายงานสรุปตรวจสอบเบิกจ่ายตรง กรมบัญชีกลาง</h1>
     <div class="meta">
-        {{ $hospitalName }} · เอกสาร {{ $batch->document_no ?: $batch->filename }}
+        {{ $hospitalName }} · {{ $doc }}
         · ช่วง HOSxP {{ $reconciliation->start_date->format('d/m/Y') }} - {{ $reconciliation->end_date->format('d/m/Y') }}
         · สร้างเมื่อ {{ $generatedAt }}
     </div>
     <div class="meta">
         กรองเดือน: <strong>{{ $monthFilterLabel ?? 'ทุกเดือน' }}</strong>
         · กรองสถานะ: <strong>{{ $statusFilterLabel ?? 'ทั้งหมด' }}</strong>
+        · กรอง Error: <strong>{{ $errorFilterLabel ?? 'ทุก Error Code' }}</strong>
+        · กรองยอดเงิน: <strong>{{ $amountFilterLabel ?? 'ทุกยอดเงิน' }}</strong>
         @if (!empty($search))
             · คำค้น: <strong>{{ $search }}</strong>
         @endif
-        · จำนวนในรายงานนี้ {{ number_format($items->count()) }} รายการ
-        @if (empty($statusFilter))
-            (ไม่รวมสถานะตรงกัน)
-        @endif
+        · รายการตามตัวกรอง {{ number_format($summary['item_count'] ?? $items->count()) }} รายการ
     </div>
 
+    <h2>สรุปตามตัวกรอง</h2>
     <table class="kpi">
         <tr>
-            <td><div class="box"><div class="label">Visit HOSxP</div><div class="value">{{ number_format($reconciliation->hosxp_count) }}</div></div></td>
-            <td><div class="box"><div class="label">รายการ STM</div><div class="value">{{ number_format($reconciliation->stm_count) }}</div></div></td>
-            <td><div class="box"><div class="label">ยอด HOSxP รวม</div><div class="value">{{ number_format($reconciliation->total_hosxp, 2) }}</div></div></td>
-            <td><div class="box"><div class="label">Payment</div><div class="value">{{ number_format($totalHosxpPaid ?? 0, 2) }}</div></div></td>
-            <td><div class="box"><div class="label">หลังหัก Payment</div><div class="value">{{ number_format($totalHosxpNet ?? max(0, (float) $reconciliation->total_hosxp - (float) ($totalHosxpPaid ?? 0)), 2) }}</div></div></td>
-            <td><div class="box"><div class="label">พึงรับ STM</div><div class="value">{{ number_format($reconciliation->total_stm_approved, 2) }}</div></div></td>
-            <td><div class="box"><div class="label">ยอดขาด</div><div class="value" style="color:#b91c1c">{{ number_format($reconciliation->total_shortfall, 2) }}</div></div></td>
+            <td><div class="box"><div class="label">จำนวนรายการ</div><div class="value">{{ number_format($summary['item_count'] ?? 0) }}</div></div></td>
+            <td><div class="box"><div class="label">HOSxP (SEQ ตรง)</div><div class="value">{{ number_format($summary['total_hosxp'] ?? 0, 2) }}</div></div></td>
+            <td><div class="box"><div class="label">Payment</div><div class="value">{{ number_format($summary['total_hosxp_paid'] ?? 0, 2) }}</div></div></td>
+            <td><div class="box"><div class="label">หลังหัก Payment</div><div class="value">{{ number_format($summary['total_hosxp_net'] ?? 0, 2) }}</div></div></td>
+            <td><div class="box"><div class="label">เรียกเก็บ</div><div class="value">{{ number_format($summary['total_claim'] ?? 0, 2) }}</div></div></td>
+            <td><div class="box"><div class="label">ชดเชยสุทธิ</div><div class="value">{{ number_format($summary['total_approved'] ?? 0, 2) }}</div></div></td>
+            <td><div class="box"><div class="label">ยอดขาด</div><div class="value" style="color:#b91c1c">{{ number_format($summary['total_shortfall'] ?? 0, 2) }}</div></div></td>
+            <td><div class="box"><div class="label">HOSxP ไม่มี SEQ</div><div class="value">{{ number_format($summary['total_hosxp_unmatched_net'] ?? 0, 2) }}</div></div></td>
         </tr>
     </table>
 
-    <div class="meta">
-        ตรงกัน {{ number_format($reconciliation->matched_ok) }} ·
-        ขาดเงิน {{ number_format($reconciliation->matched_short) }} ·
-        เกิน {{ number_format($reconciliation->matched_over) }} ·
-        มีเฉพาะ HOSxP {{ number_format($reconciliation->only_hosxp) }} ·
-        มีเฉพาะ STM {{ number_format($reconciliation->only_stm) }} ·
-        STM นอกช่วง {{ number_format($reconciliation->stm_out_of_range ?? 0) }}
-    </div>
+    @if (!empty($byStatus))
+        <h2>แยกตามสถานะ</h2>
+        <table class="data">
+            <thead>
+                <tr>
+                    <th>สถานะ</th>
+                    <th class="num">จำนวน</th>
+                    <th class="num">เรียกเก็บ</th>
+                    <th class="num">ชดเชยสุทธิ</th>
+                    <th class="num">ยอดขาด</th>
+                    <th class="num">HOSxP หลังหัก</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach ($byStatus as $row)
+                    <tr>
+                        <td>{{ $row['label'] }}</td>
+                        <td class="num">{{ number_format($row['count']) }}</td>
+                        <td class="num">{{ number_format($row['total_claim'], 2) }}</td>
+                        <td class="num">{{ number_format($row['total_approved'], 2) }}</td>
+                        <td class="num short">{{ number_format($row['total_shortfall'], 2) }}</td>
+                        <td class="num">{{ number_format($row['total_hosxp_net'], 2) }}</td>
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+    @endif
+
+    @if (!empty($monthly))
+        <h2>แยกตามเดือน</h2>
+        <table class="data">
+            <thead>
+                <tr>
+                    <th>เดือน</th>
+                    <th class="num">รายการ</th>
+                    <th class="num">HOSxP (SEQ)</th>
+                    <th class="num">หลังหัก</th>
+                    <th class="num">เรียกเก็บ</th>
+                    <th class="num">ชดเชยสุทธิ</th>
+                    <th class="num">ยอดขาด</th>
+                    <th class="num">HOSxP ไม่มี SEQ</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach ($monthly as $m)
+                    <tr>
+                        <td>{{ $m['label'] }}</td>
+                        <td class="num">{{ number_format($m['item_count']) }}</td>
+                        <td class="num">{{ number_format($m['total_hosxp'], 2) }}</td>
+                        <td class="num">{{ number_format($m['total_hosxp_net'], 2) }}</td>
+                        <td class="num">{{ number_format($m['total_stm_claim'], 2) }}</td>
+                        <td class="num">{{ number_format($m['total_stm_approved'], 2) }}</td>
+                        <td class="num short">{{ number_format($m['total_shortfall'], 2) }}</td>
+                        <td class="num">{{ number_format($m['total_hosxp_unmatched_net'] ?? 0, 2) }}</td>
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+    @endif
 
     <h2>
         @if (!empty($statusFilter))
-            รายการสถานะ: {{ $statusFilterLabel }} (สูงสุด 500 รายการ)
+            รายการสถานะ: {{ $statusFilterLabel }}
         @else
-            รายการที่ต้องติดตาม (สูงสุด 500 รายการ)
+            รายการที่ต้องติดตาม
         @endif
+        (แสดง {{ number_format($items->count()) }}
+        @if (!empty($detailTotal))
+            จาก {{ number_format($detailTotal) }}
+        @endif
+        รายการ
+        @if (!empty($detailCapped))
+            · จำกัด 500 แถว
+        @endif
+        )
     </h2>
     <table class="data">
         <thead>
@@ -99,7 +167,8 @@
                 <th class="num">Payment</th>
                 <th class="num">หลังหัก</th>
                 <th class="num">เรียกเก็บ</th>
-                <th class="num">พึงรับ</th>
+                <th class="num">ชดเชยสุทธิ</th>
+                <th class="num">ผลต่าง</th>
                 <th class="num">ขาด</th>
             </tr>
         </thead>
@@ -110,6 +179,7 @@
                     $gross = $item->hosxp_total !== null ? (float) $item->hosxp_total : null;
                     $net = $gross !== null ? max(0, $gross - $paid) : null;
                     $adjusted = $paid > 0.009;
+                    $diff = (float) ($item->diff_approved ?? 0);
                 @endphp
                 <tr>
                     <td>
@@ -129,16 +199,17 @@
                     <td class="num">{{ $net !== null ? number_format($net, 2) : '-' }}</td>
                     <td class="num">{{ number_format((float) $item->stm_claim, 2) }}</td>
                     <td class="num">{{ number_format((float) $item->stm_approved, 2) }}</td>
+                    <td class="num {{ $diff > 0.009 ? 'short' : ($diff < -0.009 ? '' : 'ok') }}">{{ number_format($diff, 2) }}</td>
                     <td class="num short">{{ number_format((float) $item->shortfall, 2) }}</td>
                 </tr>
             @empty
-                <tr><td colspan="13">ไม่พบรายการที่ต้องติดตาม</td></tr>
+                <tr><td colspan="14">ไม่พบรายการตามตัวกรอง</td></tr>
             @endforelse
         </tbody>
     </table>
 
     <div class="footer">
-        จับคู่ด้วย HN + PID + SEQ NO (และสำรองด้วยวันที่รับบริการ) · เปรียบเทียบ (HOSxP รวม − Payment) กับ STM พึงรับทั้งหมด · ★หักP = มีหัก Payment · เกณฑ์สิทธิ์ pttype LIKE {{ $reconciliation->pttype_like }}
+        รายงานตามตัวกรองปัจจุบัน · จับคู่ HN+PID+SEQ · ยอดขาด = เรียกเก็บ − ชดเชยสุทธิ · HOSxP นับเฉพาะ SEQ ตรง · ★หักP = มีหัก Payment · pttype LIKE {{ $reconciliation->pttype_like }}
     </div>
 </body>
 </html>

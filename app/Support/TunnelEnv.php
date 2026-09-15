@@ -42,7 +42,7 @@ class TunnelEnv
     {
         $public = rtrim($public, '/');
         $host = parse_url($public, PHP_URL_HOST) ?: '';
-        $callback = $public.LineUrls::appPath().'/auth/line/callback';
+        $callback = $public.LineUrls::tunnelAppPath().'/auth/line/callback';
         $stateful = (string) env('SANCTUM_STATEFUL_DOMAINS');
         if ($host !== '' && $stateful !== '' && ! str_contains($stateful, $host)) {
             $stateful = $host.','.$stateful;
@@ -53,18 +53,14 @@ class TunnelEnv
         EnvFile::set([
             'CLOUDFLARE_TUNNEL_MODE' => 'named',
             'CLOUDFLARE_PUBLIC_HOSTNAME' => $host,
-            'APP_URL' => $public,
-            'ASSET_URL' => '',
             'NGROK_ENABLED' => 'true',
             'NGROK_PUBLIC_URL' => $public,
             'TUNNEL_DRIVER' => 'cloudflare',
             'LINE_OAUTH_REDIRECT' => $callback,
             'SANCTUM_STATEFUL_DOMAINS' => $stateful,
-            'SESSION_DOMAIN' => $host,
         ]);
 
         config([
-            'app.url' => $public,
             'ngrok.enabled' => true,
             'ngrok.public_url' => $public,
             'services.line.redirect' => $callback,

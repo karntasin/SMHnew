@@ -28,7 +28,7 @@ class FinanceMenusSeeder extends Seeder
 
         if (! $parent) {
             $parent = Menu::create([
-                'title' => 'Finance Reports',
+                'title' => 'รายงานการเงิน',
                 'icon' => 'DollarSign',
                 'route' => null,
                 'order' => 90,
@@ -36,7 +36,7 @@ class FinanceMenusSeeder extends Seeder
             ]);
         } else {
             $parent->update([
-                'title' => 'Finance Reports',
+                'title' => 'รายงานการเงิน',
                 'icon' => 'DollarSign',
                 'route' => null,
                 'permission_name' => null,
@@ -45,14 +45,14 @@ class FinanceMenusSeeder extends Seeder
 
         $children = [
             [
-                'title' => 'BMS Dashboard',
+                'title' => 'แดชบอร์ด BMS',
                 'icon' => 'Layout',
                 'route' => 'finance.dashboard',
                 'order' => 1,
                 'permission_name' => 'finance.dashboard',
             ],
             [
-                'title' => 'HOSxP Revenue by Coverage',
+                'title' => 'รายได้ตามสิทธิ์การรักษา',
                 'icon' => 'BarChart3',
                 'route' => 'finance.revenue',
                 'order' => 2,
@@ -61,7 +61,7 @@ class FinanceMenusSeeder extends Seeder
         ];
 
         $this->syncChildren($parent, $children, 'รายงานการเงิน');
-        $this->command?->info('อัปเดตเมนู Finance Reports เรียบร้อยแล้ว ('.count($children).' รายการย่อย)');
+        $this->command?->info('อัปเดตเมนูรายงานการเงินเรียบร้อยแล้ว ('.count($children).' รายการย่อย)');
     }
 
     private function seedFinancialDataHub(): void
@@ -122,24 +122,31 @@ class FinanceMenusSeeder extends Seeder
                 'permission_name' => 'finance.cgd.dashboard',
             ],
             [
+                'title' => 'ตรวจก่อนเบิก C Deny',
+                'icon' => 'ShieldAlert',
+                'route' => 'finance.cgd.precheck',
+                'order' => 3,
+                'permission_name' => 'finance.cgd.precheck',
+            ],
+            [
                 'title' => 'ตรวจข้อมูล อปท.',
                 'icon' => 'Building2',
                 'route' => 'finance.lgo.dashboard',
-                'order' => 3,
+                'order' => 4,
                 'permission_name' => 'finance.lgo.dashboard',
             ],
             [
                 'title' => 'ตรวจข้อมูล ประกันสังคม',
                 'icon' => 'Shield',
                 'route' => 'finance.sso.dashboard',
-                'order' => 4,
+                'order' => 5,
                 'permission_name' => 'finance.sso.dashboard',
             ],
             [
                 'title' => 'ตรวจข้อมูล บัตรทอง',
                 'icon' => 'Heart',
                 'route' => 'finance.uc.dashboard',
-                'order' => 5,
+                'order' => 6,
                 'permission_name' => 'finance.uc.dashboard',
             ],
         ];

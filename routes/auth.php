@@ -7,6 +7,7 @@ use App\Http\Controllers\Auth\EmailVerificationPromptController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
+use App\Http\Controllers\Auth\StaffRosterLookupController;
 use App\Http\Controllers\Auth\VerifyEmailController;
 use App\Http\Controllers\LineAuthController;
 use App\Http\Controllers\CompleteProfileController;
@@ -27,6 +28,10 @@ Route::middleware('guest')->group(function () {
 
     Route::post('register', [RegisteredUserController::class, 'store']);
 
+    Route::post('register/roster-lookup', StaffRosterLookupController::class)
+        ->middleware('throttle:30,1')
+        ->name('register.roster-lookup');
+
     Route::get('login', [AuthenticatedSessionController::class, 'create'])
         ->name('login');
 
@@ -46,6 +51,10 @@ Route::middleware('guest')->group(function () {
 });
 
 Route::middleware('auth')->group(function () {
+    Route::post('profile/roster-lookup', StaffRosterLookupController::class)
+        ->middleware('throttle:30,1')
+        ->name('profile.roster-lookup');
+
     // Complete Profile (for new LINE users)
     Route::get('profile/complete', [CompleteProfileController::class, 'show'])
         ->name('profile.complete');

@@ -2,330 +2,298 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Inertia\Inertia;
+use App\Models\HosxpReportPreset;
+use App\Models\HosxpScheduledReport;
+use App\Services\HosxpConnectionService;
+use App\Services\HosxpReportExportService;
+use App\Services\HosxpReportService;
+use App\Services\ThaiPdfService;
+use Box\Spout\Common\Entity\Style\Color;
+use Box\Spout\Writer\Common\Creator\Style\StyleBuilder;
 use Box\Spout\Writer\Common\Creator\WriterEntityFactory;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Inertia\Inertia;
+use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class HosxpReportController extends Controller
 {
-    public function index()
+    public function __construct(
+        private HosxpReportService $reports,
+        private ThaiPdfService $pdf,
+        private HosxpConnectionService $connection,
+    ) {}
+
+    public function index(): Response
     {
+        $status = $this->reports->connectionStatus();
+        $endDate = date('Y-m-d');
+        $startDate = date('Y-m-d', strtotime('-1 month', strtotime($endDate)));
+        $userId = Auth::id();
+
         return Inertia::render('HosxpReports/Index', [
-            'reports' => [
-                ['id' => 'patient_list', 'name' => 'รายชื่อผู้ป่วย (Patient List)', 'description' => 'รายชื่อผู้ป่วยทั้งหมดที่ลงทะเบียน'],
-                ['id' => 'opd_visit', 'name' => 'ผู้ป่วยนอก (OPD Visits)', 'description' => 'ข้อมูลการรับบริการผู้ป่วยนอก'],
-                ['id' => 'diagnosis', 'name' => 'การวินิจฉัยโรค (Diagnosis)', 'description' => 'รายงานการวินิจฉัยโรคตาม ICD-10'],
-                ['id' => 'lab_report', 'name' => 'รายงานผลแล็บ (Lab Report)', 'description' => 'ข้อมูลการสั่งและผลตรวจทางห้องปฏิบัติการ'],
-                ['id' => 'drug_report', 'name' => 'รายงานการใช้ยา (Drug Usage)', 'description' => 'ข้อมูลการสั่งยาผู้ป่วยนอก'],
-                ['id' => 'xray_report', 'name' => 'รายงาน X-ray (X-ray Report)', 'description' => 'ข้อมูลการส่งตรวจทางรังสีวิทยา'],
-                ['id' => 'ipd_admission', 'name' => 'ผู้ป่วยใน (IPD Admissions)', 'description' => 'ข้อมูลการรับผู้ป่วยไว้รักษาในโรงพยาบาล'],
-            ]
+            'connection' => $status,
+            'reports' => $this->reports->reportCatalog(),
+            'defaults' => [
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'limit' => 5000,
+            ],
+            'filter_options' => $this->filterOptions(),
+            'presets' => HosxpReportPreset::query()
+                ->where(function ($q) use ($userId) {
+                    $q->where('user_id', $userId)->orWhere('is_shared', true);
+                })
+                ->orderBy('name')
+                ->get(['id', 'name', 'report_id', 'params', 'is_shared', 'user_id']),
+            'scheduled_reports' => HosxpScheduledReport::query()
+                ->where('user_id', $userId)
+                ->orderByDesc('is_active')
+                ->orderBy('name')
+                ->get(),
         ]);
     }
 
-    public function generate(Request $request)
+    public function preview(Request $request): JsonResponse
     {
-        $request->validate([
+        $params = $this->validatedParams($request);
+
+        try {
+            return response()->json($this->reports->preview($params['report_id'], $params));
+        } catch (\Throwable $e) {
+            return response()->json(['error' => true, 'message' => $e->getMessage()], 422);
+        }
+    }
+
+    public function generate(Request $request): StreamedResponse
+    {
+        return $this->streamExcel($this->validatedParams($request));
+    }
+
+    public function generatePdf(Request $request)
+    {
+        $params = $this->validatedParams($request);
+        $reportId = $params['report_id'];
+
+        try {
+            $payload = $this->reports->exportPayload($reportId, $params, 500);
+            [$fontRegularUri, $fontBoldUri] = $this->pdf->fontUris();
+
+            $html = view('hosxp.report-pdf', [
+                'title' => $this->reports->reportTitle($reportId),
+                'headers' => $payload['headers'],
+                'rows' => $payload['rows'],
+                'startDate' => $params['start_date'] ?? '-',
+                'endDate' => $params['end_date'] ?? '-',
+                'total' => $payload['total'],
+                'truncated' => $payload['truncated'],
+                'generatedAt' => now()->timezone('Asia/Bangkok')->format('d/m/Y H:i:s'),
+                'fontRegularUri' => $fontRegularUri,
+                'fontBoldUri' => $fontBoldUri,
+            ])->render();
+
+            $binary = $this->pdf->render($html);
+            $fileName = $reportId.'_'.date('Ymd_His').'.pdf';
+
+            return response($binary, 200, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'attachment; filename="'.$fileName.'"',
+            ]);
+        } catch (\Throwable $e) {
+            return response('ไม่สามารถสร้าง PDF: '.$e->getMessage(), 500);
+        }
+    }
+
+    public function storePreset(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'name' => 'required|string|max:120',
             'report_id' => 'required|string',
-            'start_date' => 'nullable|date',
-            'end_date' => 'nullable|date',
-            'limit' => 'nullable|integer|min:1|max:10000',
-            'has_lab' => 'nullable|boolean',
-            'has_drug' => 'nullable|boolean',
-            'lab_item_name' => 'nullable|string',
-            'lab_result_max' => 'nullable|numeric',
-            'drug_name' => 'nullable|string',
+            'params' => 'required|array',
+            'is_shared' => 'nullable|boolean',
         ]);
 
-        $reportId = $request->input('report_id');
-        $startDate = $request->input('start_date');
-        $endDate = $request->input('end_date');
-        $limit = $request->input('limit', 1000);
-        $hasLab = $request->boolean('has_lab');
-        $hasDrug = $request->boolean('has_drug');
-        $labItemName = $request->input('lab_item_name');
-        $labResultMax = $request->input('lab_result_max');
-        $drugName = $request->input('drug_name');
+        $preset = HosxpReportPreset::create([
+            'user_id' => Auth::id(),
+            'name' => $data['name'],
+            'report_id' => $data['report_id'],
+            'params' => $data['params'],
+            'is_shared' => $request->boolean('is_shared'),
+        ]);
 
-        $fileName = $reportId . '_' . date('Ymd_His') . '.xlsx';
+        return response()->json(['preset' => $preset]);
+    }
 
-        return new StreamedResponse(function () use ($reportId, $startDate, $endDate, $limit, $hasLab, $hasDrug, $labItemName, $labResultMax, $drugName) {
+    public function destroyPreset(HosxpReportPreset $preset): JsonResponse
+    {
+        if ($preset->user_id !== Auth::id() && ! Auth::user()?->hasRole(['admin', 'Admin'])) {
+            abort(403);
+        }
+        $preset->delete();
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function storeScheduled(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'name' => 'required|string|max:120',
+            'report_id' => 'required|string',
+            'params' => 'nullable|array',
+            'format' => 'required|in:xlsx,pdf',
+            'frequency' => 'required|in:daily,weekly,monthly',
+            'day_of_month' => 'nullable|integer|min:1|max:28',
+            'day_of_week' => 'nullable|integer|min:0|max:6',
+            'run_time' => 'nullable|date_format:H:i',
+        ]);
+
+        $schedule = HosxpScheduledReport::create([
+            'user_id' => Auth::id(),
+            'name' => $data['name'],
+            'report_id' => $data['report_id'],
+            'params' => $data['params'] ?? [],
+            'format' => $data['format'],
+            'frequency' => $data['frequency'],
+            'day_of_month' => $data['day_of_month'] ?? 1,
+            'day_of_week' => $data['day_of_week'] ?? 1,
+            'run_time' => ($data['run_time'] ?? '06:00').':00',
+            'is_active' => true,
+            'next_run_at' => now(),
+        ]);
+        $schedule->update(['next_run_at' => $schedule->computeNextRun()]);
+
+        return response()->json(['scheduled' => $schedule->fresh()]);
+    }
+
+    public function destroyScheduled(HosxpScheduledReport $scheduled): JsonResponse
+    {
+        if ($scheduled->user_id !== Auth::id()) {
+            abort(403);
+        }
+        $scheduled->delete();
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function downloadScheduled(HosxpScheduledReport $scheduled)
+    {
+        if ($scheduled->user_id !== Auth::id() && ! Auth::user()?->hasRole(['admin', 'Admin'])) {
+            abort(403);
+        }
+        if (! $scheduled->last_file_path) {
+            abort(404, 'ยังไม่มีไฟล์รายงาน');
+        }
+
+        $path = storage_path('app/'.$scheduled->last_file_path);
+        if (! file_exists($path)) {
+            abort(404, 'ไม่พบไฟล์รายงาน');
+        }
+
+        return response()->download($path);
+    }
+
+    public function checkConnection(): JsonResponse
+    {
+        return response()->json($this->connection->check());
+    }
+
+    private function streamExcel(array $params): StreamedResponse
+    {
+        $reportId = $params['report_id'];
+        $fileName = $reportId.'_'.date('Ymd_His').'.xlsx';
+
+        return new StreamedResponse(function () use ($params, $reportId) {
             $writer = WriterEntityFactory::createXLSXWriter();
             $writer->openToFile('php://output');
 
+            $titleStyle = (new StyleBuilder())->setFontBold()->setFontSize(12)->build();
+            $metaStyle = (new StyleBuilder())->setFontSize(10)->setFontColor(Color::rgb(80, 80, 80))->build();
+            $headerStyle = (new StyleBuilder())->setFontBold()->setBackgroundColor(Color::rgb(219, 234, 254))->build();
+
             try {
-                // Check connection
-                try {
-                    DB::connection('hosxp')->getPdo();
-                } catch (\Exception $e) {
-                    // Fallback for demo/testing if connection fails
-                    $this->generateMockData($writer, $reportId);
-                    $writer->close();
-                    return;
+                $title = $this->reports->reportTitle($reportId);
+                $writer->addRow(WriterEntityFactory::createRowFromArray(['รายงาน HOSxP: '.$title], $titleStyle));
+                $writer->addRow(WriterEntityFactory::createRowFromArray([
+                    'ช่วงวันที่',
+                    ($params['start_date'] ?? '-').' ถึง '.($params['end_date'] ?? '-'),
+                ], $metaStyle));
+                $writer->addRow(WriterEntityFactory::createRowFromArray(['ออกรายงานเมื่อ', date('Y-m-d H:i:s')], $metaStyle));
+                $writer->addRow(WriterEntityFactory::createRowFromArray(['']));
+
+                $isHeader = true;
+                $rowCount = 0;
+                foreach ($this->reports->exportRows($reportId, $params) as $row) {
+                    if ($isHeader) {
+                        $writer->addRow(WriterEntityFactory::createRowFromArray($row, $headerStyle));
+                        $isHeader = false;
+
+                        continue;
+                    }
+                    $writer->addRow(WriterEntityFactory::createRowFromArray($row));
+                    $rowCount++;
                 }
 
-                switch ($reportId) {
-                    case 'patient_list':
-                        $this->exportPatientList($writer, $startDate, $endDate, $limit);
-                        break;
-                    case 'opd_visit':
-                        $this->exportOpdVisits($writer, $startDate, $endDate, $limit, $hasLab, $hasDrug);
-                        break;
-                    case 'diagnosis':
-                        $this->exportDiagnosis($writer, $startDate, $endDate, $limit);
-                        break;
-                    case 'lab_report':
-                        $this->exportLabReport($writer, $startDate, $endDate, $limit, $labItemName, $labResultMax);
-                        break;
-                    case 'drug_report':
-                        $this->exportDrugReport($writer, $startDate, $endDate, $limit, $drugName);
-                        break;
-                    case 'xray_report':
-                        $this->exportXrayReport($writer, $startDate, $endDate, $limit);
-                        break;
-                    case 'ipd_admission':
-                        $this->exportIpdAdmissions($writer, $startDate, $endDate, $limit);
-                        break;
-                    default:
-                        $writer->addRow(WriterEntityFactory::createRowFromArray(['Error', 'Unknown Report ID']));
-                }
-            } catch (\Exception $e) {
-                $writer->addRow(WriterEntityFactory::createRowFromArray(['Error', $e->getMessage()]));
+                $writer->addRow(WriterEntityFactory::createRowFromArray(['']));
+                $writer->addRow(WriterEntityFactory::createRowFromArray(['จำนวนแถวข้อมูล', number_format($rowCount)], $metaStyle));
+            } catch (\Throwable $e) {
+                $writer->addRow(WriterEntityFactory::createRowFromArray(['ข้อผิดพลาด', $e->getMessage()]));
             }
 
             $writer->close();
         }, 200, [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+            'Content-Disposition' => 'attachment; filename="'.$fileName.'"',
         ]);
     }
 
-    private function generateMockData($writer, $reportId)
+    /** @return array<string, mixed> */
+    private function validatedParams(Request $request): array
     {
-        $writer->addRow(WriterEntityFactory::createRowFromArray(['Note', 'Database connection failed. Showing mock data.']));
-        
-        if ($reportId === 'patient_list') {
-            $writer->addRow(WriterEntityFactory::createRowFromArray(['HN', 'CID', 'Name', 'Birthdate']));
-            $writer->addRow(WriterEntityFactory::createRowFromArray(['000001', '1234567890123', 'John Doe', '1980-01-01']));
-            $writer->addRow(WriterEntityFactory::createRowFromArray(['000002', '9876543210987', 'Jane Smith', '1990-05-15']));
-        } elseif ($reportId === 'opd_visit') {
-            $writer->addRow(WriterEntityFactory::createRowFromArray(['VN', 'HN', 'Date', 'Department', 'Symptom']));
-            $writer->addRow(WriterEntityFactory::createRowFromArray(['2401010001', '000001', '2024-01-01', 'OPD', 'Fever']));
-        } elseif ($reportId === 'lab_report') {
-            $writer->addRow(WriterEntityFactory::createRowFromArray(['VN', 'HN', 'Date', 'Lab Item', 'Result']));
-            $writer->addRow(WriterEntityFactory::createRowFromArray(['2401010001', '000001', '2024-01-01', 'FBS', '100']));
-        } elseif ($reportId === 'drug_report') {
-            $writer->addRow(WriterEntityFactory::createRowFromArray(['VN', 'HN', 'Date', 'Drug Name', 'Qty']));
-            $writer->addRow(WriterEntityFactory::createRowFromArray(['2401010001', '000001', '2024-01-01', 'Paracetamol', '20']));
-        } else {
-            $writer->addRow(WriterEntityFactory::createRowFromArray(['Column 1', 'Column 2']));
-            $writer->addRow(WriterEntityFactory::createRowFromArray(['Data 1', 'Data 2']));
-        }
+        return $request->validate([
+            'report_id' => 'required|string',
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date',
+            'limit' => 'nullable|integer|min:1|max:50000',
+            'has_lab' => 'nullable|boolean',
+            'has_drug' => 'nullable|boolean',
+            'active_in_range' => 'nullable|boolean',
+            'lab_item_name' => 'nullable|string|max:120',
+            'lab_result_max' => 'nullable|numeric',
+            'lab_result_min' => 'nullable|numeric',
+            'drug_name' => 'nullable|string|max:120',
+            'visit_type' => 'nullable|string|in:OPD,IPD,opd,ipd',
+            'pttype' => 'nullable|string|max:20',
+            'department' => 'nullable|string|max:20',
+            'ward' => 'nullable|string|max:20',
+            'admit_status' => 'nullable|string|in:active,discharged,all',
+            'icd10' => 'nullable|string|max:10',
+            'icd10_prefix' => 'nullable|string|max:10',
+            'diagtype' => 'nullable|string|max:5',
+            'hn' => 'nullable|string|max:20',
+            'cid' => 'nullable|string|max:20',
+            'name' => 'nullable|string|max:120',
+        ]);
     }
 
-    private function exportPatientList($writer, $startDate, $endDate, $limit)
+    /** @return array<string, mixed> */
+    private function filterOptions(): array
     {
-        $header = ['HN', 'CID', 'First Name', 'Last Name', 'Birthdate', 'Province', 'District', 'Subdistrict'];
-        $writer->addRow(WriterEntityFactory::createRowFromArray($header));
+        try {
+            if (! $this->reports->connectionStatus()['connected']) {
+                return ['pttypes' => [], 'departments' => [], 'wards' => []];
+            }
 
-        $query = DB::connection('hosxp')->table('patient')
-            ->select('patient.hn', 'patient.cid', 'patient.fname', 'patient.lname', 'patient.birthdate', 
-                     'thaiaddress.chwpart', 'thaiaddress.amppart', 'thaiaddress.tmbpart')
-            ->leftJoin('thaiaddress', function($join) {
-                $join->on('patient.chwpart', '=', 'thaiaddress.chwpart')
-                     ->on('patient.amppart', '=', 'thaiaddress.amppart')
-                     ->on('patient.tmbpart', '=', 'thaiaddress.tmbpart');
-            });
+            $conn = \Illuminate\Support\Facades\DB::connection('hosxp');
 
-        if ($startDate) {
-            // Assuming we filter by registration date or similar if available, but patient table usually doesn't have a clear "created_at" for reporting range unless specified.
-            // Let's assume we just dump all or limit. For safety, let's limit.
-            $query->limit($limit);
-        } else {
-            $query->limit($limit);
-        }
-
-        foreach ($query->cursor() as $row) {
-            $writer->addRow(WriterEntityFactory::createRowFromArray((array)$row));
-        }
-    }
-
-    private function exportOpdVisits($writer, $startDate, $endDate, $limit, $hasLab, $hasDrug)
-    {
-        $header = ['VN', 'HN', 'Visit Date', 'Department', 'Symptom', 'BP Systolic', 'BP Diastolic'];
-        $writer->addRow(WriterEntityFactory::createRowFromArray($header));
-
-        $query = DB::connection('hosxp')->table('ovst')
-            ->join('opdscreen', 'ovst.vn', '=', 'opdscreen.vn')
-            ->select('ovst.vn', 'ovst.hn', 'ovst.vstdate', 'ovst.spclty', 'opdscreen.symptom', 'opdscreen.bpsys', 'opdscreen.bpdia');
-
-        if ($startDate) {
-            $query->whereDate('ovst.vstdate', '>=', $startDate);
-        }
-        if ($endDate) {
-            $query->whereDate('ovst.vstdate', '<=', $endDate);
-        }
-
-        if ($hasLab) {
-            $query->whereExists(function ($query) {
-                $query->select(DB::raw(1))
-                      ->from('lab_head')
-                      ->whereColumn('lab_head.vn', 'ovst.vn');
-            });
-        }
-
-        if ($hasDrug) {
-            $query->whereExists(function ($query) {
-                $query->select(DB::raw(1))
-                      ->from('opitemrece')
-                      ->whereColumn('opitemrece.vn', 'ovst.vn')
-                      ->where('opitemrece.icode', 'like', '1%'); // Assuming drugs start with 1, adjust as per HOSxP structure
-            });
-        }
-        
-        $query->limit($limit);
-
-        foreach ($query->cursor() as $row) {
-            $writer->addRow(WriterEntityFactory::createRowFromArray((array)$row));
-        }
-    }
-
-    private function exportDiagnosis($writer, $startDate, $endDate, $limit)
-    {
-        $header = ['VN', 'HN', 'Visit Date', 'ICD10', 'Diagnosis Type'];
-        $writer->addRow(WriterEntityFactory::createRowFromArray($header));
-
-        $query = DB::connection('hosxp')->table('ovstdiag')
-            ->join('ovst', 'ovstdiag.vn', '=', 'ovst.vn')
-            ->select('ovstdiag.vn', 'ovstdiag.hn', 'ovst.vstdate', 'ovstdiag.icd10', 'ovstdiag.diagtype');
-
-        if ($startDate) {
-            $query->whereDate('ovst.vstdate', '>=', $startDate);
-        }
-        if ($endDate) {
-            $query->whereDate('ovst.vstdate', '<=', $endDate);
-        }
-
-        $query->limit($limit);
-
-        foreach ($query->cursor() as $row) {
-            $writer->addRow(WriterEntityFactory::createRowFromArray((array)$row));
-        }
-    }
-
-    private function exportLabReport($writer, $startDate, $endDate, $limit, $labItemName = null, $labResultMax = null)
-    {
-        $header = ['VN', 'HN', 'Order Date', 'Lab Item Code', 'Lab Item Name', 'Lab Result', 'Normal Value'];
-        $writer->addRow(WriterEntityFactory::createRowFromArray($header));
-
-        $query = DB::connection('hosxp')->table('lab_order')
-            ->join('lab_head', 'lab_order.lab_order_number', '=', 'lab_head.lab_order_number')
-            ->leftJoin('lab_items', 'lab_order.lab_items_code', '=', 'lab_items.lab_items_code')
-            ->select('lab_head.vn', 'lab_head.hn', 'lab_head.order_date', 'lab_order.lab_items_code', 'lab_items.lab_items_name', 'lab_order.lab_order_result', 'lab_items.lab_items_normal_value');
-
-        if ($startDate) {
-            $query->whereDate('lab_head.order_date', '>=', $startDate);
-        }
-        if ($endDate) {
-            $query->whereDate('lab_head.order_date', '<=', $endDate);
-        }
-
-        if ($labItemName) {
-            $query->where('lab_items.lab_items_name', 'like', '%' . $labItemName . '%');
-        }
-
-        if ($labResultMax !== null && $labResultMax !== '') {
-            // Note: lab_order_result is often varchar, so numeric comparison might be tricky or require casting.
-            // We'll attempt a simple comparison, but in real HOSxP this might need REGEXP or casting.
-            // For safety/simplicity in this generic implementation, we'll use whereRaw with casting if possible, 
-            // or just standard where if we assume it's numeric.
-            // Let's try standard where first, but be aware of non-numeric results.
-            $query->whereRaw('CAST(lab_order.lab_order_result AS DECIMAL(10,2)) <= ?', [$labResultMax]);
-        }
-
-        $query->limit($limit);
-
-        foreach ($query->cursor() as $row) {
-            $writer->addRow(WriterEntityFactory::createRowFromArray((array)$row));
-        }
-    }
-
-    private function exportDrugReport($writer, $startDate, $endDate, $limit, $drugName = null)
-    {
-        $header = ['VN', 'HN', 'Date', 'Drug Code', 'Drug Name', 'Qty', 'Price'];
-        $writer->addRow(WriterEntityFactory::createRowFromArray($header));
-
-        $query = DB::connection('hosxp')->table('opitemrece')
-            ->join('drugitems', 'opitemrece.icode', '=', 'drugitems.icode')
-            ->select('opitemrece.vn', 'opitemrece.hn', 'opitemrece.vstdate', 'opitemrece.icode', 'drugitems.name', 'opitemrece.qty', 'opitemrece.sum_price');
-
-        if ($startDate) {
-            $query->whereDate('opitemrece.vstdate', '>=', $startDate);
-        }
-        if ($endDate) {
-            $query->whereDate('opitemrece.vstdate', '<=', $endDate);
-        }
-
-        if ($drugName) {
-            $query->where('drugitems.name', 'like', '%' . $drugName . '%');
-        }
-
-        $query->limit($limit);
-
-        foreach ($query->cursor() as $row) {
-            $writer->addRow(WriterEntityFactory::createRowFromArray((array)$row));
-        }
-    }
-
-    private function exportXrayReport($writer, $startDate, $endDate, $limit)
-    {
-        $header = ['VN', 'HN', 'Date', 'X-ray Item', 'Result Note'];
-        $writer->addRow(WriterEntityFactory::createRowFromArray($header));
-
-        // Assuming standard HOSxP xray tables, might vary
-        $query = DB::connection('hosxp')->table('xray_report')
-            ->join('xray_items', 'xray_report.xray_items_code', '=', 'xray_items.xray_items_code')
-            ->select('xray_report.vn', 'xray_report.hn', 'xray_report.report_date', 'xray_items.xray_items_name', 'xray_report.report_text');
-
-        if ($startDate) {
-            $query->whereDate('xray_report.report_date', '>=', $startDate);
-        }
-        if ($endDate) {
-            $query->whereDate('xray_report.report_date', '<=', $endDate);
-        }
-
-        $query->limit($limit);
-
-        foreach ($query->cursor() as $row) {
-            $writer->addRow(WriterEntityFactory::createRowFromArray((array)$row));
-        }
-    }
-
-    private function exportIpdAdmissions($writer, $startDate, $endDate, $limit)
-    {
-        $header = ['AN', 'HN', 'Admit Date', 'Discharge Date', 'Ward', 'Diagnosis'];
-        $writer->addRow(WriterEntityFactory::createRowFromArray($header));
-
-        $query = DB::connection('hosxp')->table('ipt')
-            ->leftJoin('iptdiag', function($join) {
-                $join->on('ipt.an', '=', 'iptdiag.an')
-                     ->where('iptdiag.diagtype', '=', '1'); // Principal Diagnosis
-            })
-            ->select('ipt.an', 'ipt.hn', 'ipt.regdate', 'ipt.dchdate', 'ipt.ward', 'iptdiag.icd10');
-
-        if ($startDate) {
-            $query->whereDate('ipt.regdate', '>=', $startDate);
-        }
-        if ($endDate) {
-            $query->whereDate('ipt.regdate', '<=', $endDate);
-        }
-
-        $query->limit($limit);
-
-        foreach ($query->cursor() as $row) {
-            $writer->addRow(WriterEntityFactory::createRowFromArray((array)$row));
+            return [
+                'pttypes' => $conn->table('pttype')->select('pttype as code', 'name')->orderBy('name')->limit(200)->get(),
+                'departments' => $conn->table('kskdepartment')->select('depcode as code', 'department as name')->orderBy('department')->limit(200)->get(),
+                'wards' => $conn->table('ward')->select('ward as code', 'name')->orderBy('name')->limit(100)->get(),
+            ];
+        } catch (\Throwable) {
+            return ['pttypes' => [], 'departments' => [], 'wards' => []];
         }
     }
 }

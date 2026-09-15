@@ -1,5 +1,6 @@
 import AppLogoIcon from '@/components/app-logo-icon';
 import { Link, usePage } from '@inertiajs/react';
+import { assetUrl, storageUrl } from '@/lib/asset';
 import { useEffect, useState } from 'react';
 import { Hospital, Shield, Heart } from 'lucide-react';
 
@@ -25,7 +26,7 @@ export default function AuthSimpleLayout({ children, title, description }: AuthL
         };
     };
 
-    const primaryColor = setting?.warna || '#0ea5e9';
+    const primaryColor = setting?.warna || '#7C3AED';
     const primaryForeground = '#ffffff';
 
     useEffect(() => {
@@ -42,7 +43,7 @@ export default function AuthSimpleLayout({ children, title, description }: AuthL
     return (
         <div className="relative min-h-svh overflow-hidden">
             {/* Animated Background */}
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
+            <div className="absolute inset-0 bg-gradient-to-br from-purple-50 via-violet-50 to-fuchsia-50 dark:from-gray-900 dark:via-purple-950 dark:to-gray-900">
                 {/* Animated Circles */}
                 <div className="absolute top-0 -left-4 w-72 h-72 bg-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob dark:opacity-20"></div>
                 <div className="absolute top-0 -right-4 w-72 h-72 bg-yellow-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-2000 dark:opacity-20"></div>
@@ -71,9 +72,9 @@ export default function AuthSimpleLayout({ children, title, description }: AuthL
                     }`}
                 >
                     {/* Card */}
-                    <div className="relative rounded-2xl bg-white/80 backdrop-blur-xl shadow-2xl shadow-blue-500/10 dark:bg-gray-800/80 dark:shadow-none border border-white/20 dark:border-gray-700/50 overflow-hidden">
+                    <div className="relative rounded-2xl bg-white/80 backdrop-blur-xl shadow-2xl shadow-purple-500/10 dark:bg-gray-800/80 dark:shadow-none border border-white/20 dark:border-gray-700/50 overflow-hidden">
                         {/* Gradient Top Border */}
-                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500"></div>
+                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-violet-400 via-purple-400 to-fuchsia-400"></div>
                         
                         <div className="p-8 sm:p-10">
                             <div className="flex flex-col gap-8">
@@ -86,12 +87,12 @@ export default function AuthSimpleLayout({ children, title, description }: AuthL
                                         {/* Simple Single Border Logo */}
                                         <div className="relative">
                                             {/* Subtle glow on hover */}
-                                            <div className="absolute inset-[-6px] rounded-2xl bg-blue-500/20 blur-lg opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                            <div className="absolute inset-[-6px] rounded-2xl bg-purple-500/20 blur-lg opacity-0 group-hover:opacity-100 transition-opacity"></div>
                                             
                                             {/* Logo container - single border */}
-                                            <div className="relative flex h-24 w-24 items-center justify-center rounded-2xl bg-gradient-to-br from-white via-white to-gray-50 ring-2 ring-blue-500/50 shadow-xl shadow-blue-500/20 transform transition-all duration-500 group-hover:scale-105 group-hover:ring-blue-500">
+                                            <div className="relative flex h-24 w-24 items-center justify-center rounded-2xl bg-gradient-to-br from-white via-white to-gray-50 ring-2 ring-purple-400/50 shadow-xl shadow-purple-500/20 transform transition-all duration-500 group-hover:scale-105 group-hover:ring-purple-400">
                                                 <img
-                                                    src={setting?.logo ? `/storage/${setting.logo}` : '/logosmh.png'}
+                                                    src={setting?.logo ? storageUrl(setting.logo) : assetUrl('logosmh.png')}
                                                     alt="Logo"
                                                     className="size-16 object-contain drop-shadow-md transition-transform duration-500 group-hover:scale-110"
                                                 />
@@ -100,7 +101,7 @@ export default function AuthSimpleLayout({ children, title, description }: AuthL
                                         
                                         {/* App name */}
                                         <div className="text-center">
-                                            <span className="block text-2xl font-black tracking-tight bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 bg-clip-text text-transparent bg-[length:200%_auto] group-hover:animate-gradient-x dark:from-blue-400 dark:via-purple-400 dark:to-blue-400">
+                                            <span className="block text-2xl font-black tracking-tight bg-gradient-to-r from-violet-500 via-purple-500 to-violet-500 bg-clip-text text-transparent bg-[length:200%_auto] group-hover:animate-gradient-x dark:from-violet-400 dark:via-purple-400 dark:to-violet-400">
                                                 {setting?.nama_app}
                                             </span>
                                             <span className="text-xs font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400">

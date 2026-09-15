@@ -4,7 +4,6 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>เข้าสู่ระบบ LINE สำเร็จ</title>
-    <meta http-equiv="refresh" content="1;url={{ $transferUrl }}">
     <style>
         * { box-sizing: border-box; }
         body {

@@ -12,9 +12,12 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('vehicle_bookings', function (Blueprint $table) {
-            // Track who completed the booking (should be the driver)
             if (!Schema::hasColumn('vehicle_bookings', 'completed_by')) {
-                $table->foreignId('completed_by')->nullable()->after('completed_at')->constrained('users')->nullOnDelete();
+                if (Schema::hasColumn('vehicle_bookings', 'completed_at')) {
+                    $table->foreignId('completed_by')->nullable()->after('completed_at')->constrained('users')->nullOnDelete();
+                } else {
+                    $table->foreignId('completed_by')->nullable()->constrained('users')->nullOnDelete();
+                }
             }
         });
     }

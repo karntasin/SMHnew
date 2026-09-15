@@ -3,195 +3,193 @@
 namespace App\Services\Risk;
 
 /**
- * Thai ASCVD Risk Calculator
- * Based on modified Framingham Risk Score for Thai population
- * 
- * References:
- * - Thai CVD Risk Score
- * - Framingham Heart Study adapted for Asian populations
- * 
- * Risk factors considered:
- * - Age (35-70 years)
- * - Sex (male/female)
- * - Systolic Blood Pressure (SBP)
- * - Total Cholesterol (TC)
- * - HDL Cholesterol
- * - Diabetes Mellitus (DM)
- * - Current Smoking
- * - Hypertension Treatment
+ * Thai CV Risk Score calculator for 10-year ASCVD risk in Thai adults.
+ *
+ * Formula source: official Ramathibodi Thai CV Risk Score 2.5 calculator
+ * (EGAT pooled 20-year cohort). The official calculator uses total
+ * cholesterol when available, otherwise waist-to-height ratio or waist.
  */
 class ThaiAscvdCalculator
 {
-    // Age coefficients (log scale)
-    private const AGE_MALE = 3.06117;
-    private const AGE_FEMALE = 2.32888;
-    
-    // Total Cholesterol coefficients
-    private const TC_MALE = 1.12370;
-    private const TC_FEMALE = 1.20904;
-    
-    // HDL Cholesterol coefficients (inverse relationship)
-    private const HDL_MALE = -0.93263;
-    private const HDL_FEMALE = -0.70833;
-    
-    // Systolic BP coefficients (treated)
-    private const SBP_TREATED_MALE = 1.93303;
-    private const SBP_TREATED_FEMALE = 2.76157;
-    
-    // Systolic BP coefficients (untreated)
-    private const SBP_UNTREATED_MALE = 1.99881;
-    private const SBP_UNTREATED_FEMALE = 2.82263;
-    
-    // Smoking coefficients
-    private const SMOKING_MALE = 0.65451;
-    private const SMOKING_FEMALE = 0.52873;
-    
-    // Diabetes coefficients
-    private const DM_MALE = 0.57367;
-    private const DM_FEMALE = 0.69154;
-    
-    // Baseline survival (10-year)
-    private const BASELINE_SURVIVAL_MALE = 0.88936;
-    private const BASELINE_SURVIVAL_FEMALE = 0.94833;
-    
-    // Mean values for centering
-    private const MEAN_MALE = 23.9802;
-    private const MEAN_FEMALE = 26.1931;
+    private const SURVIVAL_ROOT = 0.964588;
 
-    /**
-     * Calculate 10-year cardiovascular disease risk using Thai ASCVD formula
-     * 
-     * @param array $data Patient data with keys: sex, age, sbp, tc, hdl, dm, smoker, on_treatment
-     * @return array|null Returns ['risk' => float, 'tc_used' => float, 'tc_estimated' => bool, 'hdl_used' => float, 'hdl_estimated' => bool] or null if invalid
-     */
     public function calculate(array $data): ?array
     {
-        // Extract and validate input parameters
         $sex = $data['sex'] ?? null;
-        $age = $data['age'] ?? null;
-        $sbp = $data['sbp'] ?? null;
-        $tc = $data['tc'] ?? null;
-        $hdl = $data['hdl'] ?? null;
-        $dm = $data['dm'] ?? false;
-        $smoker = $data['smoker'] ?? false;
-        $onTreatment = $data['on_treatment'] ?? false;
+        $age = isset($data['age']) ? (int) $data['age'] : null;
+        $sbp = $this->numeric($data['sbp'] ?? null);
+        $tc = $this->numeric($data['tc'] ?? null);
+        $waist = $this->numeric($data['waist'] ?? null);
+        $height = $this->numeric($data['height'] ?? null);
+        $whRatio = $this->numeric($data['wh_ratio'] ?? null);
+        $dm = (bool) ($data['dm'] ?? false);
+        $smoker = (bool) ($data['smoker'] ?? false);
 
-        // Validation: Required fields
-        if (!$sex || !$age || !$sbp) {
+        if (! in_array($sex, ['male', 'female'], true) || $age === null || $sbp === null) {
             return null;
         }
 
-        // Validation: Age must be between 35-70 for Thai ASCVD
+        // The official public guidance says the estimator applies to Thai people age 35-70.
         if ($age < 35 || $age > 70) {
             return null;
         }
 
-        // Validation: Sex must be male or female
-        if (!in_array($sex, ['male', 'female'])) {
+        if ($sbp < 70 || $sbp > 260) {
             return null;
         }
 
-        // Validation: SBP reasonable range (90-250 mmHg)
-        if ($sbp < 90 || $sbp > 250) {
+        $sexCode = $sex === 'male' ? 1 : 0;
+        $smokeCode = $smoker ? 1 : 0;
+        $dmCode = $dm ? 1 : 0;
+        $sbpUsed = min(220, max(70, $sbp));
+        $tcUsed = $tc !== null && $tc > 0 ? min(400, max(80, $tc)) : null;
+        $waistUsed = $waist !== null && $waist > 0 ? min(200, $waist) : null;
+        $heightUsed = $height !== null && $height > 0 ? min(230, $height) : null;
+
+        if (($whRatio === null || $whRatio <= 0) && $waistUsed !== null && $heightUsed !== null) {
+            $whRatio = $waistUsed / $heightUsed;
+        }
+
+        $method = null;
+        $score = null;
+        $risk = null;
+        $compareScore = null;
+        $compareRisk = null;
+
+        [$compareSbp, $compareWhr, $compareWaist] = $this->comparisonInputs($sexCode, $age);
+
+        if ($tcUsed !== null) {
+            $method = 'lipid';
+            $score = (0.08183 * $age)
+                + (0.39499 * $sexCode)
+                + (0.02084 * $sbpUsed)
+                + (0.69974 * $dmCode)
+                + (0.00212 * $tcUsed)
+                + (0.41916 * $smokeCode);
+            $risk = $this->riskFromScore($score, 7.04423);
+
+            $compareScore = (0.08183 * $age)
+                + (0.39499 * $sexCode)
+                + (0.02084 * $compareSbp)
+                + (0.00212 * 200);
+            $compareRisk = $this->riskFromScore($compareScore, 7.04423);
+        } elseif ($whRatio !== null && $whRatio > 0) {
+            $method = 'waist_height';
+            $whrUsed = min(1.2, max(0.3, $whRatio));
+            $score = (0.079 * $age)
+                + (0.128 * $sexCode)
+                + (0.019350987 * $sbpUsed)
+                + (0.58454 * $dmCode)
+                + (3.512566 * $whrUsed)
+                + (0.459 * $smokeCode);
+            $risk = $this->riskFromScore($score, 7.712325);
+
+            $compareScore = (0.079 * $age)
+                + (0.128 * $sexCode)
+                + (0.019350987 * $compareSbp)
+                + (3.512566 * $compareWhr);
+            $compareRisk = $this->riskFromScore($compareScore, 7.712325);
+        } elseif ($waistUsed !== null) {
+            $method = 'waist';
+            $score = (0.08372 * $age)
+                + (0.05988 * $sexCode)
+                + (0.02034 * $sbpUsed)
+                + (0.59953 * $dmCode)
+                + (0.01283 * $waistUsed)
+                + (0.459 * $smokeCode);
+            $risk = $this->riskFromScore($score, 7.31047);
+
+            $compareScore = (0.08372 * $age)
+                + (0.05988 * $sexCode)
+                + (0.02034 * $compareSbp)
+                + (0.01283 * $compareWaist);
+            $compareRisk = $this->riskFromScore($compareScore, 7.31047);
+        }
+
+        if ($risk === null) {
             return null;
         }
-
-        // Track if values are estimated
-        $tcEstimated = false;
-        $hdlEstimated = false;
-        $tcUsed = $tc;
-        $hdlUsed = $hdl;
-
-        // Optional: TC and HDL for more accurate calculation
-        // If not available, use population averages
-        if (!$tc || $tc < 100 || $tc > 400) {
-            // Average TC for Thai population: 200 mg/dL
-            $tcUsed = 200;
-            $tcEstimated = true;
-        }
-
-        if (!$hdl || $hdl < 20 || $hdl > 100) {
-            // Average HDL: 50 for male, 60 for female
-            $hdlUsed = ($sex === 'male') ? 50 : 60;
-            $hdlEstimated = true;
-        }
-
-        // Calculate risk score using Framingham-based formula
-        $risk = $this->calculateFraminghamBasedRisk(
-            $sex,
-            $age,
-            $sbp,
-            $tcUsed,
-            $hdlUsed,
-            $dm,
-            $smoker,
-            $onTreatment
-        );
 
         return [
-            'risk' => $risk,
+            'risk' => round($risk * 100, 2),
+            'risk_ratio' => $compareRisk > 0 ? round($risk / $compareRisk, 2) : null,
+            'compare_risk' => round($compareRisk * 100, 2),
+            'score' => round($score, 5),
+            'compare_score' => round($compareScore, 5),
+            'method' => $method,
+            'method_label' => $this->methodLabel($method),
+            'category' => $this->category($risk * 100),
             'tc_used' => $tcUsed,
-            'tc_estimated' => $tcEstimated,
-            'hdl_used' => $hdlUsed,
-            'hdl_estimated' => $hdlEstimated,
+            'tc_estimated' => false,
+            'hdl_used' => null,
+            'hdl_estimated' => false,
+            'waist_used' => $waistUsed,
+            'height_used' => $heightUsed,
+            'wh_ratio_used' => $whRatio !== null ? round($whRatio, 4) : null,
+            'sbp_used' => $sbpUsed,
         ];
     }
 
-    private function calculateFraminghamBasedRisk(
-        string $sex,
-        int $age,
-        float $sbp,
-        float $tc,
-        float $hdl,
-        bool $dm,
-        bool $smoker,
-        bool $onTreatment
-    ): float {
-        $isMale = ($sex === 'male');
+    private function numeric(mixed $value): ?float
+    {
+        return is_numeric($value) ? (float) $value : null;
+    }
 
-        // Natural logarithms of continuous variables
-        $lnAge = log($age);
-        $lnTC = log($tc);
-        $lnHDL = log($hdl);
-        $lnSBP = log($sbp);
+    /** @return array{0: int, 1: float, 2: int} */
+    private function comparisonInputs(int $sexCode, int $age): array
+    {
+        $compareSbp = 120;
+        $compareWhr = 0.52667;
+        $compareWaist = 79;
 
-        // Select sex-specific coefficients
-        $coefAge = $isMale ? self::AGE_MALE : self::AGE_FEMALE;
-        $coefTC = $isMale ? self::TC_MALE : self::TC_FEMALE;
-        $coefHDL = $isMale ? self::HDL_MALE : self::HDL_FEMALE;
-        $coefSBP = $onTreatment 
-            ? ($isMale ? self::SBP_TREATED_MALE : self::SBP_TREATED_FEMALE)
-            : ($isMale ? self::SBP_UNTREATED_MALE : self::SBP_UNTREATED_FEMALE);
-        $coefSmoking = $isMale ? self::SMOKING_MALE : self::SMOKING_FEMALE;
-        $coefDM = $isMale ? self::DM_MALE : self::DM_FEMALE;
-        
-        $baselineSurvival = $isMale ? self::BASELINE_SURVIVAL_MALE : self::BASELINE_SURVIVAL_FEMALE;
-        $mean = $isMale ? self::MEAN_MALE : self::MEAN_FEMALE;
-
-        // Calculate individual risk sum
-        $riskSum = 0;
-        $riskSum += $coefAge * $lnAge;
-        $riskSum += $coefTC * $lnTC;
-        $riskSum += $coefHDL * $lnHDL;
-        $riskSum += $coefSBP * $lnSBP;
-        
-        if ($smoker) {
-            $riskSum += $coefSmoking;
-        }
-        
-        if ($dm) {
-            $riskSum += $coefDM;
+        if ($sexCode === 1) {
+            $compareWhr = 0.58125;
+            $compareWaist = 93;
+            if ($age > 60) {
+                $compareSbp = 132;
+            }
+        } else {
+            if ($age <= 60) {
+                $compareSbp = 115;
+            } else {
+                $compareSbp = 130;
+            }
         }
 
-        // Calculate 10-year CVD risk
-        $risk = 1 - pow($baselineSurvival, exp($riskSum - $mean));
-        
-        // Convert to percentage and round
-        $riskPercent = $risk * 100;
-        
-        // Cap between 0-100%
-        $riskPercent = max(0, min(100, $riskPercent));
+        return [$compareSbp, $compareWhr, $compareWaist];
+    }
 
-        return round($riskPercent, 1);
+    private function riskFromScore(float $score, float $constant): float
+    {
+        $risk = 1 - pow(self::SURVIVAL_ROOT, exp($score - $constant));
+
+        return max(0, min(1, $risk));
+    }
+
+    private function methodLabel(string $method): string
+    {
+        return match ($method) {
+            'lipid' => 'ใช้ผลเลือด Total Cholesterol',
+            'waist_height' => 'ไม่มีผลเลือด ใช้รอบเอว/ส่วนสูง',
+            'waist' => 'ไม่มีผลเลือด ใช้รอบเอว',
+            default => 'ไม่ระบุวิธีคำนวณ',
+        };
+    }
+
+    private function category(float $riskPercent): array
+    {
+        if ($riskPercent < 10) {
+            return ['key' => 'low', 'label' => 'เสี่ยงต่ำ', 'color' => 'green'];
+        }
+
+        if ($riskPercent < 20) {
+            return ['key' => 'moderate', 'label' => 'เสี่ยงปานกลาง', 'color' => 'yellow'];
+        }
+
+        if ($riskPercent <= 30) {
+            return ['key' => 'high', 'label' => 'เสี่ยงสูง', 'color' => 'orange'];
+        }
+
+        return ['key' => 'very_high', 'label' => 'เสี่ยงสูงมาก', 'color' => 'red'];
     }
 }

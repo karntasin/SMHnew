@@ -81,6 +81,7 @@
         <thead>
             <tr>
                 <th>ประเภท</th>
+                <th>รูปแบบ</th>
                 <th class="num">รายการยา</th>
                 <th class="num">จำนวนรวม</th>
                 <th class="num">มูลค่ารวม (บาท)</th>
@@ -88,15 +89,30 @@
         </thead>
         <tbody>
             @foreach ($byForm as $item)
-                <tr>
-                    <td>{{ $item['label'] }}</td>
-                    <td class="num">{{ number_format($item['drug_count']) }}</td>
-                    <td class="num">{{ number_format($item['total_qty'], 0) }}</td>
-                    <td class="num">{{ number_format($item['total_amount'], 2) }}</td>
-                </tr>
+                @if (!empty($item['subtypes']))
+                    @foreach ($item['subtypes'] as $index => $sub)
+                        <tr>
+                            @if ($index === 0)
+                                <td rowspan="{{ count($item['subtypes']) }}">{{ $item['label'] }}</td>
+                            @endif
+                            <td>{{ $sub['label'] }}</td>
+                            <td class="num">{{ number_format($sub['drug_count']) }}</td>
+                            <td class="num">{{ number_format($sub['total_qty'], 0) }}</td>
+                            <td class="num">{{ number_format($sub['total_amount'], 2) }}</td>
+                        </tr>
+                    @endforeach
+                @else
+                    <tr>
+                        <td>{{ $item['label'] }}</td>
+                        <td>-</td>
+                        <td class="num">{{ number_format($item['drug_count']) }}</td>
+                        <td class="num">{{ number_format($item['total_qty'], 0) }}</td>
+                        <td class="num">{{ number_format($item['total_amount'], 2) }}</td>
+                    </tr>
+                @endif
             @endforeach
             <tr class="grand">
-                <td>รวมทั้งหมด</td>
+                <td colspan="3">รวมทั้งหมด</td>
                 <td class="num">{{ number_format($drugCount) }}</td>
                 <td class="num">{{ number_format($totalQty, 0) }}</td>
                 <td class="num">{{ number_format($totalAmount, 2) }}</td>
@@ -161,7 +177,7 @@
 
     <div class="footer">
         ข้อมูลจาก HOSxP (opitemrece × drugitems) · จัดกลุ่มประเภทจากหน่วยยา (units):
-        ยาเม็ด / ยาน้ำ / ยาฉีด / อื่นๆ
+        ยาเม็ด (Tab/แคปซูล/Sachet/กระปุก/กล่อง) · ยาน้ำ (ขวด/ซอง) · ยาฉีด (Amp/Vial/Syringe/หลอด/Unit/Dose/Pen) · ยาใช้ภายนอก (หลอด/Patch)
     </div>
 </body>
 </html>

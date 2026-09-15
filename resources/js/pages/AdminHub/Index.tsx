@@ -14,7 +14,9 @@ import {
   Inbox,
   Send,
   CheckSquare,
-  Building2
+  Building2,
+  Stethoscope,
+  ClipboardList
 } from 'lucide-react';
 import { useTranslation } from '@/hooks/use-translation';
 import { cn } from '@/lib/utils';
@@ -36,6 +38,7 @@ export default function AdminHub() {
         { label: t('Book Room'), href: '/administration/rooms?action=create' },
         { label: t('My Bookings'), href: '/administration/rooms/my' },
         { label: t('Calendar'), href: '/administration/rooms/calendar' },
+        { label: 'ตั้งค่าห้อง', href: '/administration/rooms/settings' },
       ]
     },
     {
@@ -61,13 +64,13 @@ export default function AdminHub() {
       color: 'text-green-600',
       bg: 'bg-green-100',
       gradient: 'from-green-500 to-emerald-500',
-      href: '/vehicles/bookings',
+      href: '/vehicles',
       links: [
-        { label: t('Vehicle Schedule'), href: '/vehicles/calendar' },
+        { label: 'เลือกรถ', href: '/vehicles' },
         { label: t('Book Vehicle'), href: '/vehicles/bookings/create' },
         { label: t('Vehicle Bookings'), href: '/vehicles/bookings' },
-        { label: t('Manage Vehicles'), href: '/vehicles/manage' },
-        { label: t('Settings'), href: '/vehicles/settings' },
+        { label: t('Vehicle Schedule'), href: '/vehicles/calendar' },
+        { label: t('Manage Vehicles'), href: '/vehicles/settings' },
       ]
     },
     {
@@ -77,11 +80,43 @@ export default function AdminHub() {
       color: 'text-purple-600',
       bg: 'bg-purple-100',
       gradient: 'from-purple-500 to-violet-500',
-      href: '/documents/dashboard',
+      href: route('documents.dashboard'),
       links: [
-        { label: 'Dashboard', href: '/documents/dashboard' },
-        { label: t('Document List'), href: '/documents' },
-        { label: t('Create Document'), href: '/documents/create' },
+        { label: t('แดชบอร์ดหนังสือ'), href: route('documents.dashboard') },
+        { label: t('รายการหนังสือ'), href: route('documents.index') },
+        { label: t('ลงทะเบียนรับหนังสือ'), href: route('documents.create') },
+        { label: t('ระหว่างนำเรียน'), href: route('documents.pendingReview') },
+        { label: t('กล่องงานผู้อำนวยการ'), href: route('documents.director.index') },
+      ]
+    },
+    {
+      title: t('Medical Equipment Borrowing'),
+      description: t('Borrow medical equipment, track stock and return status'),
+      icon: Stethoscope,
+      color: 'text-teal-600',
+      bg: 'bg-teal-100',
+      gradient: 'from-teal-500 to-cyan-500',
+      href: route('equipment-borrowing.dashboard'),
+      links: [
+        { label: t('Equipment Borrowing Dashboard'), href: route('equipment-borrowing.dashboard') },
+        { label: t('Request Equipment'), href: route('equipment-borrowing.borrowings.create') },
+        { label: t('My Borrowings'), href: route('equipment-borrowing.borrowings.my') },
+        { label: t('Manage Equipment'), href: route('equipment-borrowing.equipment.index') },
+        { label: t('Equipment Settings'), href: route('equipment-borrowing.settings.index') },
+      ]
+    },
+    {
+      title: 'ระบบบันทึกการลา',
+      description: 'ยื่นใบลา ตรวจสอบสถานะ อนุมัติใบลา ตามระเบียบ ทบ. พ.ศ. ๒๕๕๖',
+      icon: ClipboardList,
+      color: 'text-rose-600',
+      bg: 'bg-rose-100',
+      gradient: 'from-rose-500 to-pink-500',
+      href: route('leave.index'),
+      links: [
+        { label: 'ภาพรวมการลา', href: route('leave.index') },
+        { label: 'ยื่นใบลา', href: route('leave.create') },
+        { label: 'รออนุมัติ', href: route('leave.index', { tab: 'pending' }) },
       ]
     }
   ];

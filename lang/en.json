@@ -61,6 +61,14 @@
     "Maintenance Request": "Maintenance Request",
     "Vehicle Booking": "Vehicle Booking",
     "Document Management": "Document Management",
+    "Medical Equipment Borrowing": "Medical Equipment Borrowing",
+    "Borrow medical equipment, track stock and return status": "Borrow medical equipment, track stock and return status",
+    "Equipment Borrowing Dashboard": "Equipment Borrowing Dashboard",
+    "Request Equipment": "Request Equipment",
+    "My Borrowings": "My Borrowings",
+    "Manage Equipment": "Manage Equipment",
+    "Equipment Settings": "Equipment Settings",
+    "All Borrowings": "All Borrowings",
     "Quick Links": "Quick Links",
     "Overview": "Overview",
     "Manage WI, Procedure, Policy and regulations": "Manage WI, Procedure, Policy and regulations",
@@ -149,5 +157,8 @@
     "e.g. 100": "e.g. 100",
     "e.g. Paracetamol": "e.g. Paracetamol",
     "Lab Name": "Lab Name",
-    "Max Result": "Max Result"
+    "Max Result": "Max Result",
+    "Finance Reports": "Finance Reports",
+    "HOSxP Revenue by Coverage": "HOSxP Revenue by Coverage",
+    "BMS Dashboard": "BMS Dashboard"
 }

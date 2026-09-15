@@ -44,4 +44,41 @@ return [
         'welcome_message' => env('LINE_WELCOME_MESSAGE'),
         'add_friend_url' => env('LINE_OA_ADD_FRIEND_URL'),
     ],
+
+    'fshh_chat' => [
+        'url' => env('FSHH_CHAT_WORKER_URL', 'https://polished-river-f1bb.karntasin5.workers.dev'),
+        'secret' => env('FSHH_CHAT_SYNC_SECRET'),
+        'liff_url' => env('FSHH_CHAT_LIFF_URL', 'https://liff.line.me/2011190976-nGVbTYZD'),
+        'verify_ssl' => filter_var(env('FSHH_CHAT_VERIFY_SSL', true), FILTER_VALIDATE_BOOLEAN),
+    ],
+
+    'telegram' => [
+        'bot_token' => env('TELEGRAM_BOT_TOKEN'),
+        'chat_id' => env('TELEGRAM_CHAT_ID'),
+        'egfr_alerts' => [
+            'enabled' => filter_var(env('TELEGRAM_EGFR_ALERTS_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+            /** จำนวนวันย้อนหลังที่สแกน (ค่าเริ่มต้น = วันนี้) */
+            'lookback_days' => (int) env('TELEGRAM_EGFR_ALERTS_LOOKBACK_DAYS', 0),
+            /**
+             * ระดับที่ส่ง: contraindicated,alert,dose_exceeded,missing_egfr
+             * ค่าว่าง = contraindicated,alert,dose_exceeded
+             */
+            'severities' => env('TELEGRAM_EGFR_ALERTS_SEVERITIES', 'contraindicated,alert,dose_exceeded'),
+            'max_items' => (int) env('TELEGRAM_EGFR_ALERTS_MAX_ITEMS', 20),
+            /** per_item = แจ้งทีละใบสั่งเมื่อเข้าเงื่อนไข | digest = สรุปรวม */
+            'mode' => env('TELEGRAM_EGFR_ALERTS_MODE', 'per_item'),
+        ],
+        'stock_alerts' => [
+            'enabled' => filter_var(env('TELEGRAM_STOCK_ALERTS_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+        ],
+    ],
+
+    /*
+    | HOSxP desktop notify via ksklog (NOTIFYMESSAGE) — เขียนได้เฉพาะตาราง ksklog
+    */
+    'hosxp_notify' => [
+        'enabled' => filter_var(env('HOSXP_NOTIFY_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+        /** IP เครื่อง HOSxP ที่ login อยู่จริง ใช้เป็นตัวตนผู้ส่ง (ต้องมีใน onlineuser) */
+        'sender_computer' => env('HOSXP_NOTIFY_SENDER_COMPUTER', ''),
+    ],
 ];

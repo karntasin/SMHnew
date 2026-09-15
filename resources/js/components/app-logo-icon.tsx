@@ -1,5 +1,6 @@
 import { usePage } from '@inertiajs/react';
 import { cn } from '@/lib/utils';
+import { assetUrl, storageUrl } from '@/lib/asset';
 import type { SVGAttributes } from 'react';
 
 interface AppLogoIconProps extends SVGAttributes<SVGElement> {
@@ -25,7 +26,7 @@ export default function AppLogoIcon({ size = 'md', className, ...props }: AppLog
     xl: 'size-20',
   };
 
-  const logoSrc = setting?.logo ? `/storage/${setting.logo}` : '/logosmh.png';
+  const logoSrc = setting?.logo ? storageUrl(setting.logo) : assetUrl('logosmh.png');
 
   return (
     <div className={cn(

@@ -39,6 +39,8 @@ import {
     FileText,
     Image as ImageIcon
 } from 'lucide-react';
+import { storageUrl } from '@/lib/asset';
+import MaintenanceSubNav from './MaintenanceSubNav';
 
 interface MaintenanceImage {
     id: number;
@@ -195,7 +197,14 @@ export default function WorkOrders({ workOrders, stats, filters, userPositions, 
         ]}>
             <Head title="ใบงานซ่อมบำรุง" />
 
-            <div className="p-6 space-y-6">
+            <div className="relative min-h-screen overflow-hidden">
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(249,115,22,0.14),_transparent_55%),radial-gradient(ellipse_at_bottom_right,_rgba(245,158,11,0.10),_transparent_45%)]" />
+                <div className="pointer-events-none absolute -left-24 top-24 h-72 w-72 rounded-full bg-orange-300/15 blur-3xl" />
+
+                <div className="relative container mx-auto space-y-6 px-4 py-6">
+                    <MaintenanceSubNav active="technician.work-orders.index" />
+
+            <div className="space-y-6">
                 {/* Header */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
@@ -336,7 +345,7 @@ export default function WorkOrders({ workOrders, stats, filters, userPositions, 
                                                             {order.images && order.images.length > 0 && (
                                                                 <div className="shrink-0">
                                                                     <img 
-                                                                        src={`/storage/${order.images[0].image_path}`} 
+                                                                        src={storageUrl(order.images[0].image_path)} 
                                                                         alt="รูปภาพประกอบ" 
                                                                         className="w-20 h-20 object-cover rounded-md border"
                                                                         onError={(e) => {
@@ -471,6 +480,8 @@ export default function WorkOrders({ workOrders, stats, filters, userPositions, 
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
+            </div>
+                </div>
             </div>
         </AppLayout>
     );

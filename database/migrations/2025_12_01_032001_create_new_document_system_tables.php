@@ -15,6 +15,7 @@ return new class extends Migration
 
         // Drop old tables if they exist to ensure a clean slate
         Schema::dropIfExists('document_distributions');
+        Schema::dropIfExists('document_actions');
         Schema::dropIfExists('document_approvals');
         Schema::dropIfExists('document_attachments');
         Schema::dropIfExists('document_drafts'); // Added based on file list

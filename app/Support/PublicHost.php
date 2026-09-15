@@ -16,6 +16,22 @@ class PublicHost
         return strtolower((string) config('cloudflare.tunnel_mode', 'quick')) === 'named';
     }
 
+    /**
+     * Path ของแอปตาม request จริง เช่น /sss/my-app/public หรือว่างเมื่อ DocumentRoot คือ public
+     */
+    public static function requestAppPath(?\Illuminate\Http\Request $request = null): string
+    {
+        if ($request === null && ! app()->runningInConsole() && app()->bound('request')) {
+            $request = request();
+        }
+
+        if ($request) {
+            return rtrim(str_replace('\\', '/', $request->getBasePath()), '/');
+        }
+
+        return rtrim((string) (parse_url((string) config('app.url'), PHP_URL_PATH) ?: ''), '/');
+    }
+
     /** ลิงก์ชั่วคราว ngrok / trycloudflare — ไม่ใช่ subdomain ของโดเมนคุณ */
     public static function isEphemeralTunnelHost(?string $host): bool
     {

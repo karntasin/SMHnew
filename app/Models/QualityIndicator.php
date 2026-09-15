@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class QualityIndicator extends Model
 {
     protected $fillable = [
+        'family_id',
         'type',
         'department_id',
         'team_id',
@@ -28,6 +29,11 @@ class QualityIndicator extends Model
         'target_value' => 'decimal:2',
     ];
 
+    public function family()
+    {
+        return $this->belongsTo(QualityIndicatorFamily::class, 'family_id');
+    }
+
     public function department()
     {
         return $this->belongsTo(Department::class);
@@ -41,5 +47,10 @@ class QualityIndicator extends Model
     public function entries(): HasMany
     {
         return $this->hasMany(QualityIndicatorEntry::class);
+    }
+
+    public function reviews(): HasMany
+    {
+        return $this->hasMany(QualityReview::class, 'quality_indicator_id');
     }
 }

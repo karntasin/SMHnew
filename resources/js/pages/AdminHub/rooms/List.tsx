@@ -21,10 +21,11 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Calendar, Clock, Users, CheckCircle, XCircle, Search, Filter, Plus, MoreHorizontal, MapPin, AlertCircle } from 'lucide-react';
+import { Calendar, Clock, Users, CheckCircle, XCircle, Search, Filter, Plus, MoreHorizontal } from 'lucide-react';
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
 import CreateModal from './CreateModal';
+import RoomSubNav from './RoomSubNav';
 
 interface Room {
     id: number;
@@ -33,6 +34,7 @@ interface Room {
     location: string;
     status: string;
     color: string;
+    image_url?: string | null;
 }
 
 interface Booking {
@@ -41,7 +43,7 @@ interface Booking {
     start_time: string;
     end_time: string;
     status: string;
-    room: Room;
+    room: Room | null;
     user: { name: string };
     attendees_count: number;
 }
@@ -111,18 +113,30 @@ export default function List({ rooms = [], bookings = [], stats, currentFilter =
     );
 
     const handleFilterClick = (filter: string) => {
-        router.get(route('rooms.index'), { filter }, { preserveState: true, preserveScroll: true });
+        const target = currentFilter === 'my' ? route('rooms.my') : route('rooms.bookings');
+        if (currentFilter === 'my') {
+            router.get(target, {}, { preserveState: true, preserveScroll: true });
+            return;
+        }
+        router.get(target, { filter }, { preserveState: true, preserveScroll: true });
     };
 
     return (
-        <AppLayout breadcrumbs={[{ title: 'ระบบจองห้องประชุม', href: '/administration/rooms' }]}>
-            <Head title="รายการจองห้องประชุม" />
+        <AppLayout breadcrumbs={[
+            { title: 'ระบบจองห้องประชุม', href: '/administration/rooms' },
+            { title: currentFilter === 'my' ? 'การจองของฉัน' : 'รายการจอง', href: '#' },
+        ]}>
+            <Head title={currentFilter === 'my' ? 'การจองของฉัน' : 'รายการจองห้องประชุม'} />
 
             <div className="container mx-auto py-6 space-y-6">
+                <RoomSubNav active={currentFilter === 'my' ? 'rooms.my' : 'rooms.bookings'} />
+
                 {/* Header & Actions */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight">ระบบจองห้องประชุม</h1>
+                        <h1 className="text-3xl font-bold tracking-tight">
+                            {currentFilter === 'my' ? 'การจองของฉัน' : 'รายการจองห้องประชุม'}
+                        </h1>
                         <p className="text-muted-foreground">จัดการการจองห้องประชุมและตรวจสอบสถานะ</p>
                     </div>
                     <div className="flex gap-2">
@@ -132,7 +146,7 @@ export default function List({ rooms = [], bookings = [], stats, currentFilter =
                                 ปฏิทินการจอง
                             </Button>
                         </Link>
-                        <Button onClick={() => setIsCreateModalOpen(true)} className="bg-blue-600 hover:bg-blue-700">
+                        <Button onClick={() => setIsCreateModalOpen(true)} className="bg-sky-600 hover:bg-sky-700">
                             <Plus className="mr-2 h-4 w-4" />
                             จองห้องประชุม
                         </Button>
@@ -250,8 +264,8 @@ export default function List({ rooms = [], bookings = [], stats, currentFilter =
                                                 </TableCell>
                                                 <TableCell>
                                                     <div className="flex items-center gap-2">
-                                                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: booking.room.color }}></div>
-                                                        {booking.room.name}
+                                                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: booking.room?.color || '#0ea5e9' }}></div>
+                                                        {booking.room?.name || '-'}
                                                     </div>
                                                 </TableCell>
                                                 <TableCell>

@@ -11,6 +11,7 @@ class DocumentAction extends Model
     protected $casts = [
         'acknowledged_at' => 'datetime',
         'reminder_sent_at' => 'datetime',
+        'implementation_updated_at' => 'datetime',
         'is_current' => 'boolean',
     ];
 

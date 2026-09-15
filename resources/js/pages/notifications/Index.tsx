@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import AppLayout from '@/layouts/app-layout';
 import { Head, router } from '@inertiajs/react';
+import { apiFetch } from '@/lib/asset';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +16,8 @@ import {
     AlertTriangle,
     Info,
     Car,
-    UserCheck
+    UserCheck,
+    Stethoscope
 } from 'lucide-react';
 
 interface NotificationData {
@@ -53,7 +55,7 @@ export default function Index({
 
     const handleMarkAsRead = async (notificationId: string) => {
         try {
-            await fetch(`/notifications/${notificationId}/read`, {
+            await apiFetch(`/notifications/${notificationId}/read`, {
                 method: 'POST',
                 headers: {
                     'Accept': 'application/json',
@@ -71,7 +73,7 @@ export default function Index({
 
     const handleMarkAllAsRead = async () => {
         try {
-            await fetch('/notifications/read-all', {
+            await apiFetch('/notifications/read-all', {
                 method: 'POST',
                 headers: {
                     'Accept': 'application/json',
@@ -108,6 +110,8 @@ export default function Index({
                 return <Car className="w-5 h-5 text-green-500" />;
             case 'vehicle_booking_status':
                 return <Car className="w-5 h-5 text-blue-500" />;
+            case 'equipment_borrowing':
+                return <Stethoscope className="w-5 h-5 text-teal-500" />;
             default:
                 return <Info className="w-5 h-5 text-blue-500" />;
         }

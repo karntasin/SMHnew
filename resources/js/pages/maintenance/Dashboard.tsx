@@ -1,234 +1,454 @@
-import React from 'react';
+import React, { useState } from 'react';
+
 import AppLayout from '@/layouts/app-layout';
+
 import { Head, Link } from '@inertiajs/react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+
 import { Button } from '@/components/ui/button';
-import { Wrench, Clock, CheckCircle, AlertCircle, Plus, List, Settings, Briefcase } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+
+import { cn } from '@/lib/utils';
+
+import { iconMapper } from '@/lib/iconMapper';
+
+import { ClipboardList, Plus, Wrench } from 'lucide-react';
+
+import MaintenanceSubNav from './MaintenanceSubNav';
+
+import MaintenanceRequestCard from './MaintenanceRequestCard';
+
+
+
+interface Category {
+
+    id: number;
+
+    name: string;
+
+    description?: string | null;
+
+    icon?: string | null;
+
+    color?: string | null;
+
+}
+
+
+
+interface RequestItem {
+
+    id: number;
+
+    ticket_number: string;
+
+    title: string;
+
+    description?: string;
+
+    location?: string;
+
+    status: string;
+
+    created_at: string;
+
+    category?: { name: string; color?: string } | null;
+
+    priority?: { name: string; color?: string } | null;
+
+    requester?: { name: string } | null;
+
+    images?: { image_path: string }[];
+
+}
+
+
 
 interface DashboardProps {
+
     stats: {
+
         total: number;
+
         pending: number;
+
         in_progress: number;
+
         completed: number;
+
     };
-    recentRequests: any[];
-    monthlyStats: { name: string; count: number }[];
-    categoryStats: { name: string; count: number }[];
+
+    categories: Category[];
+
+    recentRequests: RequestItem[];
+
+    pendingRequests: RequestItem[];
+
 }
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
-export default function Dashboard({ stats, recentRequests, monthlyStats, categoryStats }: DashboardProps) {
+
+export default function Dashboard({ stats, categories, recentRequests, pendingRequests }: DashboardProps) {
+
+    const [requestTab, setRequestTab] = useState<'recent' | 'pending'>('recent');
+
+    const requestItems = requestTab === 'recent' ? recentRequests : pendingRequests;
+
+
+
     return (
-        <AppLayout breadcrumbs={[{ title: 'แดชบอร์ดแจ้งซ่อม', href: '/maintenance/dashboard' }]}>
-            <Head title="แดชบอร์ดแจ้งซ่อม" />
-            
-            <div className="p-6 space-y-6">
-                <div className="flex justify-between items-center">
-                    <h1 className="text-2xl font-bold">ภาพรวมการแจ้งซ่อม</h1>
-                    <Link href={route('maintenance.requests.create')}>
-                        <Button>
-                            <Plus className="mr-2 h-4 w-4" />
-                            แจ้งซ่อมใหม่
-                        </Button>
-                    </Link>
-                </div>
 
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    <Link href={route('maintenance.requests.index')}>
-                        <Card className="hover:bg-accent transition-colors cursor-pointer h-full">
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">รายการทั้งหมด</CardTitle>
-                                <Wrench className="h-4 w-4 text-muted-foreground" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">{stats.total}</div>
-                            </CardContent>
-                        </Card>
-                    </Link>
-                    <Link href={route('maintenance.requests.index', { status: 'pending' })}>
-                        <Card className="hover:bg-accent transition-colors cursor-pointer h-full">
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">รอดำเนินการ</CardTitle>
-                                <AlertCircle className="h-4 w-4 text-yellow-500" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">{stats.pending}</div>
-                            </CardContent>
-                        </Card>
-                    </Link>
-                    <Link href={route('maintenance.requests.index', { status: 'in_progress' })}>
-                        <Card className="hover:bg-accent transition-colors cursor-pointer h-full">
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">กำลังดำเนินการ</CardTitle>
-                                <Clock className="h-4 w-4 text-blue-500" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">{stats.in_progress}</div>
-                            </CardContent>
-                        </Card>
-                    </Link>
-                    <Link href={route('maintenance.requests.index', { status: 'completed' })}>
-                        <Card className="hover:bg-accent transition-colors cursor-pointer h-full">
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">เสร็จสิ้น</CardTitle>
-                                <CheckCircle className="h-4 w-4 text-green-500" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">{stats.completed}</div>
-                            </CardContent>
-                        </Card>
-                    </Link>
-                </div>
+        <AppLayout breadcrumbs={[{ title: 'ระบบแจ้งซ่อม', href: route('maintenance.dashboard') }]}>
 
-                {/* Quick Access Menu */}
-                <h2 className="text-lg font-semibold">เมนูลัด</h2>
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    <Link href={route('maintenance.requests.index')}>
-                        <Card className="hover:bg-accent transition-colors cursor-pointer h-full">
-                            <CardContent className="flex flex-col items-center justify-center p-6 gap-4">
-                                <div className="p-4 bg-primary/10 rounded-full">
-                                    <List className="w-8 h-8 text-primary" />
-                                </div>
-                                <div className="text-center">
-                                    <h3 className="font-semibold">รายการแจ้งซ่อม</h3>
-                                    <p className="text-sm text-muted-foreground">ดูรายการแจ้งซ่อมทั้งหมด</p>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </Link>
+            <Head title="ระบบแจ้งซ่อม" />
 
-                    <Link href={route('maintenance.requests.create')}>
-                        <Card className="hover:bg-accent transition-colors cursor-pointer h-full">
-                            <CardContent className="flex flex-col items-center justify-center p-6 gap-4">
-                                <div className="p-4 bg-green-100 rounded-full">
-                                    <Plus className="w-8 h-8 text-green-600" />
-                                </div>
-                                <div className="text-center">
-                                    <h3 className="font-semibold">แจ้งซ่อมใหม่</h3>
-                                    <p className="text-sm text-muted-foreground">สร้างใบแจ้งซ่อมใหม่</p>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </Link>
 
-                    <Link href={route('technician.work-orders.index')}>
-                        <Card className="hover:bg-accent transition-colors cursor-pointer h-full">
-                            <CardContent className="flex flex-col items-center justify-center p-6 gap-4">
-                                <div className="p-4 bg-orange-100 rounded-full">
-                                    <Briefcase className="w-8 h-8 text-orange-600" />
-                                </div>
-                                <div className="text-center">
-                                    <h3 className="font-semibold">ใบงานช่าง</h3>
-                                    <p className="text-sm text-muted-foreground">สำหรับเจ้าหน้าที่ช่าง</p>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </Link>
 
-                    <Link href={route('maintenance.settings.index')}>
-                        <Card className="hover:bg-accent transition-colors cursor-pointer h-full">
-                            <CardContent className="flex flex-col items-center justify-center p-6 gap-4">
-                                <div className="p-4 bg-gray-100 rounded-full">
-                                    <Settings className="w-8 h-8 text-gray-600" />
-                                </div>
-                                <div className="text-center">
-                                    <h3 className="font-semibold">ตั้งค่าระบบ</h3>
-                                    <p className="text-sm text-muted-foreground">จัดการข้อมูลพื้นฐาน</p>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </Link>
-                </div>
+            <div className="relative min-h-screen overflow-hidden">
 
-                <div className="grid gap-4 md:grid-cols-2">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>สถิติการแจ้งซ่อมรายเดือน</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="h-[300px]">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={monthlyStats}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="name" />
-                                        <YAxis allowDecimals={false} />
-                                        <Tooltip />
-                                        <Legend />
-                                        <Bar dataKey="count" name="จำนวนแจ้งซ่อม" fill="#8884d8" />
-                                    </BarChart>
-                                </ResponsiveContainer>
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(249,115,22,0.18),_transparent_55%),radial-gradient(ellipse_at_bottom_right,_rgba(245,158,11,0.12),_transparent_45%)]" />
+
+                <div className="pointer-events-none absolute -left-24 top-24 h-72 w-72 rounded-full bg-orange-300/20 blur-3xl" />
+
+                <div className="pointer-events-none absolute -right-16 top-80 h-80 w-80 rounded-full bg-amber-300/20 blur-3xl" />
+
+
+
+                <div className="relative container mx-auto space-y-6 px-4 py-6">
+
+                    <MaintenanceSubNav active="maintenance.dashboard" />
+
+
+
+                    <section className="overflow-hidden rounded-[2rem] border border-orange-100 bg-gradient-to-br from-slate-900 via-orange-950 to-amber-900 p-6 text-white shadow-2xl shadow-orange-900/20 md:p-8">
+
+                        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+
+                            <div className="max-w-2xl space-y-3">
+
+                                <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-orange-100 backdrop-blur">
+
+                                    <Wrench className="h-3.5 w-3.5" />
+
+                                    ระบบแจ้งซ่อมและติดตามงาน
+
+                                </div>
+
+                                <h1 className="text-3xl font-bold tracking-tight md:text-4xl">ระบบแจ้งซ่อม</h1>
+
+                                <p className="text-sm text-orange-100/80 md:text-base">
+
+                                    เลือกหมวดหมู่ แจ้งปัญหา พร้อมติดตามสถานะงานซ่อมได้ในที่เดียว
+
+                                </p>
+
                             </div>
-                        </CardContent>
-                    </Card>
 
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>สถิติแยกตามระบบ/หมวดหมู่</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="h-[300px]">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie
-                                            data={categoryStats}
-                                            cx="50%"
-                                            cy="50%"
-                                            labelLine={false}
-                                            label={({ name, percent }: any) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
-                                            outerRadius={80}
-                                            fill="#8884d8"
-                                            dataKey="count"
-                                        >
-                                            {categoryStats.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip />
-                                    </PieChart>
-                                </ResponsiveContainer>
+                            <div className="flex flex-wrap gap-2">
+
+                                <Link href={route('maintenance.requests.index')}>
+
+                                    <Button variant="secondary" className="bg-white/15 text-white hover:bg-white/25">
+
+                                        <ClipboardList className="mr-2 h-4 w-4" />
+
+                                        รายการทั้งหมด
+
+                                    </Button>
+
+                                </Link>
+
+                                <Link href={route('maintenance.requests.create')}>
+
+                                    <Button className="bg-amber-400 text-slate-900 hover:bg-amber-300">
+
+                                        <Plus className="mr-2 h-4 w-4" />
+
+                                        แจ้งซ่อมใหม่
+
+                                    </Button>
+
+                                </Link>
+
                             </div>
-                        </CardContent>
-                    </Card>
-                </div>
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle>รายการล่าสุด</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-4">
-                            {recentRequests.length === 0 ? (
-                                <p className="text-muted-foreground">ไม่มีรายการล่าสุด</p>
-                            ) : (
-                                recentRequests.map((request) => (
-                                    <div key={request.id} className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0">
-                                        <div>
-                                            <p className="font-medium">{request.title}</p>
-                                            <p className="text-sm text-muted-foreground">{request.ticket_number} • {request.location}</p>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className={`px-2 py-1 rounded-full text-xs font-medium 
-                                                ${request.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 
-                                                  request.status === 'in_progress' ? 'bg-blue-100 text-blue-800' : 
-                                                  request.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                                                {request.status === 'pending' ? 'รอดำเนินการ' : 
-                                                 request.status === 'in_progress' ? 'กำลังดำเนินการ' : 
-                                                 request.status === 'completed' ? 'เสร็จสิ้น' : request.status}
-                                            </span>
-                                            <Link href={route('maintenance.requests.show', request.id)}>
-                                                <Button variant="ghost" size="sm">ดูรายละเอียด</Button>
-                                            </Link>
-                                        </div>
-                                    </div>
-                                ))
-                            )}
                         </div>
-                    </CardContent>
-                </Card>
+
+
+
+                        <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+
+                            {[
+
+                                { label: 'รายการทั้งหมด', value: stats?.total ?? 0 },
+
+                                { label: 'รอดำเนินการ', value: stats?.pending ?? 0 },
+
+                                { label: 'กำลังดำเนินการ', value: stats?.in_progress ?? 0 },
+
+                                { label: 'เสร็จสิ้น', value: stats?.completed ?? 0 },
+
+                            ].map((item) => (
+
+                                <div key={item.label} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 backdrop-blur">
+
+                                    <div className="text-2xl font-bold">{item.value}</div>
+
+                                    <div className="text-xs text-orange-100/70">{item.label}</div>
+
+                                </div>
+
+                            ))}
+
+                        </div>
+
+                    </section>
+
+
+
+                    <section className="space-y-4">
+
+                        <div>
+
+                            <h2 className="text-xl font-bold text-slate-800">หมวดหมู่การแจ้งซ่อม</h2>
+
+                            <p className="text-sm text-slate-500">เลือกหมวดหมู่แล้วแจ้งซ่อมได้ทันที</p>
+
+                        </div>
+
+
+
+                        {categories.length === 0 ? (
+
+                            <div className="rounded-3xl border border-dashed border-slate-200 bg-white/80 p-12 text-center text-slate-500">
+
+                                ยังไม่มีหมวดหมู่ — ไปที่เมนูตั้งค่าเพื่อเพิ่มหมวดหมู่การแจ้งซ่อม
+
+                                <div className="mt-4">
+
+                                    <Link href={route('maintenance.settings.index')}>
+
+                                        <Button>ไปตั้งค่า</Button>
+
+                                    </Link>
+
+                                </div>
+
+                            </div>
+
+                        ) : (
+
+                            <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+
+                                {categories.map((category) => {
+
+                                    const Icon = iconMapper(category.icon || 'wrench');
+
+                                    const color = category.color || '#f97316';
+
+
+
+                                    return (
+
+                                        <article
+
+                                            key={category.id}
+
+                                            className="group overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-orange-200 hover:shadow-xl hover:shadow-orange-900/10"
+
+                                            style={{ borderColor: `${color}33` }}
+
+                                        >
+
+                                            <div className="relative p-3 pb-0">
+
+                                                <div
+
+                                                    className="relative overflow-hidden rounded-2xl p-[3px]"
+
+                                                    style={{
+
+                                                        background: `linear-gradient(135deg, ${color} 0%, #fdba74 55%, ${color}88 100%)`,
+
+                                                    }}
+
+                                                >
+
+                                                    <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-[14px] bg-gradient-to-br from-orange-50 to-amber-50">
+
+                                                        <div
+
+                                                            className="flex h-20 w-20 items-center justify-center rounded-full shadow-lg"
+
+                                                            style={{ backgroundColor: `${color}22`, color }}
+
+                                                        >
+
+                                                            <Icon className="h-10 w-10" />
+
+                                                        </div>
+
+                                                    </div>
+
+                                                </div>
+
+                                            </div>
+
+
+
+                                            <div className="space-y-3 p-4">
+
+                                                <h3 className="text-lg font-bold text-slate-800">{category.name}</h3>
+
+                                                <p className="line-clamp-2 min-h-[2.5rem] text-sm text-slate-500">
+
+                                                    {category.description || 'หมวดหมู่การแจ้งซ่อม'}
+
+                                                </p>
+
+                                                <Link href={`${route('maintenance.requests.create')}?category_id=${category.id}`}>
+
+                                                    <Button className="w-full rounded-xl bg-orange-600 hover:bg-orange-700">
+
+                                                        <Plus className="mr-2 h-4 w-4" />
+
+                                                        แจ้งซ่อมหมวดนี้
+
+                                                    </Button>
+
+                                                </Link>
+
+                                            </div>
+
+                                        </article>
+
+                                    );
+
+                                })}
+
+                            </div>
+
+                        )}
+
+                    </section>
+
+
+
+                    <section className="space-y-4 rounded-[2rem] border border-slate-200/80 bg-white/90 p-5 shadow-xl shadow-slate-900/5 backdrop-blur md:p-6">
+
+                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+
+                            <div>
+
+                                <h2 className="text-xl font-bold text-slate-800">รายการแจ้งซ่อมล่าสุด</h2>
+
+                                <p className="text-sm text-slate-500">ดูรายการล่าสุดและรายการที่รออนุมัติ</p>
+
+                            </div>
+
+                            <div className="inline-flex rounded-2xl border border-slate-200 bg-slate-50 p-1">
+
+                                <button
+
+                                    type="button"
+
+                                    onClick={() => setRequestTab('recent')}
+
+                                    className={cn(
+
+                                        'rounded-xl px-4 py-2 text-sm font-medium transition',
+
+                                        requestTab === 'recent' ? 'bg-white text-orange-700 shadow-sm' : 'text-slate-500',
+
+                                    )}
+
+                                >
+
+                                    ล่าสุด
+
+                                </button>
+
+                                <button
+
+                                    type="button"
+
+                                    onClick={() => setRequestTab('pending')}
+
+                                    className={cn(
+
+                                        'rounded-xl px-4 py-2 text-sm font-medium transition',
+
+                                        requestTab === 'pending' ? 'bg-white text-orange-700 shadow-sm' : 'text-slate-500',
+
+                                    )}
+
+                                >
+
+                                    รออนุมัติ
+
+                                </button>
+
+                            </div>
+
+                        </div>
+
+
+
+                        {requestItems.length === 0 ? (
+
+                            <div className="rounded-2xl border border-dashed border-slate-200 p-10 text-center text-slate-400">
+
+                                ยังไม่มีรายการในช่วงนี้
+
+                            </div>
+
+                        ) : (
+
+                            <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+
+                                {requestItems.map((request) => (
+
+                                    <MaintenanceRequestCard key={request.id} request={request} />
+
+                                ))}
+
+                            </div>
+
+                        )}
+
+
+
+                        <div className="flex flex-wrap gap-2 pt-2">
+
+                            <Link href={route('maintenance.requests.index')}>
+
+                                <Button variant="outline" className="rounded-xl">
+
+                                    ดูรายการทั้งหมด
+
+                                </Button>
+
+                            </Link>
+
+                            <Link href={route('maintenance.requests.my')}>
+
+                                <Button variant="outline" className="rounded-xl">
+
+                                    รายการของฉัน
+
+                                </Button>
+
+                            </Link>
+
+                        </div>
+
+                    </section>
+
+                </div>
+
             </div>
+
         </AppLayout>
+
     );
+
 }
+

@@ -11,35 +11,124 @@ class PostLoginRedirect
         return PublicHost::isEphemeralTunnelHost($host);
     }
 
+    public static function isPublicTunnelHost(?string $host): bool
+    {
+        $host = strtolower((string) $host);
+        if ($host === '') {
+            return false;
+        }
+
+        if (PublicHost::isEphemeralTunnelHost($host)) {
+            return true;
+        }
+
+        $named = PublicHost::tunnelHostname();
+
+        return $named !== null && $host === strtolower($named);
+    }
+
+    /** Origin + path ที่เบราว์เซอร์นี้เปิดอยู่ (LAN ต้องมี /sss/my-app/public) */
+    public static function normalizeBase(?string $base, ?Request $request = null): string
+    {
+        $request ??= request();
+        $appUrl = rtrim((string) config('app.url'), '/');
+        $appPath = LineUrls::appPath();
+        $appHost = strtolower((string) (parse_url($appUrl, PHP_URL_HOST) ?: ''));
+
+        $base = is_string($base) ? rtrim($base, '/') : '';
+        if ($base === '') {
+            return self::preferredBase($request);
+        }
+
+        $parts = parse_url($base);
+        if (! is_array($parts) || empty($parts['host'])) {
+            return self::preferredBase($request);
+        }
+
+        $scheme = $parts['scheme'] ?? 'http';
+        $host = strtolower((string) $parts['host']);
+        $port = isset($parts['port']) ? ':'.$parts['port'] : '';
+        $path = rtrim((string) ($parts['path'] ?? ''), '/');
+
+        if (self::isPublicTunnelHost($host)) {
+            if ($appPath !== '' && ($path === $appPath || str_starts_with($path, $appPath.'/'))) {
+                $path = substr($path, strlen($appPath)) ?: '';
+            }
+
+            return $scheme.'://'.$host.$port.$path;
+        }
+
+        if ($appPath !== '' && ($host === $appHost || $path === '')) {
+            if ($path === '' || $path === '/' || ($path !== $appPath && ! str_starts_with($path, $appPath.'/'))) {
+                $path = $appPath;
+            }
+        }
+
+        return $scheme.'://'.$host.$port.$path;
+    }
+
+    public static function join(?string $base, string $path, ?Request $request = null): string
+    {
+        return self::normalizeBase($base, $request).'/'.ltrim($path, '/');
+    }
+
     /**
-     * Base URL users should land on after login (LAN / APP_URL), never the tunnel host.
+     * Base URL for this browser request: LAN keeps /sss/my-app/public,
+     * named tunnel stays on fshh-app.online, quick tunnel falls back to APP_URL.
      */
     public static function preferredBase(?Request $request = null): string
     {
         $request ??= request();
         $appUrl = rtrim((string) config('app.url'), '/');
-        $appHost = strtolower((string) (parse_url($appUrl, PHP_URL_HOST) ?: ''));
 
-        if ($request && ! self::isTunnelHost($request->getHost())) {
-            $path = LineUrls::appPath();
-            $base = rtrim($request->getSchemeAndHttpHost(), '/').$path;
-            if ($base !== '') {
-                return $base;
+        if ($request && self::isTunnelHost($request->getHost())) {
+            if ($appUrl !== '' && ! self::isTunnelHost(parse_url($appUrl, PHP_URL_HOST))) {
+                return $appUrl;
             }
+
+            return $appUrl !== '' ? $appUrl : rtrim((string) $request->root(), '/');
         }
 
-        if ($appUrl !== '' && ! self::isTunnelHost($appHost)) {
-            return $appUrl;
+        if ($request) {
+            $path = PublicHost::requestAppPath($request);
+            if ($path === '' && ! self::isPublicTunnelHost($request->getHost())) {
+                $path = LineUrls::appPath();
+            }
+
+            return rtrim($request->getSchemeAndHttpHost(), '/').$path;
         }
 
-        return $appUrl !== '' ? $appUrl : rtrim((string) $request?->root(), '/');
+        return $appUrl;
+    }
+
+    /**
+     * Host ที่ผู้ใช้เปิดอยู่ตอนนี้ — login จากอุโมงค์ต้องอยู่บนอุโมงค์ (Inertia XHR ข้าม origin ไม่ได้)
+     */
+    public static function currentBase(?Request $request = null): string
+    {
+        $request ??= request();
+        if (! $request) {
+            return self::preferredBase();
+        }
+
+        $path = PublicHost::requestAppPath($request);
+        if ($path === '' && ! self::isPublicTunnelHost($request->getHost())) {
+            $path = LineUrls::appPath();
+        }
+
+        return rtrim($request->getSchemeAndHttpHost(), '/').$path;
     }
 
     public static function to(string $path = 'dashboard', ?Request $request = null): string
     {
+        return self::join(self::preferredBase($request), $path, $request);
+    }
+
+    public static function toCurrent(string $path = 'dashboard', ?Request $request = null): string
+    {
         $path = '/'.ltrim($path, '/');
 
-        return self::preferredBase($request).$path;
+        return self::currentBase($request).$path;
     }
 
     public static function sanitizeIntended(?string $intended, string $fallbackPath = 'dashboard', ?Request $request = null): string
@@ -72,5 +161,57 @@ class PostLoginRedirect
         }
 
         return $intended;
+    }
+
+    /**
+     * After email/password login on the same browser tab (including trycloudflare).
+     */
+    public static function sanitizeIntendedOnCurrentHost(?string $intended, string $fallbackPath = 'dashboard', ?Request $request = null): string
+    {
+        $request ??= request();
+        $fallback = self::toCurrent($fallbackPath, $request);
+
+        if (! is_string($intended) || $intended === '') {
+            return $fallback;
+        }
+
+        $requestPath = PublicHost::requestAppPath($request);
+        $appPath = LineUrls::appPath();
+
+        if (str_starts_with($intended, '/')) {
+            if ($requestPath === '' && $appPath !== '' && ($intended === $appPath || str_starts_with($intended, $appPath.'/'))) {
+                $intended = substr($intended, strlen($appPath)) ?: '/';
+            } elseif ($requestPath !== '' && $intended !== $requestPath && ! str_starts_with($intended, $requestPath.'/')) {
+                $intended = $requestPath.$intended;
+            }
+
+            return self::currentBase($request).$intended;
+        }
+
+        $host = parse_url($intended, PHP_URL_HOST);
+        $requestHost = $request?->getHost();
+        if ($host && $requestHost && strcasecmp((string) $host, (string) $requestHost) === 0) {
+            return $intended;
+        }
+
+        return $fallback;
+    }
+
+    public static function isGeneralUser(object $user): bool
+    {
+        if (method_exists($user, 'hasAnyRole') && $user->hasAnyRole(['admin', 'superUser'])) {
+            return false;
+        }
+
+        if (method_exists($user, 'hasRole')) {
+            return $user->hasRole('user');
+        }
+
+        return true;
+    }
+
+    public static function destinationAfterRegistration(object $user, ?Request $request = null): string
+    {
+        return self::toCurrent('dashboard', $request);
     }
 }

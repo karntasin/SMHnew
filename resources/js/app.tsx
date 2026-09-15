@@ -1,12 +1,18 @@
-// Force re-scan
 import '../css/app.css';
-import './lib/axios'; // Initialize axios configuration
+import { configureClientBasePath } from './lib/asset';
+import { configureInertiaBasePath } from './lib/inertia';
+import { configureRouteHelper } from './lib/route';
+import './lib/axios';
 
 import { createInertiaApp } from '@inertiajs/react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createRoot } from 'react-dom/client';
 import { route as routeFn } from 'ziggy-js';
 import { initializeTheme } from './hooks/use-appearance';
+
+configureClientBasePath();
+configureInertiaBasePath();
+configureRouteHelper();
 
 declare global {
     const route: typeof routeFn;
@@ -27,10 +33,8 @@ createInertiaApp({
     },
 });
 
-// This will set light / dark mode on load...
 initializeTheme();
 
-// Reload page if a dynamic import fails (e.g. after a new deployment)
 window.addEventListener('vite:preloadError', (event) => {
     event.preventDefault();
     window.location.reload();

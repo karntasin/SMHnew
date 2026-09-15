@@ -2,6 +2,7 @@ import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
+import { resolveAppUrl } from '@/lib/asset';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
 
@@ -43,7 +44,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
                                     'bg-muted': currentPath === item.url,
                                 })}
                             >
-                                <Link href={item.url} prefetch>
+                                <Link href={resolveAppUrl(item.url)} prefetch>
                                     {item.title}
                                 </Link>
                             </Button>

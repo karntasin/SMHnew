@@ -19,12 +19,28 @@ if (-not (Test-Path $ConfigPath)) {
 ไม่พบ config: $ConfigPath
 ทำตามขั้นตอน:
   1. ล็อกอิน:  cloudflared tunnel login
-  2. สร้าง:    cloudflared tunnel create smh-hospital
+  2. สร้าง:    cloudflared tunnel create fshh-app
   3. คัดลอก deploy\cloudflare\config.yml.example เป็น config.yml แล้วแก้ tunnel id / hostname
-  4. ใน Zero Trust → Tunnels → Public Hostname ตั้ง subdomain + domain
+  4. cloudflared tunnel route dns fshh-app fshh-app.online
 "@
 }
 
-& $Bin service install --config $ConfigPath
-& $Bin service start
-Write-Host "ติดตั้งและเริ่ม cloudflared service แล้ว — ดูสถานะใน Cloudflare Zero Trust → Tunnels"
+# cloudflared `service install` ไม่เก็บ --config ไว้ใน binPath
+# ตั้ง PathName เอง ไม่งั้น service รันเปล่า → Cloudflare Error 1033
+$existing = Get-Service Cloudflared, cloudflared -ErrorAction SilentlyContinue
+if ($existing) {
+    Stop-Service Cloudflared -Force -ErrorAction SilentlyContinue
+    & $Bin service uninstall
+    Start-Sleep -Seconds 2
+}
+
+& $Bin --config $ConfigPath service install
+$binPath = "`"$Bin`" --no-autoupdate --config `"$ConfigPath`" tunnel run"
+sc.exe config Cloudflared binPath= $binPath
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "ตั้ง binPath ของ Cloudflared ไม่สำเร็จ"
+}
+sc.exe config Cloudflared start= auto | Out-Null
+Start-Service Cloudflared
+Write-Host "ติดตั้งและเริ่ม cloudflared service แล้ว — เปิด https://fshh-app.online"
+Write-Host "binPath: $binPath"

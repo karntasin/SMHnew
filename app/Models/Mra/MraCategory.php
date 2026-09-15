@@ -11,16 +11,23 @@ class MraCategory extends Model
 
     protected $fillable = [
         'code',
+        'audit_type',
+        'section_key',
         'name',
         'name_en',
         'description',
+        'hint',
         'sort_order',
         'weight',
+        'is_conditional',
+        'is_required_section',
         'is_active',
     ];
 
     protected $casts = [
         'weight' => 'decimal:2',
+        'is_conditional' => 'boolean',
+        'is_required_section' => 'boolean',
         'is_active' => 'boolean',
     ];
 
@@ -54,5 +61,17 @@ class MraCategory extends Model
     public function scopeActive($query)
     {
         return $query->where('is_active', true)->orderBy('sort_order');
+    }
+
+    /**
+     * Filter by OPD / IPD channel
+     */
+    public function scopeForAuditType($query, ?string $auditType)
+    {
+        if ($auditType) {
+            $query->where('audit_type', $auditType);
+        }
+
+        return $query;
     }
 }

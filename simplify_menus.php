@@ -33,10 +33,10 @@ $menus = [
         'permission_name' => null,
     ],
     
-    // 2. Quality Hub (ศูนย์คุณภาพ) - Link to hub page
+    // 2. Quality Hub (ศูนย์พัฒนาคุณภาพ) - Link to hub page
     [
         'id' => 10,
-        'title' => 'ศูนย์คุณภาพ',
+        'title' => 'ศูนย์พัฒนาคุณภาพ',
         'icon' => 'Award',
         'route' => 'quality.index',
         'parent_id' => null,
@@ -58,12 +58,30 @@ $menus = [
     // 4. Finance Dashboard
     [
         'id' => 30,
-        'title' => 'รายงานการเงิน',
+        'title' => 'Finance Reports',
         'icon' => 'DollarSign',
-        'route' => 'finance.dashboard',
+        'route' => null,
         'parent_id' => null,
         'order' => 30,
         'permission_name' => null,
+    ],
+    [
+        'id' => 301,
+        'title' => 'BMS Dashboard',
+        'icon' => 'Layout',
+        'route' => 'finance.dashboard',
+        'parent_id' => 30,
+        'order' => 1,
+        'permission_name' => 'finance.dashboard',
+    ],
+    [
+        'id' => 302,
+        'title' => 'HOSxP Revenue by Coverage',
+        'icon' => 'BarChart3',
+        'route' => 'finance.revenue',
+        'parent_id' => 30,
+        'order' => 2,
+        'permission_name' => 'finance.revenue',
     ],
     
     // 5. HOSxP Reports
@@ -124,7 +142,7 @@ echo "Total menus: " . count($menus) . "\n";
 echo "\nNew Sidebar Structure:\n";
 echo "┌────────────────────────────────────┐\n";
 echo "│ 📊 แดชบอร์ด                         │\n";
-echo "│ 🏆 ศูนย์คุณภาพ      → Quality Hub   │\n";
+echo "│ 🏆 ศูนย์พัฒนาคุณภาพ      → Quality Hub   │\n";
 echo "│ 🏢 งานธุรการ        → Admin Hub     │\n";
 echo "│ 💰 รายงานการเงิน                    │\n";
 echo "│ 📊 รายงาน HOSxP                     │\n";

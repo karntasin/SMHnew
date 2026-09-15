@@ -6,8 +6,10 @@ use App\Models\SettingApp;
 use App\Services\DrugUsageService;
 use App\Services\ThaiPdfService;
 use Box\Spout\Writer\Common\Creator\WriterEntityFactory;
+use Box\Spout\Writer\WriterInterface;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -90,67 +92,23 @@ class DrugUsageController extends Controller
             $writer = WriterEntityFactory::createXLSXWriter();
             $writer->openToFile('php://output');
 
-            $writer->addRow(WriterEntityFactory::createRowFromArray([
-                'รายงานข้อมูลยาและการใช้ยา',
-            ]));
-            $writer->addRow(WriterEntityFactory::createRowFromArray([
-                'ช่วงวันที่', $start.' ถึง '.$end,
-            ]));
-            $writer->addRow(WriterEntityFactory::createRowFromArray([
-                'ประเภทยา', $formLabel,
-            ]));
-            $writer->addRow(WriterEntityFactory::createRowFromArray([]));
-            $writer->addRow(WriterEntityFactory::createRowFromArray([
-                'ประเภท', 'รหัสยา', 'ชื่อยา', 'ความแรง', 'หน่วย', 'ราคาต่อหน่วย', 'จำนวนรวม', 'มูลค่ารวม (บาท)',
-            ]));
+            $groupedByForm = $rows->groupBy(fn ($row) => $row->form ?? DrugUsageService::FORM_OTHER);
+            $grandQty = (float) $rows->sum('total_qty');
+            $grandAmount = (float) $rows->sum('total_amount');
 
-            $currentForm = null;
-            $subQty = 0.0;
-            $subAmount = 0.0;
-            $grandQty = 0.0;
-            $grandAmount = 0.0;
+            $writer->getCurrentSheet()->setName('สรุป');
+            $this->writeDrugUsageSummarySheet($writer, $rows, $groupedByForm, $start, $end, $formLabel, $grandQty, $grandAmount);
 
-            $flushSubtotal = function () use ($writer, &$subQty, &$subAmount) {
-                if ($subQty > 0 || $subAmount > 0) {
-                    $writer->addRow(WriterEntityFactory::createRowFromArray([
-                        '', '', '', '', 'รวมประเภท', '', $subQty, $subAmount,
-                    ]));
-                    $writer->addRow(WriterEntityFactory::createRowFromArray([]));
+            foreach ($this->drugUsage->formCatalog() as $formKey => $formName) {
+                $formRows = $groupedByForm->get($formKey, collect());
+                if ($formRows->isEmpty()) {
+                    continue;
                 }
-                $subQty = 0.0;
-                $subAmount = 0.0;
-            };
 
-            foreach ($rows as $row) {
-                $rowForm = $row->form_label ?? $this->drugUsage->formLabel($this->drugUsage->classifyForm($row->units ?? null));
-                if ($currentForm !== null && $currentForm !== $rowForm) {
-                    $flushSubtotal();
-                }
-                $currentForm = $rowForm;
-
-                $qty = (float) ($row->total_qty ?? 0);
-                $amount = (float) ($row->total_amount ?? 0);
-                $subQty += $qty;
-                $subAmount += $amount;
-                $grandQty += $qty;
-                $grandAmount += $amount;
-
-                $writer->addRow(WriterEntityFactory::createRowFromArray([
-                    $rowForm,
-                    $row->icode,
-                    $row->name,
-                    $row->strength,
-                    $row->units,
-                    $row->unitprice,
-                    $qty,
-                    $amount,
-                ]));
+                $writer->addNewSheetAndMakeItCurrent();
+                $writer->getCurrentSheet()->setName($this->excelSheetName($formName));
+                $this->writeDrugUsageFormSheet($writer, $formRows, $formName, $start, $end);
             }
-
-            $flushSubtotal();
-            $writer->addRow(WriterEntityFactory::createRowFromArray([
-                '', '', '', '', 'รวมทั้งหมด', '', $grandQty, $grandAmount,
-            ]));
 
             $writer->close();
         }, $filename, [
@@ -166,25 +124,38 @@ class DrugUsageController extends Controller
 
         try {
             $rows = $this->drugUsage->exportRows($start, $end, $search, $unit, $form);
-            $grouped = $rows->groupBy(fn ($row) => $row->form_label ?? 'อื่นๆ');
-            $byForm = $rows->groupBy(fn ($row) => $row->form ?? DrugUsageService::FORM_OTHER)
-                ->map(function ($group, $key) {
-                    return [
-                        'form' => $key,
-                        'label' => $group->first()->form_label ?? $this->drugUsage->formLabel((string) $key),
-                        'drug_count' => $group->count(),
-                        'total_qty' => (float) $group->sum('total_qty'),
-                        'total_amount' => (float) $group->sum('total_amount'),
-                    ];
-                })
-                ->sortBy(fn ($item) => match ($item['form']) {
-                    'tablet' => 1,
-                    'liquid' => 2,
-                    'injection' => 3,
-                    default => 4,
-                })
-                ->values()
-                ->all();
+            $grouped = $rows->groupBy(fn ($row) => ($row->form_label ?? 'อื่นๆ').' · '.($row->sub_form_label ?? '-'));
+            $byForm = collect($this->drugUsage->formCatalog())->map(function ($label, $key) use ($rows) {
+                $group = $rows->filter(fn ($row) => ($row->form ?? DrugUsageService::FORM_OTHER) === $key);
+                $qty = (float) $group->sum('total_qty');
+                $amount = (float) $group->sum('total_amount');
+
+                $subGrouped = $group->groupBy(fn ($row) => $row->sub_form ?? 'other');
+                $subtypes = collect($this->drugUsage->subFormCatalog()[$key] ?? [])
+                    ->map(function ($subLabel, $subKey) use ($subGrouped) {
+                        $subGroup = $subGrouped->get($subKey, collect());
+
+                        return [
+                            'sub_form' => $subKey,
+                            'label' => $subLabel,
+                            'drug_count' => $subGroup->count(),
+                            'total_qty' => (float) $subGroup->sum('total_qty'),
+                            'total_amount' => (float) $subGroup->sum('total_amount'),
+                        ];
+                    })
+                    ->filter(fn ($item) => $item['drug_count'] > 0)
+                    ->values()
+                    ->all();
+
+                return [
+                    'form' => $key,
+                    'label' => $label,
+                    'drug_count' => $group->count(),
+                    'total_qty' => $qty,
+                    'total_amount' => $amount,
+                    'subtypes' => $subtypes,
+                ];
+            })->filter(fn ($item) => $item['drug_count'] > 0)->values()->all();
 
             $setting = SettingApp::first();
             $appName = $setting?->nama_app ?? config('app.name');
@@ -275,5 +246,152 @@ class DrugUsageController extends Controller
         }
 
         return date('j', $ts).' '.$months[(int) date('n', $ts) - 1].' '.(date('Y', $ts) + 543);
+    }
+
+    private function excelSheetName(string $name): string
+    {
+        $sanitized = preg_replace('/[\\\\\\/\\?\\*\\[\\]:]/', ' ', $name) ?? $name;
+
+        return mb_substr(trim($sanitized), 0, 31);
+    }
+
+    /** @param Collection<string, Collection<int, object>> $groupedByForm */
+    private function writeDrugUsageSummarySheet(
+        WriterInterface $writer,
+        Collection $rows,
+        Collection $groupedByForm,
+        string $start,
+        string $end,
+        string $formLabel,
+        float $grandQty,
+        float $grandAmount,
+    ): void {
+        $writer->addRow(WriterEntityFactory::createRowFromArray([
+            'รายงานข้อมูลยาและการใช้ยา',
+        ]));
+        $writer->addRow(WriterEntityFactory::createRowFromArray([
+            'ช่วงวันที่', $start.' ถึง '.$end,
+        ]));
+        $writer->addRow(WriterEntityFactory::createRowFromArray([
+            'ตัวกรองประเภท', $formLabel,
+        ]));
+        $writer->addRow(WriterEntityFactory::createRowFromArray([
+            'ออกรายงานเมื่อ', now()->timezone('Asia/Bangkok')->format('d/m/Y H:i:s'),
+        ]));
+        $writer->addRow(WriterEntityFactory::createRowFromArray([]));
+        $writer->addRow(WriterEntityFactory::createRowFromArray([
+            'รายการยา', $rows->count(),
+            'จำนวนรวม', $grandQty,
+            'มูลค่ารวม (บาท)', $grandAmount,
+        ]));
+        $writer->addRow(WriterEntityFactory::createRowFromArray([]));
+        $writer->addRow(WriterEntityFactory::createRowFromArray([
+            'ประเภท', 'รูปแบบ', 'รายการยา', 'จำนวนรวม', 'มูลค่ารวม (บาท)',
+        ]));
+
+        foreach ($this->drugUsage->formCatalog() as $formKey => $formName) {
+            $formRows = $groupedByForm->get($formKey, collect());
+            if ($formRows->isEmpty()) {
+                continue;
+            }
+
+            $formQty = (float) $formRows->sum('total_qty');
+            $formAmount = (float) $formRows->sum('total_amount');
+            $subGrouped = $formRows->groupBy(fn ($row) => $row->sub_form_label ?? '-');
+            $subIndex = 0;
+
+            foreach ($subGrouped as $subLabel => $subRows) {
+                $writer->addRow(WriterEntityFactory::createRowFromArray([
+                    $subIndex === 0 ? $formName : '',
+                    $subLabel,
+                    $subRows->count(),
+                    (float) $subRows->sum('total_qty'),
+                    (float) $subRows->sum('total_amount'),
+                ]));
+                $subIndex++;
+            }
+
+            $writer->addRow(WriterEntityFactory::createRowFromArray([
+                '', 'รวม '.$formName, $formRows->count(), $formQty, $formAmount,
+            ]));
+            $writer->addRow(WriterEntityFactory::createRowFromArray([]));
+        }
+
+        $writer->addRow(WriterEntityFactory::createRowFromArray([
+            'รวมทั้งหมด', '', $rows->count(), $grandQty, $grandAmount,
+        ]));
+    }
+
+    private function writeDrugUsageFormSheet(
+        WriterInterface $writer,
+        Collection $formRows,
+        string $formName,
+        string $start,
+        string $end,
+    ): void {
+        $writer->addRow(WriterEntityFactory::createRowFromArray([
+            'รายงานข้อมูลยาและการใช้ยา — '.$formName,
+        ]));
+        $writer->addRow(WriterEntityFactory::createRowFromArray([
+            'ช่วงวันที่', $start.' ถึง '.$end,
+        ]));
+        $writer->addRow(WriterEntityFactory::createRowFromArray([
+            'รายการยา', $formRows->count(),
+            'จำนวนรวม', (float) $formRows->sum('total_qty'),
+            'มูลค่ารวม (บาท)', (float) $formRows->sum('total_amount'),
+        ]));
+        $writer->addRow(WriterEntityFactory::createRowFromArray([]));
+        $writer->addRow(WriterEntityFactory::createRowFromArray([
+            'รูปแบบ', 'รหัสยา', 'ชื่อยา', 'ความแรง', 'หน่วย', 'ราคาต่อหน่วย', 'จำนวนรวม', 'มูลค่ารวม (บาท)',
+        ]));
+
+        $currentSubForm = null;
+        $subQty = 0.0;
+        $subAmount = 0.0;
+        $sheetQty = 0.0;
+        $sheetAmount = 0.0;
+
+        $flushSubtotal = function () use ($writer, &$subQty, &$subAmount) {
+            if ($subQty > 0 || $subAmount > 0) {
+                $writer->addRow(WriterEntityFactory::createRowFromArray([
+                    '', '', '', '', 'รวมรูปแบบ', '', $subQty, $subAmount,
+                ]));
+                $writer->addRow(WriterEntityFactory::createRowFromArray([]));
+            }
+            $subQty = 0.0;
+            $subAmount = 0.0;
+        };
+
+        foreach ($formRows as $row) {
+            $rowSubForm = $row->sub_form_label ?? $this->drugUsage->subFormLabel($row->units ?? null);
+
+            if ($currentSubForm !== null && $currentSubForm !== $rowSubForm) {
+                $flushSubtotal();
+            }
+            $currentSubForm = $rowSubForm;
+
+            $qty = (float) ($row->total_qty ?? 0);
+            $amount = (float) ($row->total_amount ?? 0);
+            $subQty += $qty;
+            $subAmount += $amount;
+            $sheetQty += $qty;
+            $sheetAmount += $amount;
+
+            $writer->addRow(WriterEntityFactory::createRowFromArray([
+                $rowSubForm,
+                $row->icode,
+                $row->name,
+                $row->strength,
+                $row->units,
+                $row->unitprice,
+                $qty,
+                $amount,
+            ]));
+        }
+
+        $flushSubtotal();
+        $writer->addRow(WriterEntityFactory::createRowFromArray([
+            '', '', '', '', 'รวม '.$formName, '', $sheetQty, $sheetAmount,
+        ]));
     }
 }

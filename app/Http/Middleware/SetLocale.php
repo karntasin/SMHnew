@@ -18,9 +18,19 @@ class SetLocale
      */
     public function handle(Request $request, Closure $next)
     {
-        if (Session::has('locale')) {
-            App::setLocale(Session::get('locale'));
+        $allowed = ['th', 'en'];
+        $locale = Session::get('locale', config('app.locale', 'th'));
+
+        if (! in_array($locale, $allowed, true)) {
+            $locale = 'th';
         }
+
+        // First visit: persist Thai (or configured default) so UI stays consistent.
+        if (! Session::has('locale')) {
+            Session::put('locale', $locale);
+        }
+
+        App::setLocale($locale);
 
         return $next($request);
     }

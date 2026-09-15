@@ -11,6 +11,8 @@ class CgdReconcileItem extends Model
 
     protected $fillable = [
         'reconciliation_id',
+        'stm_import_id',
+        'claim_submission_no',
         'status',
         'hn',
         'pid',
@@ -18,6 +20,7 @@ class CgdReconcileItem extends Model
         'match_key',
         'patient_name',
         'visit_date',
+        'visit_at',
         'department',
         'pttype',
         'pttype_code',
@@ -34,6 +37,10 @@ class CgdReconcileItem extends Model
         'stm_organ',
         'stm_treat',
         'rep_no',
+        'error_code',
+        'fund_codes',
+        'tran_id',
+        'remark',
         'diff_claim',
         'diff_approved',
         'shortfall',
@@ -41,6 +48,7 @@ class CgdReconcileItem extends Model
 
     protected $casts = [
         'visit_date' => 'date',
+        'visit_at' => 'datetime',
         'hosxp_drug' => 'float',
         'hosxp_organ' => 'float',
         'hosxp_service' => 'float',
@@ -60,5 +68,10 @@ class CgdReconcileItem extends Model
     public function reconciliation(): BelongsTo
     {
         return $this->belongsTo(CgdReconciliation::class, 'reconciliation_id');
+    }
+
+    public function stmImport(): BelongsTo
+    {
+        return $this->belongsTo(StmImport::class, 'stm_import_id');
     }
 }

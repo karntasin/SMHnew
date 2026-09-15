@@ -31,8 +31,11 @@ class Vehicle extends Model
         'next_maintenance_date',
         'status', // available, maintenance, busy
         'is_active',
+        'image',
         'images',
     ];
+
+    protected $appends = ['image_url'];
 
     protected $casts = [
         'registration_date' => 'date',
@@ -57,5 +60,16 @@ class Vehicle extends Model
     public function getNameAttribute()
     {
         return "{$this->brand} {$this->model} ({$this->license_plate})";
+    }
+
+    public function getImageUrlAttribute(): ?string
+    {
+        $path = $this->image;
+
+        if (!$path && is_array($this->images) && count($this->images) > 0) {
+            $path = $this->images[0];
+        }
+
+        return $path ? asset('storage/'.$path) : null;
     }
 }

@@ -15,8 +15,11 @@ export default function FinanceDashboard({ financeUrl }: { financeUrl: string })
     };
 
     return (
-        <AppLayout breadcrumbs={[{ title: 'Finance Dashboard', href: '#' }]}>
-            <Head title="Finance Dashboard" />
+        <AppLayout breadcrumbs={[
+            { title: 'รายงานการเงิน', href: route('finance.dashboard') },
+            { title: 'แดชบอร์ด BMS', href: route('finance.dashboard') },
+        ]}>
+            <Head title="แดชบอร์ด BMS" />
             
             <div className="flex flex-col h-[calc(100vh-4rem)]">
                 <div className="p-4 border-b bg-background flex items-center gap-4 shrink-0">

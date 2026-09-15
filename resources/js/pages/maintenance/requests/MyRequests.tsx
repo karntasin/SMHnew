@@ -38,6 +38,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import MaintenanceSubNav from '../MaintenanceSubNav';
 
 interface Request {
     id: number;
@@ -128,19 +129,26 @@ export default function MyRequests({ requests, filters }: Props) {
         ]}>
             <Head title="รายการแจ้งซ่อมของฉัน" />
 
-            <div className="p-6 max-w-7xl mx-auto space-y-6">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                    <div>
-                        <h1 className="text-2xl font-bold text-slate-900">รายการแจ้งซ่อมของฉัน</h1>
-                        <p className="text-slate-500">ติดตามสถานะและจัดการรายการแจ้งซ่อมของคุณ</p>
+            <div className="relative min-h-screen overflow-hidden">
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(249,115,22,0.14),_transparent_55%),radial-gradient(ellipse_at_bottom_right,_rgba(245,158,11,0.10),_transparent_45%)]" />
+                <div className="pointer-events-none absolute -left-24 top-24 h-72 w-72 rounded-full bg-orange-300/15 blur-3xl" />
+                <div className="pointer-events-none absolute -right-16 top-80 h-80 w-80 rounded-full bg-amber-300/15 blur-3xl" />
+
+                <div className="relative container mx-auto max-w-7xl space-y-6 px-4 py-6">
+                    <MaintenanceSubNav active="maintenance.requests.my" />
+
+                    <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+                        <div>
+                            <h1 className="text-2xl font-bold text-slate-900">รายการแจ้งซ่อมของฉัน</h1>
+                            <p className="text-slate-500">ติดตามสถานะและจัดการรายการแจ้งซ่อมของคุณ</p>
+                        </div>
+                        <Link href={route('maintenance.requests.create')}>
+                            <Button className="rounded-xl bg-orange-600 text-white shadow-sm hover:bg-orange-700">
+                                <Plus className="mr-2 h-4 w-4" />
+                                แจ้งซ่อมใหม่
+                            </Button>
+                        </Link>
                     </div>
-                    <Link href={route('maintenance.requests.create')}>
-                        <Button className="bg-orange-600 hover:bg-orange-700 text-white shadow-sm">
-                            <Plus className="w-4 h-4 mr-2" />
-                            แจ้งซ่อมใหม่
-                        </Button>
-                    </Link>
-                </div>
 
                 {/* Filter Tabs */}
                 <div className="flex overflow-x-auto pb-2 gap-2 no-scrollbar">
@@ -392,6 +400,7 @@ export default function MyRequests({ requests, filters }: Props) {
                         </AlertDialogFooter>
                     </AlertDialogContent>
                 </AlertDialog>
+                </div>
             </div>
         </AppLayout>
     );

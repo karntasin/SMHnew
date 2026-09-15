@@ -36,6 +36,7 @@ import {
     Activity,
     Pill,
     Download,
+    FileSpreadsheet,
 } from 'lucide-react';
 
 interface FilterProps {
@@ -216,6 +217,36 @@ export default function RevenueDashboard({
         );
     };
 
+    const handleExportPttypePdf = () => {
+        if (!startDate || !endDate) {
+            setDateError('กรุณาเลือกวันที่เริ่มต้นและสิ้นสุดก่อนดาวน์โหลด');
+            return;
+        }
+        if (startDate > endDate) {
+            setDateError('วันที่เริ่มต้นต้องไม่เกินวันที่สิ้นสุด');
+            return;
+        }
+        window.open(
+            route('finance.revenue.export-pttype-pdf', { start_date: startDate, end_date: endDate }),
+            '_blank',
+        );
+    };
+
+    const handleExportPttypeExcel = () => {
+        if (!startDate || !endDate) {
+            setDateError('กรุณาเลือกวันที่เริ่มต้นและสิ้นสุดก่อนดาวน์โหลด');
+            return;
+        }
+        if (startDate > endDate) {
+            setDateError('วันที่เริ่มต้นต้องไม่เกินวันที่สิ้นสุด');
+            return;
+        }
+        window.open(
+            route('finance.revenue.export-pttype-excel', { start_date: startDate, end_date: endDate }),
+            '_blank',
+        );
+    };
+
     const filterLabel =
         filter?.start_date_label && filter?.end_date_label
             ? `${filter.start_date_label} — ${filter.end_date_label}`
@@ -334,22 +365,27 @@ export default function RevenueDashboard({
                                 <TrendingUp className="mr-2 h-4 w-4" />
                                 แสดงข้อมูล
                             </Button>
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={handleExportExcel}
-                            >
-                                <Download className="mr-2 h-4 w-4" />
-                                ดาวน์โหลด Excel
-                            </Button>
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={handleExportPdf}
-                            >
-                                <Download className="mr-2 h-4 w-4" />
-                                ดาวน์โหลด PDF
-                            </Button>
+                            <div className="flex flex-col gap-1.5">
+                                <span className="text-xs font-medium text-muted-foreground">ดาวน์โหลดรายงานรวม</span>
+                                <div className="flex flex-wrap gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={handleExportExcel}
+                                    >
+                                        <FileSpreadsheet className="mr-2 h-4 w-4" />
+                                        Excel รายงานรวม
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={handleExportPdf}
+                                    >
+                                        <Download className="mr-2 h-4 w-4" />
+                                        PDF รายงานรวม
+                                    </Button>
+                                </div>
+                            </div>
                         </form>
                         {filterLabel && (
                             <p className="mt-3 text-sm text-muted-foreground">
@@ -733,9 +769,40 @@ export default function RevenueDashboard({
 
                         {/* Detail Table */}
                         <Card className="shadow-lg">
-                            <CardHeader>
-                                <CardTitle>รายละเอียดตามสิทธิ์การรักษา</CardTitle>
-                                <CardDescription>เรียงตามรายได้รวมมากไปน้อย</CardDescription>
+                            <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+                                <div>
+                                    <CardTitle>รายละเอียดตามสิทธิ์การรักษา</CardTitle>
+                                    <CardDescription>เรียงตามรายได้รวมมากไปน้อย</CardDescription>
+                                </div>
+                                <div className="flex shrink-0 flex-col items-end gap-1.5">
+                                    <span className="text-xs font-medium text-muted-foreground">
+                                        ดาวน์โหลดรายงานตารางนี้
+                                    </span>
+                                    <div className="flex flex-wrap items-center justify-end gap-2">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            className="border-emerald-200 bg-emerald-50/50 hover:bg-emerald-50"
+                                            onClick={handleExportPttypeExcel}
+                                            disabled={by_pttype.length === 0}
+                                        >
+                                            <FileSpreadsheet className="mr-2 h-4 w-4 text-emerald-700" />
+                                            Excel รายละเอียดสิทธิ์
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            className="border-teal-200 bg-teal-50/50 hover:bg-teal-50"
+                                            onClick={handleExportPttypePdf}
+                                            disabled={by_pttype.length === 0}
+                                        >
+                                            <Download className="mr-2 h-4 w-4 text-teal-700" />
+                                            PDF รายละเอียดสิทธิ์
+                                        </Button>
+                                    </div>
+                                </div>
                             </CardHeader>
                             <CardContent className="overflow-x-auto">
                                 <table className="w-full text-sm">

@@ -22,7 +22,7 @@ interface LoginProps {
     status?: string;
     canResetPassword: boolean;
     lineLoginEnabled?: boolean;
-    lineQr?: { ticket: string; scanUrl: string } | null;
+    lineQr?: { ticket: string; scanUrl: string; popupUrl?: string } | null;
 }
 
 export default function Login({ status, canResetPassword, lineLoginEnabled, lineQr }: LoginProps) {
@@ -54,15 +54,21 @@ export default function Login({ status, canResetPassword, lineLoginEnabled, line
 
             <form className="flex flex-col gap-5" onSubmit={submit}>
                 {lineLoginEnabled && (
-                    <>
-                        {lineQr?.scanUrl && <LineQrLogin scanUrl={lineQr.scanUrl} />}
-                        <LineLoginButton intent="login" label="หรือเข้าด้วยอีเมล/บัญชี LINE บนเครื่องนี้" />
+                    <div className="flex flex-col gap-3">
+                        {lineQr?.scanUrl && (
+                            <LineQrLogin
+                                scanUrl={lineQr.scanUrl}
+                                popupUrl={lineQr.popupUrl}
+                                label="เข้าสู่ระบบด้วย LINE"
+                            />
+                        )}
+                        <LineLoginButton intent="login" label="เปิด LINE บนเครื่องนี้" />
                         <div className="flex items-center gap-3 text-xs text-gray-400">
                             <span className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
-                            หรือเข้าด้วยอีเมล
+                            หรือใช้อีเมล
                             <span className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
                         </div>
-                    </>
+                    </div>
                 )}
                 <div className="grid gap-5">
                     {/* Email Field */}

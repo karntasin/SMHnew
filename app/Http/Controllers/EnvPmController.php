@@ -60,11 +60,17 @@ class EnvPmController extends Controller
             
             // Update Asset Status
             $asset = EnvAsset::find($request->asset_id);
-            $asset->update(['status' => 'Active']);
+            $asset->update([
+                'status' => EnvAsset::operationalStatusForRegistry('normal'),
+                'registry_status' => 'normal',
+            ]);
         } else {
             // If failed, maybe set status to Maintenance?
             $asset = EnvAsset::find($request->asset_id);
-            $asset->update(['status' => 'Maintenance']);
+            $asset->update([
+                'status' => EnvAsset::operationalStatusForRegistry('repair'),
+                'registry_status' => 'repair',
+            ]);
         }
         
         $schedule->save();

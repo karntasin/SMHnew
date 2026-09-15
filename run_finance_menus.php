@@ -121,28 +121,28 @@ if (! $financeParentId) {
         INSERT INTO menus (title, icon, route, parent_id, `order`, permission_name, created_at, updated_at)
         VALUES (?, ?, NULL, NULL, 90, NULL, ?, ?)
     ');
-    $insert->execute(['Finance Reports', 'DollarSign', $now, $now]);
+    $insert->execute(['รายงานการเงิน', 'DollarSign', $now, $now]);
     $financeParentId = (int) $pdo->lastInsertId();
-    echo "สร้างเมนูหลัก Finance Reports (id={$financeParentId})\n";
+    echo "สร้างเมนูหลัก รายงานการเงิน (id={$financeParentId})\n";
 } else {
     $financeParentId = (int) $financeParentId;
     $pdo->prepare('
         UPDATE menus SET title = ?, icon = ?, route = NULL, permission_name = NULL, updated_at = ?
         WHERE id = ?
-    ')->execute(['Finance Reports', 'DollarSign', $now, $financeParentId]);
-    echo "อัปเดตเมนูหลัก Finance Reports (id={$financeParentId})\n";
+    ')->execute(['รายงานการเงิน', 'DollarSign', $now, $financeParentId]);
+    echo "อัปเดตเมนูหลัก รายงานการเงิน (id={$financeParentId})\n";
 }
 
 syncMenuGroup($pdo, $financeParentId, [
     [
-        'title' => 'BMS Dashboard',
+        'title' => 'แดชบอร์ด BMS',
         'icon' => 'Layout',
         'route' => 'finance.dashboard',
         'order' => 1,
         'permission_name' => 'finance.dashboard',
     ],
     [
-        'title' => 'HOSxP Revenue by Coverage',
+        'title' => 'รายได้ตามสิทธิ์การรักษา',
         'icon' => 'BarChart3',
         'route' => 'finance.revenue',
         'order' => 2,
@@ -182,6 +182,7 @@ $pdo->prepare("
     WHERE route IN (
         'finance.data-hub',
         'finance.cgd.dashboard',
+        'finance.cgd.precheck',
         'finance.cgd.import',
         'finance.lgo.dashboard',
         'finance.sso.dashboard',
@@ -206,24 +207,31 @@ syncMenuGroup($pdo, $hubParentId, [
         'permission_name' => 'finance.cgd.dashboard',
     ],
     [
+        'title' => 'ตรวจก่อนเบิก C Deny',
+        'icon' => 'ShieldAlert',
+        'route' => 'finance.cgd.precheck',
+        'order' => 3,
+        'permission_name' => 'finance.cgd.precheck',
+    ],
+    [
         'title' => 'ตรวจข้อมูล อปท.',
         'icon' => 'Building2',
         'route' => 'finance.lgo.dashboard',
-        'order' => 3,
+        'order' => 4,
         'permission_name' => 'finance.lgo.dashboard',
     ],
     [
         'title' => 'ตรวจข้อมูล ประกันสังคม',
         'icon' => 'Shield',
         'route' => 'finance.sso.dashboard',
-        'order' => 4,
+        'order' => 5,
         'permission_name' => 'finance.sso.dashboard',
     ],
     [
         'title' => 'ตรวจข้อมูล บัตรทอง',
         'icon' => 'Heart',
         'route' => 'finance.uc.dashboard',
-        'order' => 5,
+        'order' => 6,
         'permission_name' => 'finance.uc.dashboard',
     ],
 ], 'ศูนย์ข้อมูลการเงิน', $now);

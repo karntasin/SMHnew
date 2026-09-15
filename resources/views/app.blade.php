@@ -21,8 +21,10 @@
     @if (!empty($favicon))
         <link rel="icon" href="{{ asset('storage/' . $favicon) }}" type="image/png">
     @else
-        <link rel="icon" href="/logosmh.png" type="image/png">
+        <link rel="icon" href="{{ asset('logosmh.png') }}" type="image/png">
     @endif
+
+    <meta name="app-base-url" content="{{ rtrim(asset(''), '/') }}">
 
 
     @routes

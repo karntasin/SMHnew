@@ -31,6 +31,8 @@ interface DrugRow {
     units: string;
     form: string;
     form_label: string;
+    sub_form?: string;
+    sub_form_label?: string;
     unitprice: number;
     total_qty: number;
     total_amount: number;
@@ -44,6 +46,15 @@ interface FormRow {
     total_amount: number;
     qty_share_percent: number;
     amount_share_percent: number;
+    subtypes?: {
+        sub_form: string;
+        label: string;
+        drug_count: number;
+        total_qty: number;
+        total_amount: number;
+        qty_share_percent: number;
+        amount_share_percent: number;
+    }[];
 }
 
 interface Connection {
@@ -78,6 +89,7 @@ const FORM_COLORS: Record<string, string> = {
     tablet: 'border-cyan-200 bg-cyan-50 text-cyan-800',
     liquid: 'border-indigo-200 bg-indigo-50 text-indigo-800',
     injection: 'border-rose-200 bg-rose-50 text-rose-800',
+    topical: 'border-violet-200 bg-violet-50 text-violet-800',
     other: 'border-slate-200 bg-slate-50 text-slate-700',
 };
 
@@ -144,14 +156,22 @@ export default function DrugUsageReport({
     const from = total === 0 ? 0 : (filters.page - 1) * filters.per_page + 1;
     const to = Math.min(filters.page * filters.per_page, total);
 
-    // group current page rows by form for section headers
-    const groupedRows: { form: string; label: string; items: DrugRow[] }[] = [];
+    // group current page rows by form + sub-form for section headers
+    const groupedRows: { form: string; label: string; subForm: string; subLabel: string; items: DrugRow[] }[] = [];
     rows.forEach((row) => {
         const last = groupedRows[groupedRows.length - 1];
-        if (last && last.form === row.form) {
+        const subForm = row.sub_form || 'other';
+        const subLabel = row.sub_form_label || '-';
+        if (last && last.form === row.form && last.subForm === subForm) {
             last.items.push(row);
         } else {
-            groupedRows.push({ form: row.form, label: row.form_label, items: [row] });
+            groupedRows.push({
+                form: row.form,
+                label: row.form_label,
+                subForm,
+                subLabel,
+                items: [row],
+            });
         }
     });
 
@@ -159,9 +179,9 @@ export default function DrugUsageReport({
         <QualityPage
             tone="cyan"
             icon={Pill}
-            badge="ศูนย์คุณภาพ · รายงานยา"
+            badge="ศูนย์พัฒนาคุณภาพ · รายงานยา"
             title="รายงานรายการยาและการใช้ยา"
-            subtitle="แยกตามประเภทยา (ยาเม็ด / ยาน้ำ / ยาฉีด / อื่นๆ) พร้อมส่งออก Excel และ PDF"
+            subtitle="แยกตามประเภทยา (เม็ด / น้ำ / ฉีด / ใช้ภายนอก) และรูปแบบบรรจุ พร้อมส่งออก Excel และ PDF"
             breadcrumbs={drugUsageBreadcrumbs({ title: 'รายงาน', href: route('drug-usage.report') })}
             headTitle="รายงานรายการยา"
             subNav={<DrugUsageSubNav active="drug-usage.report" />}
@@ -243,7 +263,7 @@ export default function DrugUsageReport({
                 </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
                 <button
                     type="button"
                     onClick={() => setFormQuick('all')}
@@ -272,11 +292,18 @@ export default function DrugUsageReport({
                         <div className="mt-0.5 text-[11px] text-slate-400">
                             {fmtNum(f.total_qty)} · {f.qty_share_percent}%
                         </div>
+                        {(f.subtypes ?? []).length > 0 && (
+                            <div className="mt-1 space-y-0.5 text-[10px] leading-tight text-slate-400">
+                                {f.subtypes!.slice(0, 3).map((s) => (
+                                    <div key={s.sub_form}>{s.label}: {fmtNum(s.drug_count)}</div>
+                                ))}
+                            </div>
+                        )}
                     </button>
                 ))}
             </div>
 
-            <Panel title="ตารางรายการยา" description="จัดกลุ่มตามประเภทยา · เรียงหน่วยและชื่อยา">
+            <Panel title="ตารางรายการยา" description="จัดกลุ่มตามประเภทยาและรูปแบบบรรจุ · เรียงหน่วยและชื่อยา">
                 {rows.length === 0 ? (
                     <EmptyState text="ไม่พบข้อมูลการจ่ายยาในช่วงที่เลือก" />
                 ) : (
@@ -291,6 +318,7 @@ export default function DrugUsageReport({
                                         <th className="py-2 pr-3">ความแรง</th>
                                         <th className="py-2 pr-3">หน่วย</th>
                                         <th className="py-2 pr-3">ประเภท</th>
+                                        <th className="py-2 pr-3">รูปแบบ</th>
                                         <th className="py-2 pr-3 text-right">ราคา/หน่วย</th>
                                         <th className="py-2 pr-3 text-right">จำนวนรวม</th>
                                         <th className="py-2 text-right">มูลค่ารวม</th>
@@ -298,10 +326,10 @@ export default function DrugUsageReport({
                                 </thead>
                                 <tbody>
                                     {groupedRows.map((group) => (
-                                        <React.Fragment key={group.form + group.items[0]?.icode}>
+                                        <React.Fragment key={group.form + group.subForm + group.items[0]?.icode}>
                                             <tr className="bg-cyan-50/60">
-                                                <td colSpan={9} className="px-2 py-2 text-sm font-semibold text-cyan-800">
-                                                    {group.label}
+                                                <td colSpan={10} className="px-2 py-2 text-sm font-semibold text-cyan-800">
+                                                    {group.label} · {group.subLabel}
                                                     <span className="ml-2 text-xs font-normal text-cyan-600">
                                                         ({group.items.length} รายการในหน้านี้)
                                                     </span>
@@ -325,6 +353,7 @@ export default function DrugUsageReport({
                                                                 {row.form_label}
                                                             </span>
                                                         </td>
+                                                        <td className="py-2.5 pr-3 text-slate-500">{row.sub_form_label || '-'}</td>
                                                         <td className="py-2.5 pr-3 text-right tabular-nums">{fmtMoney(row.unitprice)}</td>
                                                         <td className="py-2.5 pr-3 text-right tabular-nums font-medium">{fmtNum(row.total_qty)}</td>
                                                         <td className="py-2.5 text-right tabular-nums font-medium text-emerald-700">{fmtMoney(row.total_amount)}</td>
@@ -336,7 +365,7 @@ export default function DrugUsageReport({
                                 </tbody>
                                 <tfoot>
                                     <tr className="border-t-2 border-slate-200 bg-slate-50/50 font-semibold">
-                                        <td colSpan={7} className="py-3 pr-3 text-right text-slate-600">
+                                        <td colSpan={8} className="py-3 pr-3 text-right text-slate-600">
                                             รวมหน้านี้ ({rows.length} รายการ)
                                         </td>
                                         <td className="py-3 pr-3 text-right tabular-nums">

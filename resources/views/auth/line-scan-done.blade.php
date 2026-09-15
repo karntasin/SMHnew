@@ -4,6 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>ยืนยัน LINE สำเร็จ</title>
+    @if (!empty($continueUrl))
+        <meta http-equiv="refresh" content="2;url={{ $continueUrl }}">
+    @endif
     <style>
         * { box-sizing: border-box; }
         body {
@@ -38,6 +41,16 @@
         h1 { margin: 0 0 8px; font-size: 20px; color: #0f172a; }
         p { margin: 0; color: #64748b; font-size: 14px; line-height: 1.6; }
         .name { margin-top: 8px; color: #334155; font-weight: 600; }
+        a.continue {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 12px 20px;
+            border-radius: 10px;
+            background: #06C755;
+            color: #fff;
+            text-decoration: none;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
@@ -47,19 +60,41 @@
         @if (!empty($displayName))
             <p class="name">{{ $displayName }}</p>
         @endif
-        <p style="margin-top: 12px;">กำลังกลับไปหน้าเข้าสู่ระบบ...</p>
-        <p style="margin-top: 8px; font-size: 13px;">ถ้าหน้าต่างไม่ปิดเอง ให้ปิดแล้วกลับไปที่คอมพิวเตอร์ที่แสดง QR</p>
+        <p id="status" style="margin-top: 12px;">
+            @if (($intent ?? '') === 'register')
+                กำลังไปหน้ากรอกข้อมูลผู้ใช้...
+            @else
+                กำลังเข้าสู่ระบบ...
+            @endif
+        </p>
+        @if (!empty($continueUrl))
+            <a class="continue" href="{{ $continueUrl }}">ไปต่อที่นี่</a>
+        @endif
     </div>
     <script>
         (function () {
-            if (window.opener && !window.opener.closed) {
+            var continueUrl = @json($continueUrl ?? '');
+            var hasOpener = false;
+            try {
+                hasOpener = !!(window.opener && !window.opener.closed && window.opener.location.origin === window.location.origin);
+            } catch (e) {
+                hasOpener = false;
+            }
+
+            if (hasOpener) {
                 try {
                     window.opener.postMessage({ type: 'line-qr-ready' }, '*');
                 } catch (e) {}
+                document.getElementById('status').textContent = 'ยืนยันแล้ว สามารถปิดหน้านี้ได้';
+                setTimeout(function () {
+                    window.close();
+                }, 800);
+                return;
             }
-            setTimeout(function () {
-                window.close();
-            }, 800);
+
+            if (continueUrl) {
+                window.location.replace(continueUrl);
+            }
         })();
     </script>
 </body>

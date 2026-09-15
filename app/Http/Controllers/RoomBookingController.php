@@ -2,24 +2,67 @@
 
 namespace App\Http\Controllers;
 
-use Inertia\Inertia;
-use Illuminate\Http\Request;
+use App\Models\Department;
 use App\Models\MeetingRoom;
 use App\Models\RoomBooking;
 use App\Models\User;
-use App\Models\Department;
 use App\Notifications\RoomBookingNotification;
+use App\Services\FshhChat\AdminHubChatNotifier;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
 
 class RoomBookingController extends Controller
 {
     public function index(Request $request)
     {
-        $rooms = MeetingRoom::all();
+        $rooms = MeetingRoom::query()
+            ->active()
+            ->orderBy('name')
+            ->get()
+            ->map(fn (MeetingRoom $room) => $this->transformRoom($room));
+
+        $upcoming = RoomBooking::with(['room', 'user'])
+            ->where('status', '!=', 'rejected')
+            ->where('status', '!=', 'cancelled')
+            ->where('end_time', '>=', now())
+            ->orderBy('start_time')
+            ->limit(8)
+            ->get()
+            ->map(fn (RoomBooking $booking) => $this->transformBooking($booking));
+
+        $todayBookings = RoomBooking::with(['room', 'user'])
+            ->where('status', '!=', 'rejected')
+            ->where('status', '!=', 'cancelled')
+            ->whereDate('start_time', Carbon::today())
+            ->orderBy('start_time')
+            ->get()
+            ->map(fn (RoomBooking $booking) => $this->transformBooking($booking));
+
+        $stats = [
+            'total_bookings' => RoomBooking::count(),
+            'pending_approval' => RoomBooking::where('status', 'pending')->count(),
+            'today_bookings' => RoomBooking::whereDate('start_time', Carbon::today())->count(),
+            'active_rooms' => MeetingRoom::active()->count(),
+        ];
+
+        return Inertia::render('AdminHub/rooms/Index', [
+            'rooms' => $rooms,
+            'upcoming' => $upcoming,
+            'todayBookings' => $todayBookings,
+            'stats' => $stats,
+            'facilityOptions' => MeetingRoom::facilityOptions(),
+            'preselectRoomId' => $request->integer('room_id') ?: null,
+            'openCreate' => $request->boolean('action') && $request->input('action') === 'create',
+        ]);
+    }
+
+    public function bookings(Request $request)
+    {
+        $rooms = MeetingRoom::query()->orderBy('name')->get()->map(fn (MeetingRoom $room) => $this->transformRoom($room));
         $filter = $request->input('filter', 'all');
-        
-        $query = RoomBooking::with(['room', 'user'])
-            ->orderBy('start_time', 'desc');
+
+        $query = RoomBooking::with(['room', 'user'])->orderBy('start_time', 'desc');
 
         if ($filter === 'pending') {
             $query->where('status', 'pending');
@@ -27,101 +70,91 @@ class RoomBookingController extends Controller
             $query->whereDate('start_time', Carbon::today());
         }
 
-        $bookings = $query->get()
-            ->map(function ($booking) {
-                return [
-                    'id' => $booking->id,
-                    'title' => $booking->title,
-                    'start_time' => $booking->start_time->toIso8601String(),
-                    'end_time' => $booking->end_time->toIso8601String(),
-                    'status' => $booking->status,
-                    'room' => $booking->room,
-                    'user' => [
-                        'name' => $booking->user ? $booking->user->name : 'Unknown',
-                    ],
-                    'attendees_count' => $booking->attendees_count
-                ];
-            });
+        $bookings = $query->get()->map(fn (RoomBooking $booking) => $this->transformBooking($booking));
 
         $stats = [
             'total_bookings' => RoomBooking::count(),
             'pending_approval' => RoomBooking::where('status', 'pending')->count(),
             'today_bookings' => RoomBooking::whereDate('start_time', Carbon::today())->count(),
-            'active_rooms' => MeetingRoom::where('status', 'active')->count()
+            'active_rooms' => MeetingRoom::active()->count(),
         ];
 
         return Inertia::render('AdminHub/rooms/List', [
             'rooms' => $rooms,
             'bookings' => $bookings,
             'stats' => $stats,
-            'currentFilter' => $filter
+            'currentFilter' => $filter,
         ]);
     }
 
     public function calendar()
     {
-        $events = RoomBooking::with('room')
+        $events = RoomBooking::with(['room', 'user'])
             ->where('status', '!=', 'rejected')
             ->where('status', '!=', 'cancelled')
+            ->orderBy('start_time')
             ->get()
-            ->map(function ($booking) {
+            ->map(function (RoomBooking $booking) {
+                $room = $booking->room;
+
                 return [
                     'id' => $booking->id,
                     'title' => $booking->title,
+                    'calendar_title' => ($room?->name ? $room->name.' · ' : '').$booking->title,
                     'start' => $booking->start_time->toIso8601String(),
                     'end' => $booking->end_time->toIso8601String(),
-                    'backgroundColor' => $booking->room->color ?? '#3b82f6',
-                    'borderColor' => $booking->room->color ?? '#3b82f6',
+                    'status' => $booking->status,
+                    'attendees_count' => $booking->attendees_count,
+                    'description' => $booking->description,
+                    'backgroundColor' => $room->color ?? '#0ea5e9',
+                    'borderColor' => $room->color ?? '#0ea5e9',
+                    'url' => route('rooms.bookings.show', $booking->id),
+                    'user' => [
+                        'name' => $booking->user?->name ?? 'Unknown',
+                    ],
+                    'room' => $room ? [
+                        'id' => $room->id,
+                        'name' => $room->name,
+                        'location' => $room->location,
+                        'capacity' => $room->capacity,
+                        'color' => $room->color ?: '#0ea5e9',
+                        'image_url' => $room->image_url,
+                    ] : null,
                 ];
             });
-            
+
         return response()->json($events);
     }
 
     public function meetingRooms()
     {
-        return response()->json(MeetingRoom::where('status', 'active')->get());
+        return response()->json(
+            MeetingRoom::active()->orderBy('name')->get()->map(fn (MeetingRoom $room) => $this->transformRoom($room))
+        );
     }
 
     public function myBookings()
     {
-        $rooms = MeetingRoom::all();
-        
+        $rooms = MeetingRoom::query()->orderBy('name')->get()->map(fn (MeetingRoom $room) => $this->transformRoom($room));
+
         $bookings = RoomBooking::with(['room', 'user'])
             ->where('user_id', auth()->id())
             ->orderBy('start_time', 'desc')
             ->get()
-            ->map(function ($booking) {
-                return [
-                    'id' => $booking->id,
-                    'title' => $booking->title,
-                    'start_time' => $booking->start_time->toIso8601String(),
-                    'end_time' => $booking->end_time->toIso8601String(),
-                    'status' => $booking->status,
-                    'room' => $booking->room,
-                    'user' => [
-                        'name' => $booking->user ? $booking->user->name : 'Unknown',
-                    ],
-                    'attendees_count' => $booking->attendees_count
-                ];
-            });
-
-        $myBookingsCount = RoomBooking::where('user_id', auth()->id())->count();
-        $myPendingCount = RoomBooking::where('user_id', auth()->id())->where('status', 'pending')->count();
-        $myTodayCount = RoomBooking::where('user_id', auth()->id())->whereDate('start_time', Carbon::today())->count();
+            ->map(fn (RoomBooking $booking) => $this->transformBooking($booking));
 
         $stats = [
-            'total_bookings' => $myBookingsCount,
-            'pending_approval' => $myPendingCount,
-            'today_bookings' => $myTodayCount,
-            'active_rooms' => MeetingRoom::where('status', 'active')->count()
+            'total_bookings' => RoomBooking::where('user_id', auth()->id())->count(),
+            'pending_approval' => RoomBooking::where('user_id', auth()->id())->where('status', 'pending')->count(),
+            'today_bookings' => RoomBooking::where('user_id', auth()->id())->whereDate('start_time', Carbon::today())->count(),
+            'active_rooms' => MeetingRoom::active()->count(),
         ];
 
         return Inertia::render('AdminHub/rooms/List', [
             'rooms' => $rooms,
             'bookings' => $bookings,
             'stats' => $stats,
-            'currentFilter' => 'my'
+            'currentFilter' => 'my',
         ]);
     }
 
@@ -133,31 +166,37 @@ class RoomBookingController extends Controller
             'start_date' => 'required|date',
             'start_time' => 'required',
             'end_time' => 'required',
-            'attendees_count' => 'nullable|integer',
-            'description' => 'nullable|string'
+            'attendees_count' => 'nullable|integer|min:1',
+            'description' => 'nullable|string',
         ]);
 
-        $start = Carbon::parse($validated['start_date'] . ' ' . $validated['start_time']);
-        $end = Carbon::parse($validated['start_date'] . ' ' . $validated['end_time']);
+        $start = Carbon::parse($validated['start_date'].' '.$validated['start_time']);
+        $end = Carbon::parse($validated['start_date'].' '.$validated['end_time']);
 
         if ($end <= $start) {
             return back()->withErrors(['end_time' => 'เวลาสิ้นสุดต้องหลังเวลาเริ่ม']);
         }
 
-        // Check for overlap
+        $room = MeetingRoom::findOrFail($validated['room_id']);
+        if (($validated['attendees_count'] ?? 0) > $room->capacity) {
+            return back()->withErrors([
+                'attendees_count' => "จำนวนผู้เข้าร่วมเกินความจุห้อง ({$room->capacity} คน)",
+            ]);
+        }
+
         $overlap = RoomBooking::where('room_id', $validated['room_id'])
             ->where('status', '!=', 'cancelled')
             ->where('status', '!=', 'rejected')
             ->where(function ($query) use ($start, $end) {
                 $query->where(function ($q) use ($start, $end) {
                     $q->where('start_time', '>=', $start)
-                      ->where('start_time', '<', $end);
+                        ->where('start_time', '<', $end);
                 })->orWhere(function ($q) use ($start, $end) {
                     $q->where('end_time', '>', $start)
-                      ->where('end_time', '<=', $end);
+                        ->where('end_time', '<=', $end);
                 })->orWhere(function ($q) use ($start, $end) {
                     $q->where('start_time', '<', $start)
-                      ->where('end_time', '>', $end);
+                        ->where('end_time', '>', $end);
                 });
             })
             ->exists();
@@ -166,30 +205,33 @@ class RoomBookingController extends Controller
             return back()->withErrors(['room_id' => 'ห้องประชุมไม่ว่างในช่วงเวลาดังกล่าว กรุณาเลือกเวลาอื่นหรือห้องอื่น']);
         }
 
+        $needsApproval = (bool) ($room->requires_approval ?? true);
+
         $booking = RoomBooking::create([
             'room_id' => $validated['room_id'],
             'user_id' => auth()->id(),
             'title' => $validated['title'],
             'start_time' => $start,
             'end_time' => $end,
-            'description' => $validated['description'],
-            'attendees_count' => $validated['attendees_count'],
-            'status' => 'pending'
+            'description' => $validated['description'] ?? null,
+            'attendees_count' => $validated['attendees_count'] ?? null,
+            'status' => $needsApproval ? 'pending' : 'approved',
         ]);
 
-        // Send notification to booker
         $booking->user->notify(new RoomBookingNotification($booking, 'booking_created'));
-
-        // Send notification to IT Center staff (ศูนย์สารสนเทศ)
         $this->notifyITCenterStaff($booking, 'new_booking');
 
-        return back()->with('success', 'จองห้องประชุมสำเร็จ รอการอนุมัติ');
+        $message = $needsApproval
+            ? 'จองห้องประชุมสำเร็จ รอการอนุมัติ'
+            : 'จองห้องประชุมสำเร็จ (อนุมัติอัตโนมัติ)';
+
+        return back()->with('success', $message);
     }
 
     public function show($id)
     {
         $booking = RoomBooking::with(['room', 'user.department'])->findOrFail($id);
-        
+
         return Inertia::render('AdminHub/rooms/Show', [
             'booking' => [
                 'id' => $booking->id,
@@ -198,22 +240,21 @@ class RoomBookingController extends Controller
                 'start_time' => $booking->start_time->toIso8601String(),
                 'end_time' => $booking->end_time->toIso8601String(),
                 'status' => $booking->status,
-                'room' => $booking->room,
+                'room' => $this->transformRoom($booking->room),
                 'user' => [
                     'id' => $booking->user->id,
                     'name' => $booking->user->name,
                     'email' => $booking->user->email,
-                    'department' => $booking->user->department ? $booking->user->department->name : '-'
+                    'department' => $booking->user->department ? $booking->user->department->name : '-',
                 ],
                 'attendees_count' => $booking->attendees_count,
-                'created_at' => $booking->created_at->toIso8601String()
-            ]
+                'created_at' => $booking->created_at->toIso8601String(),
+            ],
         ]);
     }
 
     public function update(Request $request, $id)
     {
-        // TODO: Implement booking update
         return back();
     }
 
@@ -221,56 +262,90 @@ class RoomBookingController extends Controller
     {
         $booking = RoomBooking::findOrFail($id);
         $booking->update(['status' => 'approved']);
-        
-        // Notify the booker
         $booking->user->notify(new RoomBookingNotification($booking, 'approved'));
-        
+
         return back()->with('success', 'อนุมัติการจองเรียบร้อยแล้ว');
     }
 
     public function destroy($id)
     {
         $booking = RoomBooking::findOrFail($id);
-        
+
         if ($booking->status === 'pending') {
-             $booking->update(['status' => 'rejected']);
-             // Notify the booker about rejection
-             $booking->user->notify(new RoomBookingNotification($booking, 'rejected'));
+            $booking->update(['status' => 'rejected']);
+            $booking->user->notify(new RoomBookingNotification($booking, 'rejected'));
         } else {
-             $booking->update(['status' => 'cancelled']);
-             // Notify the booker about cancellation
-             $booking->user->notify(new RoomBookingNotification($booking, 'cancelled'));
+            $booking->update(['status' => 'cancelled']);
+            $booking->user->notify(new RoomBookingNotification($booking, 'cancelled'));
         }
-        
-        return to_route('rooms.index')->with('success', 'ยกเลิกการจองเรียบร้อยแล้ว');
+
+        return back()->with('success', 'ยกเลิกการจองเรียบร้อยแล้ว');
     }
 
-    /**
-     * Notify IT Center staff about room booking
-     */
+    protected function transformRoom(?MeetingRoom $room): ?array
+    {
+        if (! $room) {
+            return null;
+        }
+
+        return [
+            'id' => $room->id,
+            'name' => $room->name,
+            'capacity' => $room->capacity,
+            'location' => $room->location,
+            'description' => $room->description,
+            'status' => $room->status ?: ($room->is_active ? 'active' : 'inactive'),
+            'color' => $room->color ?: '#0ea5e9',
+            'facilities' => $room->facilities ?? [],
+            'requires_approval' => (bool) ($room->requires_approval ?? true),
+            'image_url' => $room->image_url,
+        ];
+    }
+
+    protected function transformBooking(RoomBooking $booking): array
+    {
+        return [
+            'id' => $booking->id,
+            'title' => $booking->title,
+            'description' => $booking->description,
+            'start_time' => $booking->start_time->toIso8601String(),
+            'end_time' => $booking->end_time->toIso8601String(),
+            'status' => $booking->status,
+            'room' => $this->transformRoom($booking->room),
+            'user' => [
+                'name' => $booking->user ? $booking->user->name : 'Unknown',
+            ],
+            'attendees_count' => $booking->attendees_count,
+        ];
+    }
+
     protected function notifyITCenterStaff(RoomBooking $booking, string $actionType): void
     {
-        // Find department "ศูนย์สารสนเทศ"
         $itDepartment = Department::where('name', 'like', '%ศูนย์สารสนเทศ%')
             ->orWhere('name', 'like', '%สารสนเทศ%')
             ->orWhere('name', 'like', '%IT%')
             ->first();
 
+        $recipients = collect();
         if ($itDepartment) {
-            // Notify all users in IT department
-            $itStaff = User::where('department_id', $itDepartment->id)->get();
-            foreach ($itStaff as $staff) {
-                $staff->notify(new RoomBookingNotification($booking, $actionType));
+            $recipients = $recipients->merge(User::where('department_id', $itDepartment->id)->get());
+        }
+
+        $admins = User::role(['admin', 'hroom'])->get();
+        foreach ($admins as $admin) {
+            if (! $itDepartment || (int) $admin->department_id !== (int) $itDepartment->id) {
+                $recipients->push($admin);
             }
         }
 
-        // Also notify users with 'admin' or 'hroom' role (room admin)
-        $admins = User::role(['admin', 'hroom'])->get();
-        foreach ($admins as $admin) {
-            // Don't notify if already notified as IT staff
-            if (!$itDepartment || $admin->department_id !== $itDepartment->id) {
-                $admin->notify(new RoomBookingNotification($booking, $actionType));
-            }
+        $bookerId = (int) $booking->user_id;
+        $recipients
+            ->unique('id')
+            ->reject(fn (User $user) => (int) $user->id === $bookerId)
+            ->each(fn (User $user) => $user->notify(new RoomBookingNotification($booking, $actionType)));
+
+        if ($actionType === 'new_booking') {
+            app(AdminHubChatNotifier::class)->roomBookingCreated($booking);
         }
     }
 }

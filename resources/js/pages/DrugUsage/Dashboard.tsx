@@ -71,6 +71,17 @@ interface FormRow {
     total_amount: number;
     qty_share_percent: number;
     amount_share_percent: number;
+    subtypes?: SubFormRow[];
+}
+
+interface SubFormRow {
+    sub_form: string;
+    label: string;
+    drug_count: number;
+    total_qty: number;
+    total_amount: number;
+    qty_share_percent: number;
+    amount_share_percent: number;
 }
 
 interface AccountRow {
@@ -130,6 +141,7 @@ const FORM_COLORS: Record<string, string> = {
     tablet: '#06b6d4',
     liquid: '#6366f1',
     injection: '#f43f5e',
+    topical: '#8b5cf6',
     other: '#94a3b8',
 };
 
@@ -202,7 +214,7 @@ export default function DrugUsageDashboard({
         <QualityPage
             tone="cyan"
             icon={Pill}
-            badge="ศูนย์คุณภาพ · รายงานยา"
+            badge="ศูนย์พัฒนาคุณภาพ · รายงานยา"
             title="ภาพรวมข้อมูลยาและการใช้ยา"
             subtitle="สรุปการจ่ายยาจาก HOSxP ตามช่วงวันที่ — จำนวน มูลค่า และแนวโน้มรายเดือน"
             breadcrumbs={drugUsageBreadcrumbs()}
@@ -269,7 +281,7 @@ export default function DrugUsageDashboard({
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">
-                <Panel title="แยกตามประเภทยา" description="ยาเม็ด · ยาน้ำ · ยาฉีด · อื่นๆ">
+                <Panel title="แยกตามประเภทยา" description="ยาเม็ด · ยาน้ำ · ยาฉีด · ยาใช้ภายนอก · อื่นๆ">
                     {formChart.every((f) => f.qty === 0) ? (
                         <EmptyState text="ไม่พบข้อมูล" />
                     ) : (
@@ -306,36 +318,47 @@ export default function DrugUsageDashboard({
                                     </thead>
                                     <tbody>
                                         {by_form.map((row) => (
-                                            <tr key={row.form} className="border-b border-slate-50">
-                                                <td className="py-2 pr-3">
-                                                    <span className="inline-flex items-center gap-2 font-medium text-slate-800">
-                                                        <span
-                                                            className="h-2.5 w-2.5 rounded-full"
-                                                            style={{ background: FORM_COLORS[row.form] || '#94a3b8' }}
-                                                        />
-                                                        {row.label}
-                                                    </span>
-                                                </td>
-                                                <td className="py-2 pr-3 text-right tabular-nums">{fmtNum(row.drug_count)}</td>
-                                                <td className="py-2 pr-3 text-right tabular-nums">{fmtNum(row.total_qty)}</td>
-                                                <td className="py-2 pr-3 text-right tabular-nums">{fmtMoney(row.total_amount)}</td>
-                                                <td className="py-2 text-right">
-                                                    <div className="flex items-center justify-end gap-2">
-                                                        <div className="h-1.5 w-16 overflow-hidden rounded-full bg-slate-100">
-                                                            <div
-                                                                className="h-full rounded-full"
-                                                                style={{
-                                                                    width: `${Math.min(row.qty_share_percent, 100)}%`,
-                                                                    background: FORM_COLORS[row.form] || '#94a3b8',
-                                                                }}
+                                            <React.Fragment key={row.form}>
+                                                <tr className="border-b border-slate-50">
+                                                    <td className="py-2 pr-3">
+                                                        <span className="inline-flex items-center gap-2 font-medium text-slate-800">
+                                                            <span
+                                                                className="h-2.5 w-2.5 rounded-full"
+                                                                style={{ background: FORM_COLORS[row.form] || '#94a3b8' }}
                                                             />
-                                                        </div>
-                                                        <span className="w-10 text-right tabular-nums text-cyan-700">
-                                                            {row.qty_share_percent}%
+                                                            {row.label}
                                                         </span>
-                                                    </div>
-                                                </td>
-                                            </tr>
+                                                    </td>
+                                                    <td className="py-2 pr-3 text-right tabular-nums">{fmtNum(row.drug_count)}</td>
+                                                    <td className="py-2 pr-3 text-right tabular-nums">{fmtNum(row.total_qty)}</td>
+                                                    <td className="py-2 pr-3 text-right tabular-nums">{fmtMoney(row.total_amount)}</td>
+                                                    <td className="py-2 text-right">
+                                                        <div className="flex items-center justify-end gap-2">
+                                                            <div className="h-1.5 w-16 overflow-hidden rounded-full bg-slate-100">
+                                                                <div
+                                                                    className="h-full rounded-full"
+                                                                    style={{
+                                                                        width: `${Math.min(row.qty_share_percent, 100)}%`,
+                                                                        background: FORM_COLORS[row.form] || '#94a3b8',
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                            <span className="w-10 text-right tabular-nums text-cyan-700">
+                                                                {row.qty_share_percent}%
+                                                            </span>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                                {(row.subtypes ?? []).map((sub) => (
+                                                    <tr key={`${row.form}-${sub.sub_form}`} className="border-b border-slate-50/80 bg-slate-50/40 text-xs">
+                                                        <td className="py-1.5 pr-3 pl-6 text-slate-600">{sub.label}</td>
+                                                        <td className="py-1.5 pr-3 text-right tabular-nums text-slate-500">{fmtNum(sub.drug_count)}</td>
+                                                        <td className="py-1.5 pr-3 text-right tabular-nums text-slate-500">{fmtNum(sub.total_qty)}</td>
+                                                        <td className="py-1.5 pr-3 text-right tabular-nums text-slate-500">{fmtMoney(sub.total_amount)}</td>
+                                                        <td className="py-1.5 text-right tabular-nums text-slate-400">{sub.qty_share_percent}%</td>
+                                                    </tr>
+                                                ))}
+                                            </React.Fragment>
                                         ))}
                                     </tbody>
                                 </table>

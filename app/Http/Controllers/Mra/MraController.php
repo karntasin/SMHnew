@@ -9,13 +9,18 @@ use App\Models\Mra\MraCategory;
 use App\Models\Mra\MraCriteria;
 use App\Models\Hosxp\Patient;
 use App\Services\HosxpService;
+use App\Services\ThaiPdfService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Symfony\Component\HttpFoundation\Response;
 
 class MraController extends Controller
 {
+    private const HOSPITAL_NAME = 'โรงพยาบาลค่ายสุรสิงหนาท';
+
     protected $hosxpService;
 
     public function __construct(HosxpService $hosxpService)
@@ -99,116 +104,39 @@ class MraController extends Controller
      */
     public function dashboard()
     {
-        // Overall stats
-        $thisMonthStart = now()->startOfMonth();
-        $lastMonthStart = now()->subMonth()->startOfMonth();
-        $lastMonthEnd = now()->subMonth()->endOfMonth();
+        return Inertia::render('MRA/Dashboard', $this->dashboardPayload());
+    }
 
-        $stats = [
-            'total_audits' => MraAudit::count(),
-            'pending_audits' => MraAudit::where('status', 'pending')->count(),
-            'in_progress_audits' => MraAudit::where('status', 'in_progress')->count(),
-            'completed_audits' => MraAudit::whereIn('status', ['audited', 'corrected'])->count(),
-            'avg_accuracy' => round(MraAudit::whereIn('status', ['audited', 'corrected'])
-                ->avg('accuracy_percentage') ?? 0, 2),
-            'this_month_audits' => MraAudit::where('created_at', '>=', $thisMonthStart)->count(),
-            'this_month_accuracy' => round(MraAudit::whereIn('status', ['audited', 'corrected'])
-                ->where('audited_at', '>=', $thisMonthStart)
-                ->avg('accuracy_percentage') ?? 0, 2),
-            'last_month_accuracy' => round(MraAudit::whereIn('status', ['audited', 'corrected'])
-                ->whereBetween('audited_at', [$lastMonthStart, $lastMonthEnd])
-                ->avg('accuracy_percentage') ?? 0, 2),
-            'target_accuracy' => 90, // เป้าหมายตามเกณฑ์ สรพ.
-        ];
+    public function exportDashboardPdf(ThaiPdfService $pdf): Response
+    {
+        $data = $this->dashboardPayload();
+        [$fontRegularUri, $fontBoldUri] = $pdf->fontUris();
+        $now = now()->timezone(config('app.timezone'));
 
-        // Monthly trend (last 6 months)
-        $monthlyTrends = collect();
-        for ($i = 5; $i >= 0; $i--) {
-            $monthStart = now()->subMonths($i)->startOfMonth();
-            $monthEnd = now()->subMonths($i)->endOfMonth();
-            $monthLabel = $monthStart->locale('th')->isoFormat('MMM');
-            
-            $monthStats = MraAudit::whereIn('status', ['audited', 'corrected'])
-                ->whereBetween('audited_at', [$monthStart, $monthEnd])
-                ->selectRaw('COUNT(*) as total, AVG(accuracy_percentage) as accuracy')
-                ->first();
+        $html = view('mra.dashboard-pdf', [
+            'hospitalName' => self::HOSPITAL_NAME,
+            'stats' => $data['stats'],
+            'monthlyTrends' => $data['monthlyTrends'],
+            'categoryStats' => $data['categoryStats'],
+            'topErrors' => $data['topErrors'],
+            'recentAudits' => $data['recentAudits'],
+            'generatedAt' => $this->formatThaiDateTime($now),
+            'generatedAtDate' => $this->formatThaiDate($now),
+            'fontRegularUri' => $fontRegularUri,
+            'fontBoldUri' => $fontBoldUri,
+            'statusLabel' => fn (string $status) => $this->mraStatusLabel($status),
+            'formatVisitDate' => function ($value) {
+                if (! $value) {
+                    return '-';
+                }
 
-            $monthlyTrends->push([
-                'month' => $monthLabel,
-                'total' => $monthStats->total ?? 0,
-                'accuracy' => round($monthStats->accuracy ?? 0, 1),
-            ]);
-        }
+                return $this->formatThaiDate(Carbon::parse($value)->timezone(config('app.timezone')));
+            },
+        ])->render();
 
-        // Accuracy by category
-        $categoryStats = MraCategory::active()
-            ->with(['criteria' => function($q) {
-                $q->active();
-            }])
-            ->get()
-            ->map(function($category) {
-                $details = MraAuditDetail::whereHas('criteria', function($q) use ($category) {
-                    $q->where('mra_category_id', $category->id);
-                })->get();
-
-                $total = $details->whereIn('result', ['pass', 'fail'])->count();
-                $passed = $details->where('result', 'pass')->count();
-                $failed = $details->where('result', 'fail')->count();
-
-                return [
-                    'id' => $category->id,
-                    'code' => $category->code,
-                    'name' => $category->name,
-                    'total_audits' => $total,
-                    'pass_count' => $passed,
-                    'fail_count' => $failed,
-                    'accuracy' => $total > 0 ? round(($passed / $total) * 100, 1) : 0,
-                ];
-            });
-
-        // Top errors
-        $topErrors = MraAuditDetail::where('result', 'fail')
-            ->with(['criteria.category'])
-            ->select('mra_criteria_id', DB::raw('COUNT(*) as fail_count'))
-            ->groupBy('mra_criteria_id')
-            ->orderByDesc('fail_count')
-            ->limit(10)
-            ->get()
-            ->map(function($item) {
-                $totalAudits = MraAuditDetail::where('mra_criteria_id', $item->mra_criteria_id)->count();
-                return [
-                    'criteria_code' => $item->criteria?->code ?? '',
-                    'criteria_name' => $item->criteria?->name ?? 'Unknown',
-                    'category_name' => $item->criteria?->category?->name ?? '',
-                    'fail_count' => $item->fail_count,
-                    'percentage' => $totalAudits > 0 ? round(($item->fail_count / $totalAudits) * 100, 1) : 0,
-                ];
-            });
-
-        // Recent audits
-        $recentAudits = MraAudit::with('auditor')
-            ->orderBy('created_at', 'desc')
-            ->limit(10)
-            ->get()
-            ->map(function($audit) {
-                return [
-                    'id' => $audit->id,
-                    'hn' => $audit->hn,
-                    'patient_name' => $audit->patient_name,
-                    'visit_date' => $audit->visit_date,
-                    'status' => $audit->status,
-                    'accuracy_percentage' => $audit->accuracy_percentage,
-                    'auditor_name' => $audit->auditor?->name,
-                    'audited_at' => $audit->audited_at,
-                ];
-            });
-
-        return Inertia::render('MRA/Dashboard', [
-            'stats' => $stats,
-            'monthlyTrends' => $monthlyTrends,
-            'categoryStats' => $categoryStats,
-            'topErrors' => $topErrors,
-            'recentAudits' => $recentAudits,
+        return response($pdf->render($html, 'portrait', true), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="ภาพรวม-MRA.pdf"',
         ]);
     }
 
@@ -235,8 +163,11 @@ class MraController extends Controller
             $patient = $this->hosxpService->findPatient($hn);
 
             if ($patient) {
-                // ดึง visits ล่าสุด
-                $recentVisits = $this->hosxpService->getRecentVisits($hn, 10);
+                // ใช้ HN จาก HOSxP (มีศูนย์นำหน้า) เพื่อดึง visits และบันทึกต่อ
+                $canonicalHn = $patient['hn'] ?? $this->hosxpService->normalizeHn($hn);
+                $visitType = $request->input('visit_type');
+                $limit = min(max((int) $request->input('limit', 30), 5), 100);
+                $recentVisits = $this->hosxpService->getRecentVisits($canonicalHn, $limit, $visitType);
 
                 return response()->json([
                     'patient' => $patient,
@@ -282,38 +213,22 @@ class MraController extends Controller
         $auditType = $request->input('audit_type', 'opd');
 
         $categories = MraCategory::active()
-            ->with(['criteria' => function($q) {
+            ->forAuditType($auditType)
+            ->with(['criteria' => function ($q) {
                 $q->active()->orderBy('sort_order');
             }])
             ->get()
-            ->map(function($category) {
-                return [
-                    'id' => $category->id,
-                    'code' => $category->code,
-                    'name' => $category->name,
-                    'name_en' => $category->name_en,
-                    'description' => $category->description,
-                    'weight' => $category->weight,
-                    'criteria' => $category->criteria->map(function($c) {
-                        return [
-                            'id' => $c->id,
-                            'code' => $c->code,
-                            'name' => $c->name,
-                            'name_en' => $c->name_en,
-                            'description' => $c->description,
-                            'audit_guide' => $c->audit_guide,
-                            'data_type' => $c->data_type,
-                            'max_score' => $c->max_score,
-                            'is_required' => $c->is_required,
-                        ];
-                    }),
-                ];
-            });
+            ->map(fn ($category) => $this->serializeCategory($category));
+
+        $criteriaQuery = MraCriteria::active()->whereHas('category', fn ($q) => $q->forAuditType($auditType)->active());
 
         return response()->json([
             'categories' => $categories,
-            'total_criteria' => MraCriteria::active()->count(),
-            'total_max_score' => MraCriteria::active()->sum('max_score'),
+            'audit_type' => $auditType,
+            'standard' => 'MRA 2563 (สปสช./สรพ./HA)',
+            'passing_score' => 80,
+            'total_criteria' => (clone $criteriaQuery)->count(),
+            'total_max_score' => (clone $criteriaQuery)->sum('max_score'),
         ]);
     }
 
@@ -328,8 +243,13 @@ class MraController extends Controller
             return response()->json(['error' => 'VN is required'], 400);
         }
 
+        $auditType = $request->input('audit_type');
+
         $criteria = MraCriteria::active()
             ->whereIn('data_type', ['auto', 'both'])
+            ->when($auditType, function ($q) use ($auditType) {
+                $q->whereHas('category', fn ($cq) => $cq->forAuditType($auditType)->active());
+            })
             ->get();
 
         $results = [];
@@ -339,8 +259,8 @@ class MraController extends Controller
                 'criteria_id' => $criterion->id,
                 'criteria_name' => $criterion->name,
                 'passed' => $check['passed'],
-                'value' => $check['value'],
-                'message' => $check['message'],
+                'value' => $check['value'] ?? null,
+                'message' => $check['message'] ?? null,
                 'max_score' => $criterion->max_score,
             ];
         }
@@ -385,10 +305,8 @@ class MraController extends Controller
 
         // ใช้ HN จาก HOSxP เป็นหลัก และดึงชื่อ/CID เต็มฝั่งเซิร์ฟเวอร์ (ไม่เชื่อค่าจากเบราว์เซอร์ที่ถูก mask)
         $hosxpPatient = $this->hosxpService->findPatient($validated['hn']);
+        $validated['hn'] = $hosxpPatient['hn'] ?? $this->hosxpService->normalizeHn($validated['hn']);
         if ($hosxpPatient) {
-            if (! empty($hosxpPatient['hn'])) {
-                $validated['hn'] = $hosxpPatient['hn'];
-            }
             if (! empty($hosxpPatient['patient_name'])) {
                 $validated['patient_name'] = $hosxpPatient['patient_name'];
             }
@@ -398,6 +316,12 @@ class MraController extends Controller
         }
         if (! empty($validated['cid']) && (strlen((string) $validated['cid']) !== 13 || str_contains((string) $validated['cid'], '*'))) {
             $validated['cid'] = null;
+        }
+        if (! empty($validated['vn'])) {
+            $validated['vn'] = (string) $validated['vn'];
+        }
+        if (! empty($validated['an'])) {
+            $validated['an'] = (string) $validated['an'];
         }
 
         $audit = MraAudit::create([
@@ -417,20 +341,22 @@ class MraController extends Controller
     {
         $audit->load(['details.criteria.category', 'auditor']);
 
-        // Get all criteria
         $categories = MraCategory::active()
-            ->with(['criteria' => function($q) {
+            ->forAuditType($audit->audit_type ?: 'opd')
+            ->with(['criteria' => function ($q) {
                 $q->active()->orderBy('sort_order');
             }])
-            ->get();
+            ->get()
+            ->map(fn ($category) => $this->serializeCategory($category));
 
-        // Prepare existing results
         $existingResults = $audit->details->keyBy('mra_criteria_id');
 
         return Inertia::render('MRA/AuditForm', [
             'audit' => $audit,
             'categories' => $categories,
             'existingResults' => $existingResults,
+            'passingScore' => 80,
+            'standardLabel' => 'MRA 2563 · ' . strtoupper($audit->audit_type ?: 'opd'),
         ]);
     }
 
@@ -482,16 +408,19 @@ class MraController extends Controller
             }
 
             // Calculate and update scores
-            $audit->calculateScores();
+            $scores = $audit->calculateScores();
 
             // Finalize if requested
             if ($validated['finalize'] ?? false) {
+                if (($scores['total_max_score'] ?? 0) <= 0) {
+                    abort(422, 'ไม่สามารถสรุปผลได้ เพราะทุกรายการเป็น N/A — กรุณาประเมินอย่างน้อย 1 ข้อ');
+                }
                 $audit->markAsAudited();
             }
         });
 
-        $message = ($validated['finalize'] ?? false) 
-            ? 'บันทึกและสรุปผลการตรวจสอบเรียบร้อยแล้ว' 
+        $message = ($validated['finalize'] ?? false)
+            ? 'บันทึกและสรุปผลการตรวจสอบเรียบร้อยแล้ว'
             : 'บันทึกผลการตรวจสอบเรียบร้อยแล้ว';
 
         return redirect()->back()->with('success', $message);
@@ -504,16 +433,128 @@ class MraController extends Controller
     {
         $audit->load(['details.criteria.category', 'auditor']);
         
-        // Get all categories with criteria
         $categories = MraCategory::active()
-            ->with(['criteria' => function($q) {
+            ->forAuditType($audit->audit_type ?: 'opd')
+            ->with(['criteria' => function ($q) {
                 $q->active()->orderBy('sort_order');
             }])
-            ->get();
+            ->get()
+            ->map(fn ($category) => $this->serializeCategory($category));
 
         return Inertia::render('MRA/Show', [
             'audit' => $audit,
             'categories' => $categories,
+            'passingScore' => 80,
+        ]);
+    }
+
+    /**
+     * ส่งออกรายงาน PDF ผลการตรวจสอบเวชระเบียน
+     */
+    public function exportPdf(MraAudit $audit, ThaiPdfService $pdf): Response
+    {
+        $audit->load(['details.criteria.category', 'auditor']);
+
+        $categories = MraCategory::active()
+            ->forAuditType($audit->audit_type ?: 'opd')
+            ->with(['criteria' => function ($q) {
+                $q->active()->orderBy('sort_order');
+            }])
+            ->get();
+
+        $detailsByCriteria = $audit->details->keyBy('mra_criteria_id');
+
+        $categoryBlocks = $categories->map(function (MraCategory $category) use ($detailsByCriteria) {
+            $rows = $category->criteria->map(function ($criterion) use ($detailsByCriteria, $category) {
+                $detail = $detailsByCriteria->get($criterion->id);
+                $result = $detail?->result ?? 'pending';
+                $maxScore = (float) ($detail?->max_score ?? $criterion->max_score ?? 0);
+                $obtained = $result === 'pass' ? $maxScore : 0;
+
+                return [
+                    'code' => $criterion->code,
+                    'name' => $criterion->name,
+                    'hosxp_value' => $detail?->hosxp_value,
+                    'result' => $result,
+                    'max_score' => $maxScore,
+                    'obtained_score' => $obtained,
+                    'comment' => trim((string) ($detail?->auditor_comment ?? '')),
+                ];
+            })->values();
+
+            $scored = $rows->filter(fn ($r) => in_array($r['result'], ['pass', 'fail'], true));
+            $pass = $scored->where('result', 'pass')->count();
+            $fail = $scored->where('result', 'fail')->count();
+            $maxScore = $scored->sum('max_score');
+            $obtainedScore = $scored->where('result', 'pass')->sum('max_score');
+
+            return [
+                'code' => $category->code,
+                'name' => $category->name,
+                'name_en' => $category->name_en,
+                'pass' => $pass,
+                'fail' => $fail,
+                'na' => $rows->where('result', 'na')->count(),
+                'max_score' => $maxScore,
+                'obtained_score' => $obtainedScore,
+                'percent' => $maxScore > 0 ? round(($obtainedScore / $maxScore) * 100, 1) : 0,
+                'rows' => $rows,
+            ];
+        })->values();
+
+        $failedItems = $categoryBlocks
+            ->flatMap(function ($block) {
+                return collect($block['rows'])
+                    ->where('result', 'fail')
+                    ->map(fn ($row) => array_merge($row, [
+                        'category_code' => $block['code'],
+                        'category_name' => $block['name'],
+                    ]));
+            })
+            ->values();
+
+        $failCount = max(0, (int) ($audit->total_items ?? 0) - (int) ($audit->correct_items ?? 0));
+        if ($failCount === 0 && $failedItems->isNotEmpty()) {
+            $failCount = $failedItems->count();
+        }
+
+        [$fontRegularUri, $fontBoldUri] = $pdf->fontUris();
+        $now = now()->timezone(config('app.timezone'));
+
+        $statusLabels = [
+            'pending' => 'รอตรวจสอบ',
+            'in_progress' => 'กำลังตรวจสอบ',
+            'audited' => 'ตรวจสอบแล้ว',
+            'corrected' => 'แก้ไขแล้ว',
+        ];
+
+        $html = view('mra.audit-result-pdf', [
+            'hospitalName' => self::HOSPITAL_NAME,
+            'audit' => $audit,
+            'patientNameMasked' => \App\Support\PiiMask::patientName($audit->patient_name),
+            'cidMasked' => \App\Support\PiiMask::cid($audit->cid),
+            'categoryBlocks' => collect(\App\Support\PiiMask::maskTree($categoryBlocks->toArray())),
+            'failedItems' => collect(\App\Support\PiiMask::maskTree($failedItems->toArray())),
+            'failCount' => $failCount,
+            'statusLabel' => $statusLabels[$audit->status] ?? $audit->status,
+            'auditTypeLabel' => strtoupper((string) ($audit->audit_type ?: 'opd')),
+            'generatedAt' => $this->formatThaiDateTime($now),
+            'generatedAtDate' => $this->formatThaiDate($now),
+            'visitDateLabel' => $audit->visit_date
+                ? $this->formatThaiDate(Carbon::parse($audit->visit_date)->timezone(config('app.timezone')))
+                : '-',
+            'auditedAtLabel' => $audit->audited_at
+                ? $this->formatThaiDateTime(Carbon::parse($audit->audited_at)->timezone(config('app.timezone')))
+                : null,
+            'fontRegularUri' => $fontRegularUri,
+            'fontBoldUri' => $fontBoldUri,
+        ])->render();
+
+        $filename = 'MRA-'.$audit->hn.'-'.$audit->id.'.pdf';
+
+        return response($pdf->render($html, 'portrait'), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="'.$filename.'"',
         ]);
     }
 
@@ -574,77 +615,56 @@ class MraController extends Controller
     }
 
     /**
-     * รายงาน MRA
+     * รายงาน MRA — แยก OPD / IPD
      */
     public function reports(Request $request)
     {
         $fromDate = $request->input('from_date', now()->startOfMonth()->format('Y-m-d'));
         $toDate = $request->input('to_date', now()->format('Y-m-d'));
+        $channel = $request->input('channel', 'all');
 
-        // Statistics summary
-        $stats = [
-            'total_audits' => MraAudit::whereBetween('visit_date', [$fromDate, $toDate])->count(),
-            'completed_audits' => MraAudit::whereIn('status', ['audited', 'corrected'])
-                ->whereBetween('visit_date', [$fromDate, $toDate])->count(),
-            'avg_accuracy' => round(MraAudit::whereIn('status', ['audited', 'corrected'])
-                ->whereBetween('visit_date', [$fromDate, $toDate])
-                ->avg('accuracy_percentage') ?? 0, 2),
-            'target' => 90,
-        ];
+        return Inertia::render('MRA/Reports', $this->reportsPayload($fromDate, $toDate, $channel));
+    }
 
-        // Category statistics
-        $categoryStats = MraCategory::active()
-            ->get()
-            ->map(function($category) use ($fromDate, $toDate) {
-                $details = MraAuditDetail::whereHas('audit', function($q) use ($fromDate, $toDate) {
-                    $q->whereBetween('visit_date', [$fromDate, $toDate])
-                      ->whereIn('status', ['audited', 'corrected']);
-                })->whereHas('criteria', function($q) use ($category) {
-                    $q->where('mra_category_id', $category->id);
-                })->get();
+    public function exportReportsPdf(Request $request, ThaiPdfService $pdf): Response
+    {
+        $fromDate = $request->input('from_date', now()->startOfMonth()->format('Y-m-d'));
+        $toDate = $request->input('to_date', now()->format('Y-m-d'));
+        $channel = $request->input('channel', 'all');
+        $data = $this->reportsPayload($fromDate, $toDate, $channel);
+        $channel = $data['filters']['channel'];
+        $overviewStats = match ($channel) {
+            'opd' => $data['opd']['stats'],
+            'ipd' => $data['ipd']['stats'],
+            default => $data['stats'],
+        };
 
-                $total = $details->whereIn('result', ['pass', 'fail'])->count();
-                $passed = $details->where('result', 'pass')->count();
+        [$fontRegularUri, $fontBoldUri] = $pdf->fontUris();
+        $now = now()->timezone(config('app.timezone'));
+        $channelLabel = match ($data['filters']['channel']) {
+            'opd' => 'ผู้ป่วยนอก (OPD)',
+            'ipd' => 'ผู้ป่วยใน (IPD)',
+            default => 'ทั้งหมด (OPD + IPD)',
+        };
 
-                return [
-                    'id' => $category->id,
-                    'code' => $category->code,
-                    'name' => $category->name,
-                    'total' => $total,
-                    'passed' => $passed,
-                    'failed' => $total - $passed,
-                    'accuracy' => $total > 0 ? round(($passed / $total) * 100, 1) : 0,
-                ];
-            });
+        $html = view('mra.reports-pdf', [
+            'hospitalName' => self::HOSPITAL_NAME,
+            'stats' => $overviewStats,
+            'opd' => $data['opd'],
+            'ipd' => $data['ipd'],
+            'filters' => $data['filters'],
+            'channelLabel' => $channelLabel,
+            'fromDateLabel' => $this->formatThaiDate(Carbon::parse($data['filters']['from_date'])->timezone(config('app.timezone'))),
+            'toDateLabel' => $this->formatThaiDate(Carbon::parse($data['filters']['to_date'])->timezone(config('app.timezone'))),
+            'generatedAt' => $this->formatThaiDateTime($now),
+            'generatedAtDate' => $this->formatThaiDate($now),
+            'fontRegularUri' => $fontRegularUri,
+            'fontBoldUri' => $fontBoldUri,
+        ])->render();
 
-        // Top errors
-        $topErrors = MraAuditDetail::where('result', 'fail')
-            ->whereHas('audit', function($q) use ($fromDate, $toDate) {
-                $q->whereBetween('visit_date', [$fromDate, $toDate]);
-            })
-            ->with(['criteria.category'])
-            ->select('mra_criteria_id', DB::raw('COUNT(*) as fail_count'))
-            ->groupBy('mra_criteria_id')
-            ->orderByDesc('fail_count')
-            ->limit(10)
-            ->get()
-            ->map(function($item) {
-                return [
-                    'criteria_code' => $item->criteria?->code ?? '',
-                    'criteria_name' => $item->criteria?->name ?? 'Unknown',
-                    'category_name' => $item->criteria?->category?->name ?? '',
-                    'fail_count' => $item->fail_count,
-                ];
-            });
-
-        return Inertia::render('MRA/Reports', [
-            'stats' => $stats,
-            'categoryStats' => $categoryStats,
-            'topErrors' => $topErrors,
-            'filters' => [
-                'from_date' => $fromDate,
-                'to_date' => $toDate,
-            ],
+        return response($pdf->render($html, 'portrait', true), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="รายงานสรุป-MRA.pdf"',
         ]);
     }
 
@@ -653,12 +673,314 @@ class MraController extends Controller
      */
     public function settings()
     {
-        $categories = MraCategory::with(['criteria' => function($q) {
+        $categories = MraCategory::with(['criteria' => function ($q) {
             $q->orderBy('sort_order');
-        }])->orderBy('sort_order')->get();
+        }])
+            ->orderBy('audit_type')
+            ->orderBy('sort_order')
+            ->get()
+            ->map(fn ($category) => $this->serializeCategory($category));
 
         return Inertia::render('MRA/Settings', [
             'categories' => $categories,
+            'standardLabel' => 'Medical Record Audit Guideline ปี 2563 (สปสช./สรพ./HA)',
+            'passingScore' => 80,
+            'opdCount' => MraCategory::where('audit_type', 'opd')->count(),
+            'ipdCount' => MraCategory::where('audit_type', 'ipd')->count(),
         ]);
+    }
+
+    /**
+     * คู่มือใช้งานระบบ MRA
+     */
+    public function guide()
+    {
+        return Inertia::render('MRA/Guide');
+    }
+
+    private function serializeCategory(MraCategory $category): array
+    {
+        return [
+            'id' => $category->id,
+            'code' => $category->code,
+            'audit_type' => $category->audit_type,
+            'section_key' => $category->section_key,
+            'name' => $category->name,
+            'name_en' => $category->name_en,
+            'description' => $category->description,
+            'hint' => $category->hint,
+            'weight' => $category->weight,
+            'is_conditional' => (bool) $category->is_conditional,
+            'is_required_section' => (bool) $category->is_required_section,
+            'criteria' => $category->criteria->map(function ($c) {
+                return [
+                    'id' => $c->id,
+                    'code' => $c->code,
+                    'group_key' => $c->group_key,
+                    'group_title' => $c->group_title,
+                    'name' => $c->name,
+                    'name_en' => $c->name_en,
+                    'description' => $c->description,
+                    'audit_guide' => $c->audit_guide,
+                    'data_type' => $c->data_type,
+                    'max_score' => $c->max_score,
+                    'is_required' => (bool) $c->is_required,
+                    'is_bonus' => (bool) $c->is_bonus,
+                    'is_active' => (bool) $c->is_active,
+                    'sort_order' => $c->sort_order,
+                ];
+            })->values(),
+        ];
+    }
+
+    /**
+     * @return array{stats: array, monthlyTrends: \Illuminate\Support\Collection, categoryStats: \Illuminate\Support\Collection, topErrors: \Illuminate\Support\Collection, recentAudits: \Illuminate\Support\Collection}
+     */
+    private function dashboardPayload(): array
+    {
+        $thisMonthStart = now()->startOfMonth();
+        $lastMonthStart = now()->subMonth()->startOfMonth();
+        $lastMonthEnd = now()->subMonth()->endOfMonth();
+
+        $stats = [
+            'total_audits' => MraAudit::count(),
+            'pending_audits' => MraAudit::where('status', 'pending')->count(),
+            'in_progress_audits' => MraAudit::where('status', 'in_progress')->count(),
+            'completed_audits' => MraAudit::whereIn('status', ['audited', 'corrected'])->count(),
+            'avg_accuracy' => round(MraAudit::whereIn('status', ['audited', 'corrected'])
+                ->avg('accuracy_percentage') ?? 0, 2),
+            'this_month_audits' => MraAudit::where('created_at', '>=', $thisMonthStart)->count(),
+            'this_month_accuracy' => round(MraAudit::whereIn('status', ['audited', 'corrected'])
+                ->where('audited_at', '>=', $thisMonthStart)
+                ->avg('accuracy_percentage') ?? 0, 2),
+            'last_month_accuracy' => round(MraAudit::whereIn('status', ['audited', 'corrected'])
+                ->whereBetween('audited_at', [$lastMonthStart, $lastMonthEnd])
+                ->avg('accuracy_percentage') ?? 0, 2),
+            'target_accuracy' => 90,
+        ];
+
+        $monthlyTrends = collect();
+        for ($i = 5; $i >= 0; $i--) {
+            $monthStart = now()->subMonths($i)->startOfMonth();
+            $monthEnd = now()->subMonths($i)->endOfMonth();
+            $monthLabel = $monthStart->locale('th')->isoFormat('MMM');
+
+            $monthStats = MraAudit::whereIn('status', ['audited', 'corrected'])
+                ->whereBetween('audited_at', [$monthStart, $monthEnd])
+                ->selectRaw('COUNT(*) as total, AVG(accuracy_percentage) as accuracy')
+                ->first();
+
+            $monthlyTrends->push([
+                'month' => $monthLabel,
+                'total' => $monthStats->total ?? 0,
+                'accuracy' => round($monthStats->accuracy ?? 0, 1),
+            ]);
+        }
+
+        $categoryStats = MraCategory::active()
+            ->orderBy('audit_type')
+            ->orderBy('sort_order')
+            ->get()
+            ->map(function ($category) {
+                $details = MraAuditDetail::whereHas('criteria', function ($q) use ($category) {
+                    $q->where('mra_category_id', $category->id);
+                })->get();
+
+                $total = $details->whereIn('result', ['pass', 'fail'])->count();
+                $passed = $details->where('result', 'pass')->count();
+                $failed = $details->where('result', 'fail')->count();
+
+                return [
+                    'id' => $category->id,
+                    'code' => $category->code,
+                    'name' => $category->name,
+                    'audit_type' => $category->audit_type,
+                    'total_audits' => $total,
+                    'pass_count' => $passed,
+                    'fail_count' => $failed,
+                    'accuracy' => $total > 0 ? round(($passed / $total) * 100, 1) : 0,
+                ];
+            });
+
+        $topErrors = MraAuditDetail::where('result', 'fail')
+            ->with(['criteria.category'])
+            ->select('mra_criteria_id', DB::raw('COUNT(*) as fail_count'))
+            ->groupBy('mra_criteria_id')
+            ->orderByDesc('fail_count')
+            ->limit(10)
+            ->get()
+            ->map(function ($item) {
+                $totalAudits = MraAuditDetail::where('mra_criteria_id', $item->mra_criteria_id)->count();
+
+                return [
+                    'criteria_code' => $item->criteria?->code ?? '',
+                    'criteria_name' => $item->criteria?->name ?? 'Unknown',
+                    'category_name' => $item->criteria?->category?->name ?? '',
+                    'fail_count' => $item->fail_count,
+                    'percentage' => $totalAudits > 0 ? round(($item->fail_count / $totalAudits) * 100, 1) : 0,
+                ];
+            });
+
+        $recentAudits = MraAudit::with('auditor')
+            ->orderBy('created_at', 'desc')
+            ->limit(10)
+            ->get()
+            ->map(function ($audit) {
+                return [
+                    'id' => $audit->id,
+                    'hn' => $audit->hn,
+                    'patient_name' => $audit->patient_name,
+                    'visit_date' => $audit->visit_date,
+                    'status' => $audit->status,
+                    'accuracy_percentage' => $audit->accuracy_percentage,
+                    'auditor_name' => $audit->auditor?->name,
+                    'audited_at' => $audit->audited_at,
+                ];
+            });
+
+        return [
+            'stats' => $stats,
+            'monthlyTrends' => $monthlyTrends,
+            'categoryStats' => $categoryStats,
+            'topErrors' => $topErrors,
+            'recentAudits' => $recentAudits,
+        ];
+    }
+
+    /**
+     * @return array{stats: array, opd: array, ipd: array, categoryStats: \Illuminate\Support\Collection, topErrors: \Illuminate\Support\Collection, filters: array}
+     */
+    private function reportsPayload(string $fromDate, string $toDate, string $channel): array
+    {
+        $channel = in_array($channel, ['all', 'opd', 'ipd'], true) ? $channel : 'all';
+
+        $buildStats = function (?string $auditType) use ($fromDate, $toDate) {
+            $query = MraAudit::whereBetween('visit_date', [$fromDate, $toDate]);
+            if ($auditType) {
+                $query->where('audit_type', $auditType);
+            }
+
+            $completed = (clone $query)->whereIn('status', ['audited', 'corrected']);
+
+            return [
+                'total_audits' => (clone $query)->count(),
+                'completed_audits' => (clone $completed)->count(),
+                'avg_accuracy' => round((clone $completed)->avg('accuracy_percentage') ?? 0, 2),
+                'passed_audits' => (clone $completed)->where('accuracy_percentage', '>=', 80)->count(),
+                'target' => 80,
+            ];
+        };
+
+        $buildCategoryStats = function (string $auditType) use ($fromDate, $toDate) {
+            return MraCategory::active()
+                ->forAuditType($auditType)
+                ->orderBy('sort_order')
+                ->get()
+                ->map(function ($category) use ($fromDate, $toDate, $auditType) {
+                    $details = MraAuditDetail::whereHas('audit', function ($q) use ($fromDate, $toDate, $auditType) {
+                        $q->whereBetween('visit_date', [$fromDate, $toDate])
+                            ->where('audit_type', $auditType)
+                            ->whereIn('status', ['audited', 'corrected']);
+                    })->whereHas('criteria', function ($q) use ($category) {
+                        $q->where('mra_category_id', $category->id);
+                    })->get();
+
+                    $total = $details->whereIn('result', ['pass', 'fail'])->count();
+                    $passed = $details->where('result', 'pass')->count();
+
+                    return [
+                        'id' => $category->id,
+                        'code' => $category->code,
+                        'name' => $category->name,
+                        'audit_type' => $auditType,
+                        'total' => $total,
+                        'passed' => $passed,
+                        'failed' => $total - $passed,
+                        'accuracy' => $total > 0 ? round(($passed / $total) * 100, 1) : 0,
+                    ];
+                })
+                ->values();
+        };
+
+        $buildTopErrors = function (string $auditType) use ($fromDate, $toDate) {
+            return MraAuditDetail::where('result', 'fail')
+                ->whereHas('audit', function ($q) use ($fromDate, $toDate, $auditType) {
+                    $q->whereBetween('visit_date', [$fromDate, $toDate])
+                        ->where('audit_type', $auditType)
+                        ->whereIn('status', ['audited', 'corrected']);
+                })
+                ->whereHas('criteria.category', function ($q) use ($auditType) {
+                    $q->where('audit_type', $auditType);
+                })
+                ->with(['criteria.category'])
+                ->select('mra_criteria_id', DB::raw('COUNT(*) as fail_count'))
+                ->groupBy('mra_criteria_id')
+                ->orderByDesc('fail_count')
+                ->limit(10)
+                ->get()
+                ->map(function ($item) use ($auditType) {
+                    return [
+                        'criteria_code' => $item->criteria?->code ?? '',
+                        'criteria_name' => $item->criteria?->name ?? 'Unknown',
+                        'category_name' => $item->criteria?->category?->name ?? '',
+                        'audit_type' => $auditType,
+                        'fail_count' => $item->fail_count,
+                    ];
+                })
+                ->values();
+        };
+
+        $opdCategories = $buildCategoryStats('opd');
+        $ipdCategories = $buildCategoryStats('ipd');
+        $opdErrors = $buildTopErrors('opd');
+        $ipdErrors = $buildTopErrors('ipd');
+
+        return [
+            'stats' => $buildStats(null),
+            'opd' => [
+                'stats' => $buildStats('opd'),
+                'categoryStats' => $opdCategories,
+                'topErrors' => $opdErrors,
+            ],
+            'ipd' => [
+                'stats' => $buildStats('ipd'),
+                'categoryStats' => $ipdCategories,
+                'topErrors' => $ipdErrors,
+            ],
+            'categoryStats' => $opdCategories->concat($ipdCategories)->values(),
+            'topErrors' => $opdErrors->concat($ipdErrors)
+                ->sortByDesc('fail_count')
+                ->take(10)
+                ->values(),
+            'filters' => [
+                'from_date' => $fromDate,
+                'to_date' => $toDate,
+                'channel' => $channel,
+            ],
+        ];
+    }
+
+    private function mraStatusLabel(string $status): string
+    {
+        return match ($status) {
+            'pending' => 'รอตรวจสอบ',
+            'in_progress' => 'กำลังตรวจ',
+            'audited' => 'เสร็จสิ้น',
+            'corrected' => 'แก้ไขแล้ว',
+            default => $status,
+        };
+    }
+
+    private function formatThaiDate(Carbon $dt): string
+    {
+        $months = [1 => 'ม.ค.', 2 => 'ก.พ.', 3 => 'มี.ค.', 4 => 'เม.ย.', 5 => 'พ.ค.', 6 => 'มิ.ย.',
+            7 => 'ก.ค.', 8 => 'ส.ค.', 9 => 'ก.ย.', 10 => 'ต.ค.', 11 => 'พ.ย.', 12 => 'ธ.ค.'];
+
+        return $dt->day.' '.$months[(int) $dt->month].' '.($dt->year + 543);
+    }
+
+    private function formatThaiDateTime(Carbon $dt): string
+    {
+        return $this->formatThaiDate($dt).' เวลา '.$dt->format('H:i').' น.';
     }
 }

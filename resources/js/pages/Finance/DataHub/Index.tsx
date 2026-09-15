@@ -82,7 +82,7 @@ export default function FinanceDataHubIndex({ hosxpReady, stats, schemes }: Prop
                 <Button asChild className="rounded-xl bg-emerald-600 hover:bg-emerald-700">
                     <Link href={route('finance.cgd.import')}>
                         <Upload className="mr-2 h-4 w-4" />
-                        นำเข้า STM (จ่ายตรง)
+                        นำเข้า REP (จ่ายตรง)
                     </Link>
                 </Button>
             }
@@ -103,7 +103,7 @@ export default function FinanceDataHubIndex({ hosxpReady, stats, schemes }: Prop
                         icon: FileCheck2,
                     },
                     {
-                        label: 'ไฟล์ STM (จ่ายตรง)',
+                        label: 'ไฟล์ REP (จ่ายตรง)',
                         value: stats.batch_count.toLocaleString(),
                         hint: `${stats.row_count.toLocaleString()} รายการ`,
                         icon: ClipboardList,

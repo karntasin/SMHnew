@@ -38,9 +38,9 @@ class AuthenticatedSessionController extends Controller
         $request->authenticate();
 
         $request->session()->regenerate();
-        $intended = session()->pull('url.intended');
+        session()->forget('url.intended');
 
-        return redirect()->away(PostLoginRedirect::sanitizeIntended($intended, 'dashboard', $request));
+        return redirect()->away(PostLoginRedirect::toCurrent('dashboard', $request));
     }
 
     /**

@@ -15,6 +15,6 @@ export default function QaSubNav() {
 }
 
 export const qaBreadcrumbs = [
-    { title: 'ศูนย์คุณภาพ', href: '/quality' },
+    { title: 'ศูนย์พัฒนาคุณภาพ', href: '/quality' },
     { title: 'Quality Assurance', href: route('quality-assurance.index') },
 ];

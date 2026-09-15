@@ -80,6 +80,10 @@ interface User {
   email: string;
   created_at: string;
   roles: Role[];
+  positions?: { id: number; name: string }[];
+  line_id?: string | null;
+  line_display_name?: string | null;
+  profile_completed?: boolean;
 }
 
 interface Props {
@@ -99,12 +103,19 @@ interface Props {
 }
 
 function getInitials(name: string) {
-  return name
-    .split(' ')
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) {
+    return '?';
+  }
+  return parts
     .map((n) => n[0])
     .join('')
     .toUpperCase()
     .slice(0, 2);
+}
+
+function isLineStubEmail(email: string) {
+  return email.toLowerCase().endsWith('@line.login');
 }
 
 export default function UserIndex({ users, filters, allRoles }: Props) {
@@ -234,17 +245,31 @@ export default function UserIndex({ users, filters, allRoles }: Props) {
                         <TableCell>
                           <div className="flex items-center gap-3">
                             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-                              {getInitials(user.name)}
+                              {getInitials(user.name || user.line_display_name || '?')}
                             </div>
                             <div className="flex flex-col">
-                              <span className="font-medium">{user.name}</span>
-                              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                <Mail className="h-3 w-3" /> {user.email}
+                              <span className="font-medium">
+                                {user.name || user.line_display_name || 'ยังไม่มีชื่อ'}
                               </span>
-                              {/* ตำแหน่งงาน */}
+                              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                <Mail className="h-3 w-3" />{' '}
+                                {isLineStubEmail(user.email) ? 'บัญชี LINE (ยังไม่ผูกอีเมล)' : user.email}
+                              </span>
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {user.line_id && (
+                                  <Badge variant="outline" className="font-normal text-[#06C755] border-[#06C755]/40">
+                                    LINE
+                                  </Badge>
+                                )}
+                                {user.profile_completed === false && (
+                                  <Badge variant="outline" className="font-normal text-amber-700 border-amber-300">
+                                    รอกรอกโปรไฟล์
+                                  </Badge>
+                                )}
+                              </div>
                               {user.positions && user.positions.length > 0 && (
                                 <span className="text-xs text-indigo-700 mt-1">
-                                  {user.positions.map((pos: any) => pos.name).join(', ')}
+                                  {user.positions.map((pos) => pos.name).join(', ')}
                                 </span>
                               )}
                             </div>

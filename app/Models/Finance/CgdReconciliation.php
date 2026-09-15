@@ -13,6 +13,10 @@ class CgdReconciliation extends Model
 
     protected $fillable = [
         'batch_id',
+        'stm_import_id',
+        'claim_submission_no',
+        'scope',
+        'scheme',
         'start_date',
         'end_date',
         'pttype_like',
@@ -54,6 +58,11 @@ class CgdReconciliation extends Model
     public function batch(): BelongsTo
     {
         return $this->belongsTo(CgdStmBatch::class, 'batch_id');
+    }
+
+    public function stmImport(): BelongsTo
+    {
+        return $this->belongsTo(StmImport::class, 'stm_import_id');
     }
 
     public function items(): HasMany

@@ -19,9 +19,9 @@ class QualityIndicatorEntry extends Model
 
     protected $casts = [
         'period_date' => 'date',
-        'numerator' => 'decimal:4',
-        'denominator' => 'decimal:4',
-        'result_value' => 'decimal:4',
+        'numerator' => 'decimal:2',
+        'denominator' => 'decimal:2',
+        'result_value' => 'decimal:2',
     ];
 
     public function indicator(): BelongsTo

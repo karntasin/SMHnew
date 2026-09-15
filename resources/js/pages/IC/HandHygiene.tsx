@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Head, useForm, router } from '@inertiajs/react';
-import AppLayout from '@/layouts/app-layout';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { useForm, router } from '@inertiajs/react';
+import { QualityPage, StatCard, Panel, EmptyState } from '@/components/quality/quality-ui';
+import IcSubNav from '@/pages/IC/IcSubNav';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,14 +22,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
 import {
     Hand,
     Plus,
@@ -150,42 +142,13 @@ export default function HandHygiene({ observations, stats, filters }: Props) {
         { value: 'other', label: 'อื่นๆ' },
     ];
 
-    const breadcrumbs = [
-        { title: 'IC', href: '/ic' },
-        { title: 'Hand Hygiene', href: '#' },
-    ];
-
-    return (
-        <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Hand Hygiene - IC" />
-
-            <div className="flex flex-col min-h-screen">
-                {/* Hero Header */}
-                <div className="relative overflow-hidden bg-gradient-to-br from-teal-500 via-emerald-500 to-green-600 text-white">
-                    <div className="absolute inset-0 bg-grid-white/10"></div>
-                    <div className="absolute -top-24 -right-24 w-96 h-96 bg-white/10 rounded-full blur-3xl"></div>
-
-                    <div className="relative px-6 py-8">
-                        <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-4">
-                                <div className="p-3 bg-white/20 backdrop-blur-sm rounded-2xl">
-                                    <Hand className="h-10 w-10" />
-                                </div>
-                                <div>
-                                    <h1 className="text-3xl font-bold tracking-tight">
-                                        Hand Hygiene Compliance
-                                    </h1>
-                                    <p className="text-white/80 text-lg">
-                                        WHO 5 Moments for Hand Hygiene
-                                    </p>
-                                </div>
-                            </div>
-                            <Dialog open={isOpen} onOpenChange={setIsOpen}>
-                                <DialogTrigger asChild>
-                                    <Button className="gap-2 bg-white text-teal-600 hover:bg-white/90">
-                                        <Plus className="h-4 w-4" /> บันทึกการสังเกต
-                                    </Button>
-                                </DialogTrigger>
+    const observeDialog = (
+        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+            <DialogTrigger asChild>
+                <Button className="gap-2 rounded-xl bg-rose-600 hover:bg-rose-700">
+                    <Plus className="h-4 w-4" /> บันทึกการสังเกต
+                </Button>
+            </DialogTrigger>
                                 <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                                     <DialogHeader>
                                         <DialogTitle>บันทึกการสังเกต Hand Hygiene</DialogTitle>
@@ -297,58 +260,56 @@ export default function HandHygiene({ observations, stats, filters }: Props) {
                                             />
                                         </div>
 
-                                        <Button type="submit" className="w-full" disabled={processing}>
+                                        <Button type="submit" className="w-full rounded-xl bg-rose-600 hover:bg-rose-700" disabled={processing}>
                                             บันทึกข้อมูล
                                         </Button>
                                     </form>
                                 </DialogContent>
-                            </Dialog>
-                        </div>
+        </Dialog>
+    );
 
-                        {/* Stats in Hero */}
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
-                            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                                <div className="flex items-center gap-2 text-white/70 text-sm mb-1">
-                                    <Target className="h-4 w-4" />
-                                    <span>เป้าหมาย</span>
-                                </div>
-                                <div className="text-3xl font-bold">{stats.target}%</div>
-                            </div>
-                            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                                <div className="flex items-center gap-2 text-white/70 text-sm mb-1">
-                                    <TrendingUp className="h-4 w-4" />
-                                    <span>Compliance Rate</span>
-                                </div>
-                                <div className="text-3xl font-bold flex items-center gap-2">
-                                    {stats.overall_rate}%
-                                    {stats.overall_rate >= stats.target ? (
-                                        <CheckCircle2 className="h-6 w-6 text-green-300" />
-                                    ) : (
-                                        <XCircle className="h-6 w-6 text-red-300" />
-                                    )}
-                                </div>
-                            </div>
-                            <div className="col-span-2 bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                                <Progress value={stats.overall_rate} className="h-4 bg-white/20" />
-                                <p className="text-sm text-white/70 mt-2 text-center">
-                                    {stats.overall_rate >= stats.target ? 'บรรลุเป้าหมาย ✓' : `ต้องเพิ่มอีก ${(stats.target - stats.overall_rate).toFixed(1)}%`}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
+    return (
+        <QualityPage
+            tone="rose"
+            icon={Hand}
+            badge="ศูนย์พัฒนาคุณภาพ · IC"
+            title="Hand Hygiene Compliance"
+            subtitle="WHO 5 Moments for Hand Hygiene"
+            headTitle="Hand Hygiene - IC"
+            breadcrumbs={[
+                { title: 'ศูนย์พัฒนาคุณภาพ', href: '/quality' },
+                { title: 'Infection Control (IC)', href: '/ic' },
+                { title: 'ล้างมือ', href: '/ic/hand-hygiene' },
+            ]}
+            subNav={<IcSubNav active="ic.hand-hygiene" />}
+            actions={observeDialog}
+        >
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                <StatCard label="เป้าหมาย" value={`${stats.target}%`} icon={Target} tone="slate" />
+                <StatCard
+                    label="Compliance Rate"
+                    value={
+                        <span className="flex items-center gap-2">
+                            {stats.overall_rate}%
+                            {stats.overall_rate >= stats.target ? (
+                                <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                            ) : (
+                                <XCircle className="h-5 w-5 text-rose-500" />
+                            )}
+                        </span>
+                    }
+                    icon={TrendingUp}
+                    tone="rose"
+                />
+                <div className="col-span-2 rounded-2xl border border-slate-200/70 bg-white p-4 shadow-sm">
+                    <Progress value={stats.overall_rate} className="h-4" />
+                    <p className="mt-2 text-center text-sm text-slate-500">
+                        {stats.overall_rate >= stats.target ? 'บรรลุเป้าหมาย ✓' : `ต้องเพิ่มอีก ${(stats.target - stats.overall_rate).toFixed(1)}%`}
+                    </p>
                 </div>
+            </div>
 
-                {/* Main Content */}
-                <div className="flex-1 p-6 space-y-6 bg-gray-50 dark:bg-gray-900">
-                    {/* Compliance by Moment */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <Hand className="h-5 w-5 text-teal-500" />
-                                Compliance แยกตาม 5 Moments (เดือนนี้)
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
+                    <Panel title="Compliance แยกตาม 5 Moments (เดือนนี้)">
                             <div className="grid gap-4 md:grid-cols-5">
                                 {stats.by_moment.map((moment, index) => (
                                     <div key={moment.moment} className="text-center">
@@ -363,21 +324,12 @@ export default function HandHygiene({ observations, stats, filters }: Props) {
                                     </div>
                                 ))}
                             </div>
-                        </CardContent>
-                    </Card>
+                    </Panel>
 
-                    {/* Compliance by Profession */}
                     <div className="grid gap-6 md:grid-cols-2">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <Users className="h-5 w-5 text-blue-500" />
-                                    Compliance แยกตามวิชาชีพ (เดือนนี้)
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
+                        <Panel title="Compliance แยกตามวิชาชีพ (เดือนนี้)">
                                 {stats.by_profession.length === 0 ? (
-                                    <p className="text-muted-foreground text-center py-4">ยังไม่มีข้อมูล</p>
+                                    <EmptyState text="ยังไม่มีข้อมูล" />
                                 ) : (
                                     <div className="space-y-4">
                                         {stats.by_profession.map((item) => {
@@ -398,18 +350,9 @@ export default function HandHygiene({ observations, stats, filters }: Props) {
                                         })}
                                     </div>
                                 )}
-                            </CardContent>
-                        </Card>
+                        </Panel>
 
-                        {/* WHO 5 Moments Info */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <Info className="h-5 w-5 text-purple-500" />
-                                    WHO 5 Moments for Hand Hygiene
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
+                        <Panel title="WHO 5 Moments for Hand Hygiene">
                                 <div className="space-y-3">
                                     {moments.map((moment) => (
                                         <div key={moment.num} className="flex items-start gap-3">
@@ -423,26 +366,24 @@ export default function HandHygiene({ observations, stats, filters }: Props) {
                                         </div>
                                     ))}
                                 </div>
-                            </CardContent>
-                        </Card>
+                        </Panel>
                     </div>
 
-                    {/* Filters */}
-                    <Card>
-                        <CardHeader>
-                            <div className="flex items-center justify-between">
-                                <CardTitle>ประวัติการสังเกต</CardTitle>
-                                <div className="flex gap-2">
-                                    <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)}>
-                                        <Filter className="h-4 w-4 mr-1" /> กรอง
-                                    </Button>
-                                    <Button variant="outline" size="sm">
-                                        <Download className="h-4 w-4 mr-1" /> Export
-                                    </Button>
-                                </div>
+                    <Panel
+                        title="ประวัติการสังเกต"
+                        action={
+                            <div className="flex gap-2">
+                                <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setShowFilters(!showFilters)}>
+                                    <Filter className="mr-1 h-4 w-4" /> กรอง
+                                </Button>
+                                <Button variant="outline" size="sm" className="rounded-xl">
+                                    <Download className="mr-1 h-4 w-4" /> Export
+                                </Button>
                             </div>
+                        }
+                    >
                             {showFilters && (
-                                <div className="grid grid-cols-4 gap-4 mt-4 pt-4 border-t">
+                                <div className="mb-4 grid grid-cols-4 gap-4 border-b border-slate-100 pb-4">
                                     <Input
                                         type="text"
                                         placeholder="หอผู้ป่วย"
@@ -474,55 +415,48 @@ export default function HandHygiene({ observations, stats, filters }: Props) {
                                     />
                                 </div>
                             )}
-                        </CardHeader>
-                        <CardContent>
-                            <div className="rounded-md border">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>วันที่</TableHead>
-                                            <TableHead>หอผู้ป่วย</TableHead>
-                                            <TableHead>วิชาชีพ</TableHead>
-                                            <TableHead>ผู้สังเกต</TableHead>
-                                            <TableHead className="text-center">โอกาส</TableHead>
-                                            <TableHead className="text-center">ปฏิบัติถูกต้อง</TableHead>
-                                            <TableHead className="text-center">Compliance</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
+                            <div className="overflow-hidden rounded-xl border border-slate-200">
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="border-b border-slate-100 text-left text-xs uppercase text-slate-400">
+                                            <th className="p-3">วันที่</th>
+                                            <th className="p-3">หอผู้ป่วย</th>
+                                            <th className="p-3">วิชาชีพ</th>
+                                            <th className="p-3">ผู้สังเกต</th>
+                                            <th className="p-3 text-center">โอกาส</th>
+                                            <th className="p-3 text-center">ปฏิบัติถูกต้อง</th>
+                                            <th className="p-3 text-center">Compliance</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
                                         {observations.data.length === 0 ? (
-                                            <TableRow>
-                                                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                                                    ไม่พบข้อมูล
-                                                </TableCell>
-                                            </TableRow>
+                                            <tr>
+                                                <td colSpan={7}><EmptyState text="ไม่พบข้อมูล" /></td>
+                                            </tr>
                                         ) : (
                                             observations.data.map((obs) => {
                                                 const profession = professions.find(p => p.value === obs.profession);
                                                 return (
-                                                    <TableRow key={obs.id}>
-                                                        <TableCell>{new Date(obs.observation_date).toLocaleDateString('th-TH')}</TableCell>
-                                                        <TableCell>{obs.ward_name}</TableCell>
-                                                        <TableCell>{profession?.label || obs.profession}</TableCell>
-                                                        <TableCell>{obs.observer_name}</TableCell>
-                                                        <TableCell className="text-center">{obs.total_opportunities}</TableCell>
-                                                        <TableCell className="text-center">{obs.total_compliances}</TableCell>
-                                                        <TableCell className="text-center">
-                                                            <Badge variant={obs.compliance_rate >= stats.target ? "default" : "destructive"}>
+                                                    <tr key={obs.id} className="border-t border-slate-100 hover:bg-slate-50/60">
+                                                        <td className="p-3">{new Date(obs.observation_date).toLocaleDateString('th-TH')}</td>
+                                                        <td className="p-3">{obs.ward_name}</td>
+                                                        <td className="p-3">{profession?.label || obs.profession}</td>
+                                                        <td className="p-3">{obs.observer_name}</td>
+                                                        <td className="p-3 text-center">{obs.total_opportunities}</td>
+                                                        <td className="p-3 text-center">{obs.total_compliances}</td>
+                                                        <td className="p-3 text-center">
+                                                            <Badge variant={obs.compliance_rate >= stats.target ? 'default' : 'destructive'}>
                                                                 {obs.compliance_rate}%
                                                             </Badge>
-                                                        </TableCell>
-                                                    </TableRow>
+                                                        </td>
+                                                    </tr>
                                                 );
                                             })
                                         )}
-                                    </TableBody>
-                                </Table>
+                                    </tbody>
+                                </table>
                             </div>
-                        </CardContent>
-                    </Card>
-                </div>
-            </div>
-        </AppLayout>
+                    </Panel>
+        </QualityPage>
     );
 }

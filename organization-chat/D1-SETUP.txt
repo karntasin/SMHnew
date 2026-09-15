@@ -1,0 +1,41 @@
+FSHH Chat — Cloudflare Worker + D1 (ไม่ใช้ Laravel)
+================================================
+
+โครงสร้าง
+  LINE LIFF → Worker (หน้าแชท + API) → D1
+
+ไฟล์
+  worker.js      เสิร์ฟ UI + route /api/gas
+  chat-api.js    logic แชทบน D1
+  chat-page.js   UI เดิม ใช้ได้เลย
+  schema.sql     ตาราง users / conversations / messages / sessions
+
+ติดตั้งครั้งแรก
+  cd organization-chat
+  npx wrangler login
+  npx wrangler d1 create fshh-chat
+
+  คัดลอก database_id ที่ได้ ไปใส่ wrangler.toml ช่อง database_id
+
+  npx wrangler d1 execute fshh-chat --remote --file=./schema.sql
+  npx wrangler deploy
+
+ทดสอบ
+  https://polished-river-f1bb.karntasin5.workers.dev/health
+  https://polished-river-f1bb.karntasin5.workers.dev/api/gas?action=health
+  ควรได้ "version":"7.2-d1" และ "backend":"d1"
+
+  เปิดแชท: https://liff.line.me/2011190976-nGVbTYZD
+
+สร้างกลุ่ม
+  กดปุ่ม ＋ สร้างกลุ่ม ใส่ชื่อ เลือกสมาชิก แล้วสร้าง
+  แตะหัวแชทกลุ่มเพื่อดูสมาชิก / เพิ่ม / ออกจากกลุ่ม
+
+หมายเหตุ
+  - ผู้ใช้ถูกสร้างตอน login LINE ครั้งแรก (ยังไม่ดึงรายชื่อจาก my-app)
+  - แผนฟรี D1: อ่านได้ ~5 ล้านแถว/วัน (รีเซ็ต 00:00 UTC ≈ 07:00 น. ไทย)
+    ถ้าขึ้น D1_ERROR daily row read limit = ใช้เกินโควต้าจาก poll แชท
+    แก้ชั่วคราว: รอถึงวันใหม่ หรืออัปเกรด Workers Paid
+  - v8.4-d1-pollopt: poll แบบ incremental + เก็บ last_message/unread ในตาราง
+    (ไม่สแกน messages ทั้งก้อนทุกครั้ง) + ชะลอช่วง poll
+  - migrate คอลัมน์: schema-poll-opt.sql (Worker ก็ ALTER ให้อัตโนมัติตอนรัน)

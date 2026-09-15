@@ -1,0 +1,118 @@
+============================================================
+FortiGate Syslog → Web App (แนะนำสำหรับ 192.168.1.214)
+============================================================
+
+เป้าหมาย
+--------
+ให้ FortiGate ส่ง Syslog มาที่เครื่อง web app (เช่น 192.168.1.214)
+แล้วระบบเก็บลงฐานข้อมูลเดิม ดูได้ที่เมนู "ไฟร์วอลล์ FortiGate"
+
+
+1) ตั้งค่าบนเครื่องรับ log (192.168.1.214)
+------------------------------------------
+ในไฟล์ .env ของ Laravel:
+
+FORTIGATE_SYSLOG_ENABLED=true
+FORTIGATE_SYSLOG_LISTEN_HOST=0.0.0.0
+FORTIGATE_SYSLOG_LISTEN_PORT=5514
+FORTIGATE_SYSLOG_NOTIFY=true
+FORTIGATE_SYSLOG_TRAFFIC_MODE=all
+
+# interesting = เก็บ traffic ที่ deny / มี app-url / พอร์ตเสี่ยง
+# denied      = เก็บเฉพาะที่ถูก deny/block
+# all         = เก็บ traffic ทั้งหมด (ปริมาณสูง)
+
+เปิด PHP sockets (php.ini ของ .php82):
+  extension=sockets
+
+เปิดตัวรับ (เลือกอย่างใดอย่างหนึ่ง):
+
+  ก) จากเว็บแอป — เมนู ไฟร์วอลล์ FortiGate → แผง "ตัวรับ Syslog จาก FortiGate"
+     กดปุ่ม "เปิดตัวรับ" / "หยุด" (แนะนำ)
+
+  ข) จากคำสั่ง:
+     cd d:\Xampp\htdocs\sss\my-app
+     .\.php82\php.exe artisan fortigate:syslog-listen
+
+เปิด Windows Firewall อนุญาต UDP inbound port 5514 จาก IP FortiGate
+
+
+2) ตั้งค่า FortiGate (Syslog ตัวที่ 2)
+------------------------------------
+CLI:
+
+config log syslogd2 setting
+    set status enable
+    set server "192.168.1.214"
+    set mode udp
+    set port 5514
+end
+
+config log syslogd2 filter
+    set severity information
+    set forward-traffic enable
+    set local-traffic disable
+    set anomaly enable
+end
+
+# ให้ส่ง UTM / security ด้วย (แล้วแต่เฟิร์มแวร์ อาจอยู่ใน filter เดียวกัน)
+# และบน Firewall Policy เปิด Log Allowed Traffic = All Sessions
+# ถ้าต้องการเห็นการใช้งานจริง
+
+
+3) ตรวจว่าเข้าแล้ว
+-----------------
+หน้าต่าง syslog-listen จะโชว์ทุก ~10 วินาที:
+  recv=... stored=... dup=... skip=...
+
+ในเว็บแอป:
+  ไฟร์วอลล์ FortiGate → บันทึกกิจกรรม
+  เลือก scope "Traffic" / "Deny web" / "Threats"
+
+
+4) ให้มี MAC ใน log (srcmac)
+--------------------------------
+FortiGate จะใส่ srcmac ใน forward traffic เมื่อเปิด Device detection
+บนอินเทอร์เฟซ LAN ที่เครื่องลูกข่ายอยู่ (L2 ตรงกับ FG)
+
+GUI:
+  Network → Interfaces → เลือกพอร์ต/VLAN ของ LAN
+  → เปิด Device detection (Device identification)
+
+CLI (แทน internal ด้วยชื่อพอร์ตจริง เช่น lan, port2, VLAN20):
+
+config system interface
+    edit "internal"
+        set device-identification enable
+    next
+end
+
+ตรวจ DHCP ของ FortiGate (ช่วยให้เว็บแอป map IP→MAC ได้แม้บาง log ไม่มี srcmac):
+  Network → Interfaces → DHCP Server เปิดอยู่บน LAN นั้น
+  หรือ External DHCP ก็ได้ แต่แคช MAC จาก FG จะน้อยกว่า
+
+Policy ที่ต้องการเห็น MAC/การใช้งาน:
+  Firewall Policy → Log Allowed Traffic = All Sessions (หรืออย่างน้อย Security Events)
+  และให้ syslogd2 ส่ง forward-traffic อยู่แล้ว (ข้อ 2)
+
+ตรวจบน FortiGate ว่า log มี MAC:
+  Log & Report → Forward Traffic → เปิดคอลัมน์ Source MAC
+  หรือใน raw: srcmac=aa:bb:cc:... / mastersrcmac=...
+
+หมายเหตุ:
+  - ถ้ามี L3 router คั่นระหว่างเครื่องกับ FG มักเห็นแค่ MAC ของ router ไม่ใช่เครื่องลูก
+  - Webfilter/บาง UTM log อาจไม่มี srcmac — forward traffic มักมีครบกว่า
+
+
+5) ปริมาณ log
+-------------
+ถ้า stored พุ่งสูงมาก ให้เปลี่ยน:
+  FORTIGATE_SYSLOG_TRAFFIC_MODE=denied
+แล้ว restart listener
+
+
+หมายเหตุทั่วไป
+--------------
+- ของเดิมที่ส่งไป 192.168.77.x (CSOC) คงไว้ได้ — ใช้ syslogd / syslogd2 คนละตัว
+- พอร์ต 514 บน Windows มักต้องรัน Administrator → ใช้ 5514 ง่ายกว่า
+- API poll ทุก 5 นาที ยังทำงานคู่กันได้ (security memory log)

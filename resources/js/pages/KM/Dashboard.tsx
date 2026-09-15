@@ -32,7 +32,7 @@ interface Props {
 }
 
 const breadcrumbs = [
-    { title: 'ศูนย์คุณภาพ', href: '/quality' },
+    { title: 'ศูนย์พัฒนาคุณภาพ', href: '/quality' },
     { title: 'KM', href: route('km.dashboard') },
 ];
 
@@ -41,7 +41,7 @@ export default function KmDashboard({ recentAssets, popularAssets, featuredCours
         <QualityPage
             tone="amber"
             icon={GraduationCap}
-            badge="ศูนย์คุณภาพ · KM"
+            badge="ศูนย์พัฒนาคุณภาพ · KM"
             title="ภาพรวมการจัดการความรู้"
             subtitle="ศูนย์รวมองค์ความรู้และระบบการเรียนรู้ออนไลน์ เพื่อพัฒนาศักยภาพบุคลากรอย่างต่อเนื่อง"
             breadcrumbs={breadcrumbs}

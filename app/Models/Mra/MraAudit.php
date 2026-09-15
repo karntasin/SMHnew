@@ -59,7 +59,19 @@ class MraAudit extends Model
         'total_obtained_score' => 'decimal:1',
         'pulse' => 'decimal:1',
         'temperature' => 'decimal:1',
+        'hn' => 'string',
+        'vn' => 'string',
+        'an' => 'string',
     ];
+
+    public function setHnAttribute(mixed $value): void
+    {
+        $hn = trim((string) ($value ?? ''));
+        if ($hn !== '' && preg_match('/^\d+$/', $hn) && strlen($hn) < 9) {
+            $hn = str_pad($hn, 9, '0', STR_PAD_LEFT);
+        }
+        $this->attributes['hn'] = $hn;
+    }
 
     /**
      * Get audit details

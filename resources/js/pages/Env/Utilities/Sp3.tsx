@@ -110,11 +110,11 @@ export default function Sp3({ unlocked, fiscalYear, fiscalYears, category, entri
             <QualityPage
                 tone="teal"
                 icon={LockKeyhole}
-                badge="ศูนย์คุณภาพ · ENV"
+                badge="ศูนย์พัฒนาคุณภาพ · ENV"
                 title="สป.3 ค่าน้ำมันดีเซล"
                 subtitle="ข้อมูลส่วนนี้ถูกซ่อนจากภาพรวม — กรุณาใส่รหัสเพื่อเข้าถึง"
                 breadcrumbs={[
-                    { title: 'ศูนย์คุณภาพ', href: '/quality' },
+                    { title: 'ศูนย์พัฒนาคุณภาพ', href: '/quality' },
                     { title: 'ENV', href: route('env.index') },
                     { title: 'สาธารณูปโภค', href: route('env.utilities.index') },
                     { title: 'สป.3', href: route('env.utilities.sp3') },
@@ -161,11 +161,11 @@ export default function Sp3({ unlocked, fiscalYear, fiscalYears, category, entri
         <QualityPage
             tone="teal"
             icon={Droplets}
-            badge="ศูนย์คุณภาพ · ENV · สป.3"
+            badge="ศูนย์พัฒนาคุณภาพ · ENV · สป.3"
             title="สป.3 ค่าน้ำมันดีเซล"
             subtitle={`ปีงบ ${fiscalYear} · ข้อมูลถูกจำกัดการเข้าถึง`}
             breadcrumbs={[
-                { title: 'ศูนย์คุณภาพ', href: '/quality' },
+                { title: 'ศูนย์พัฒนาคุณภาพ', href: '/quality' },
                 { title: 'ENV', href: route('env.index') },
                 { title: 'สาธารณูปโภค', href: route('env.utilities.index') },
                 { title: 'สป.3', href: route('env.utilities.sp3') },

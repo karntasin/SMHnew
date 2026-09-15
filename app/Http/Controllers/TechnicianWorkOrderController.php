@@ -44,7 +44,7 @@ class TechnicianWorkOrderController extends Controller
 
         // Filter my work (assigned to me)
         if ($request->get('filter') === 'my_work') {
-            $query->where('assigned_to', $user->id);
+            $query->where('technician_id', $user->id);
         }
 
         $workOrders = $query->paginate(10);
@@ -54,7 +54,7 @@ class TechnicianWorkOrderController extends Controller
             'pending' => MaintenanceRequest::where('status', 'pending')->count(),
             'in_progress' => MaintenanceRequest::where('status', 'in_progress')->count(),
             'completed' => MaintenanceRequest::where('status', 'completed')->count(),
-            'my_work' => MaintenanceRequest::where('assigned_to', $user->id)
+            'my_work' => MaintenanceRequest::where('technician_id', $user->id)
                 ->whereIn('status', ['pending', 'in_progress', 'assigned'])
                 ->count(),
         ];
@@ -98,7 +98,7 @@ class TechnicianWorkOrderController extends Controller
         $oldValues = $workOrder->toArray();
 
         $workOrder->update([
-            'assigned_to' => $validated['technician_id'],
+            'technician_id' => $validated['technician_id'],
             'status' => 'assigned',
             'assigned_at' => now(),
         ]);
@@ -140,7 +140,7 @@ class TechnicianWorkOrderController extends Controller
         }
 
         // If assigned, ensure it's assigned to this user
-        if ($workOrder->status === 'assigned' && $workOrder->assigned_to !== $user->id) {
+        if ($workOrder->status === 'assigned' && $workOrder->technician_id !== $user->id) {
              return back()->with('error', 'ใบงานนี้ไม่ได้มอบหมายให้คุณ');
         }
 
@@ -185,13 +185,9 @@ class TechnicianWorkOrderController extends Controller
         ];
 
         if ($validated['status'] === 'maintenance_completed') {
-            $updateData['completed_at'] = now(); // Tech completed time
-            $updateData['resolution'] = $validated['resolution'] ?? null;
+            $updateData['completed_at'] = now();
+            $updateData['resolution_notes'] = $validated['resolution'] ?? $workOrder->resolution_notes;
             $updateData['cost'] = $validated['cost'] ?? null;
-        }
-
-        if ($validated['status'] === 'cancelled') {
-            $updateData['cancelled_at'] = now();
         }
 
         $workOrder->update($updateData);

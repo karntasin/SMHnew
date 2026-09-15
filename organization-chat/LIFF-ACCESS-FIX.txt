@@ -1,0 +1,83 @@
+============================================================
+แก้: คนอื่นเปิด LIFF แล้วขึ้น 404 / เข้าไม่ได้
+============================================================
+
+อาการ
+-----
+- LINE ของคุณ (Admin) เปิดแชทได้
+- พนักงานคนอื่นเปิดแล้วขึ้น 404 หรือเข้าไม่ได้
+
+
+สาเหตุหลัก (90%)
+-----------------
+Channel LINE ยังอยู่สถานะ **Developing**
+→ ใช้ได้เฉพาะ **Admin / Tester** ที่ลงทะเบียนใน LINE Developers
+→ บัญชีของคุณเป็น Admin เลยเข้าได้ คนอื่นเข้าไม่ได้
+
+
+วิธีแก้ (แนะนำ — ให้พนักงานทุกคนใช้ได้)
+----------------------------------------
+1. เปิด LINE Developers Console
+   https://developers.line.biz/console/
+
+2. เลือก Provider → Channel ที่ LIFF ID = 2011190976-nGVbTYZD
+   (Channel ID = 2011190976)
+
+3. ด้านบนหน้า Channel จะเห็นป้าย **Developing**
+   → คลิก → เลือก **Publish**
+
+4. ไปแท็บ **LIFF** → เลือก LIFF app ของคุณ
+   → ถ้ามีสถานะ Unpublished ให้เปลี่ยนเป็น **Published** ด้วย
+
+5. ตรวจ **Endpoint URL** ต้องเป็น:
+   https://polished-river-f1bb.karntasin5.workers.dev/
+   (ไม่ใช่ organization-chat-api)
+
+6. แชร์ลิงก์นี้ให้พนักงาน (อย่าแชร์ Worker URL ตรง ๆ ถ้าไม่จำเป็น):
+   https://liff.line.me/2011190976-nGVbTYZD
+
+
+วิธีแก้ชั่วคราว (ยังไม่อยาก Publish)
+------------------------------------
+เพิ่มพนักงานเป็น **Tester** ใน LINE Developers:
+
+1. Provider → แท็บ **Members** หรือ **Roles**
+2. เพิ่มอีเมล/บัญชีของพนักงานเป็น **Tester**
+3. พนักงานต้อง **ผูก LINE account กับ Developer account** ก่อน
+   (Business ID ↔ LINE)
+
+→ วิธีนี้ใช้ได้แค่คนที่เพิ่มเป็น Tester เท่านั้น
+→ Production ควร Publish Channel แทน
+
+
+สาเหตุรอง — ลิงก์ผิด
+---------------------
+ถ้า Rich Menu / QR / ลิงก์ที่แชร์ชี้ไป URL ผิด เช่น:
+- organization-chat-api.karntasin5.workers.dev/xxx  (ไม่ใช่หน้าแชท)
+- Worker เก่าที่ไม่ได้ deploy แล้ว
+
+→ แก้ให้ชี้ไป LIFF URL:
+  https://liff.line.me/2011190976-nGVbTYZD
+
+
+ตรวจ Apps Script (ถ้าเปิดหน้าได้แต่ Login ไม่ได้)
+------------------------------------------------
+Deploy Web App ต้องตั้ง:
+- Execute as: Me
+- Who has access: **Anyone**  (ไม่ใช่ Only myself)
+
+
+ทดสอบหลังแก้
+------------
+1. ให้พนักงานที่เคยเข้าไม่ได้ เปิด:
+   https://liff.line.me/2011190976-nGVbTYZD
+2. ต้องเห็นหน้า FSHH Chat / Organization Chat
+3. Login LINE → ได้ sessionToken
+
+
+ถ้ายังไม่ได้
+-----------
+ส่งมาให้ตรวจ:
+- ลิงก์ที่พนักงานกด ( copy URL จากแถบที่อยู่ )
+- ภาพหน้าจอ 404
+- สถานะ Channel (Developing / Published)

@@ -46,7 +46,7 @@ import {
 
 const breadcrumbs: BreadcrumbItem[] = [
   {
-    title: 'Role Management',
+    title: 'จัดการบทบาท',
     href: '/roles',
   },
 ];
@@ -66,7 +66,6 @@ interface Role {
 
 interface Props {
   roles: Role[];
-  groupedPermissions: Record<string, Permission[]>;
 }
 
 export default function RoleIndex({ roles }: Props) {
@@ -87,14 +86,14 @@ export default function RoleIndex({ roles }: Props) {
       <div className="flex-1 space-y-6 p-6 md:p-8">
         <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-100">Role Management</h1>
+            <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-100">จัดการบทบาท</h1>
             <p className="text-muted-foreground mt-1">
-              Manage user roles and assign permissions to control access.
+              กำหนดบทบาทและสิทธิ์การเข้าถึงระบบ
             </p>
           </div>
           <Link href="/roles/create">
             <Button className="w-full md:w-auto shadow-lg hover:shadow-xl transition-all bg-primary hover:bg-primary/90">
-              <Plus className="mr-2 h-4 w-4" /> Create New Role
+              <Plus className="mr-2 h-4 w-4" /> สร้างบทบาทใหม่
             </Button>
           </Link>
         </div>

@@ -1,0 +1,24 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class EnvUtilityAcMeter extends Model
+{
+    protected $fillable = [
+        'name',
+        'sort_order',
+        'is_active',
+    ];
+
+    protected $casts = [
+        'is_active' => 'boolean',
+    ];
+
+    public function readings(): HasMany
+    {
+        return $this->hasMany(EnvUtilityAcReading::class, 'meter_id');
+    }
+}

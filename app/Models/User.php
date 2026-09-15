@@ -55,14 +55,20 @@ class User extends Authenticatable implements HasMedia
      */
     protected $fillable = [
         'name',
+        'prefix',
         'email',
+        'cid',
         'password',
         'line_id',
         'line_display_name',
+        'chat_display_name',
         'avatar',
+        'signature_path',
+        'stamp_path',
         'line_picture_url',
         'profile_completed',
         'position',
+        'phone',
         'department_id',
     ];
 
@@ -117,6 +123,16 @@ class User extends Authenticatable implements HasMedia
     public function getDisplayNameAttribute(): string
     {
         return $this->name ?: $this->line_display_name ?: 'Unknown';
+    }
+
+    /**
+     * ชื่อที่แสดงใน FSHH Chat — ถ้าว่างใช้ชื่อจริง / ชื่อ LINE
+     */
+    public function getChatNameAttribute(): string
+    {
+        $custom = trim((string) $this->chat_display_name);
+
+        return $custom !== '' ? $custom : $this->display_name;
     }
 
     public function mediaFolders()
