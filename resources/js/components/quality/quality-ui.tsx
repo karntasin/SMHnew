@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import { LucideIcon } from 'lucide-react';
 
 /*
- * ชุด UI กลางของโมดูลภายใต้ศูนย์คุณภาพ — generalize มาจาก resources/js/pages/Im/ui.tsx
+ * ชุด UI กลางของโมดูลภายใต้ศูนย์พัฒนาคุณภาพ — generalize มาจาก resources/js/pages/Im/ui.tsx
  * ทุกโมดูล (quality-docs, indicators, QA, MRA, IC, ENV, KM) ใช้โครงเดียวกัน
  * แต่กำหนดโทนสีของตนเองผ่าน prop `tone`
  */
@@ -424,7 +424,7 @@ export function Modal({
 }) {
     return (
         <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-            <DialogContent className={cn('max-h-[90vh] overflow-y-auto', wide ? 'sm:max-w-3xl' : 'sm:max-w-lg')}>
+            <DialogContent className={cn('max-h-[90vh] overflow-y-auto', wide ? 'sm:max-w-4xl' : 'sm:max-w-lg')}>
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
                 </DialogHeader>

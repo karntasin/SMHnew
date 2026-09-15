@@ -1,0 +1,72 @@
+FSHH Chat — ย้าย Backend มา Laravel
+====================================
+
+## สิ่งที่เพิ่มใน my-app
+
+- ตาราง: `chat_conversations`, `chat_messages`
+- Models: `ChatConversation`, `ChatMessage`
+- Service: `App\Services\OrganizationChat\OrganizationChatService`
+- LINE verify: `App\Services\OrganizationChat\LineIdTokenService`
+- API: `GET|POST /organization-chat/api?action=...`
+
+## ขั้นตอนติดตั้ง Laravel
+
+1. ตั้งค่า `.env` (ใช้ค่า LINE เดิม):
+   ```
+   LINE_LOGIN_CHANNEL_ID=2011190976
+   LINE_LOGIN_CHANNEL_SECRET=...
+   ```
+
+2. รัน migration:
+   ```
+   php artisan migrate
+   ```
+
+3. ทดสอบ API ในเครื่อง:
+   ```
+   curl "http://localhost/sss/my-app/public/organization-chat/api?action=health"
+   ```
+   ควรได้ `"version":"6.0-laravel"`
+
+## ขั้นตอนตั้ง Worker
+
+Cloudflare Worker **เข้าถึง localhost ไม่ได้** — Laravel ต้องอยู่บน URL สาธารณะ (production / ngrok / tunnel)
+
+1. แก้ `organization-chat/wrangler.toml`:
+   ```toml
+   [vars]
+   LARAVEL_API_URL = "https://your-domain.com/organization-chat/api"
+   ```
+
+2. Deploy Worker:
+   ```
+   cd organization-chat
+   npx wrangler deploy
+   ```
+
+3. ทดสอบ:
+   - `https://polished-river-f1bb.karntasin5.workers.dev/api/gas?action=health`
+   - เปิด LIFF: `https://liff.line.me/2011190976-nGVbTYZD`
+
+## API actions (เหมือน GAS เดิม)
+
+| action | คำอธิบาย |
+|--------|----------|
+| health | ตรวจสอบ API |
+| authenticateWithLine / lineLogin | เข้าสู่ระบบ LINE |
+| users | รายชื่อผู้ใช้ |
+| conversations | รายการแชท |
+| conversation | สร้าง/ดึงห้องแชท 1:1 |
+| messages | ข้อความในห้อง |
+| sendMessage | ส่งข้อความ |
+| markRead | อ่านแล้ว |
+| unread | จำนวนยังไม่อ่าน |
+| poll | poll inbox (เร็ว) |
+
+Session token เก็บใน Cache 6 ชม. (`org_chat_session:*`)
+
+## หมายเหตุ
+
+- ผู้ใช้ LINE ใหม่จะถูกสร้างใน `users` (role `user`) เหมือน LineAuthController
+- ข้อมูลแชทเก่าใน Google Sheets **ไม่ย้ายอัตโนมัติ** — ต้อง import แยกถ้าต้องการ
+- Worker ยังใช้ path `/api/gas` เพื่อไม่ต้องแก้ chat-page.js (unwrap ใช้ key `gas`)

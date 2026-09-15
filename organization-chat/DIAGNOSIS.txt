@@ -1,0 +1,80 @@
+============================================================
+ORGANIZATION CHAT — ผลการวิเคราะห์ (2026-08-24)
+============================================================
+
+สถาปัตยกรรมที่ออกแบบไว้
+----------------------
+LINE LIFF  →  Cloudflare Worker (หน้าเว็บ + CORS proxy)
+           →  Google Apps Script (API)
+           →  Google Sheets (Users / Conversations / Messages)
+
+
+สิ่งที่ตรวจพบจาก URL จริง
+------------------------
+1) LIFF Endpoint ที่ตั้งไว้ในโค้ด
+   https://polished-river-f1bb.karntasin5.workers.dev/
+
+   สถานะ: พัง
+   - คืนค่าเป็นโค้ด JavaScript ดิบ (export default { ... })
+   - Content-Type เป็น text/html แต่เนื้อหาไม่ใช่ HTML
+   - /api/test = 404
+   → LIFF เปิดไม่ได้ / หน้าขาว / init ล้มเหลว
+
+2) Worker API ที่ทำงานได้
+   https://organization-chat-api.karntasin5.workers.dev/
+   - /health  OK
+   - /api/test  OK
+   - /api/gas?action=health  OK (proxy ไป GAS ได้)
+
+3) Google Apps Script Web App
+   .../exec
+   - GET ?action=health  OK (JSON)
+   - GET ?action=users   OK (มีข้อมูล Users ใน Sheet แล้ว)
+
+
+สาเหตุหลักที่ทำไม่สำเร็จ
+-----------------------
+A. Worker ที่เป็น LIFF Endpoint URL ถูก deploy ผิด
+   (เอาไฟล์ worker.js ไปวางเป็น response ของ / แทนที่จะรันเป็น Worker)
+
+B. ใช้ Worker คนละตัวคนละหน้าที่
+   - polished-river = ตั้งเป็น LIFF Endpoint แต่พัง
+   - organization-chat-api = API proxy ทำงาน แต่ไม่ใช่ LIFF Endpoint
+
+C. Frontend (LIFF_TEST) เรียก Apps Script โดยตรง (API_URL = script.google.com)
+   - Browser มักโดน CORS / redirect ของ Google
+   - ควรเรียกผ่าน Cloudflare Worker เท่านั้น
+
+D. ไฟล์ App Script.md รวมหลายเวอร์ชันปนกัน
+   - Code.gs ต้นไฟล์มี doGet() คืน HTML
+   - ของที่ deploy จริงคืน JSON
+   - มี Worker V4 ท้ายไฟล์ที่ทับความเข้าใจ V5
+
+
+วิธีแก้ (สรุป)
+-------------
+1. Deploy worker.js ในโฟลเดอร์นี้ ไปที่ Worker เดียว
+   แนะนำใช้: polished-river-f1bb
+   (เพราะเป็น URL ที่ตั้งใน LINE LIFF Endpoint อยู่แล้ว)
+
+2. ใน LINE Developers > LIFF
+   Endpoint URL ต้องชี้ไป Worker นั้น (ลงท้าย /)
+
+3. Frontend ต้องเรียก API ผ่าน Worker เท่านั้น เช่น
+   https://polished-river-f1bb.karntasin5.workers.dev/api/gas
+   ห้ามเรียก script.google.com จาก browser
+
+4. Apps Script ต้องมี doGet/doPost เป็น JSON router
+   (ใช้ Code.gs.router ในโฟลเดอร์นี้ ต่อกับฟังก์ชันเดิมของคุณ)
+
+5. Deploy Apps Script เป็น Web App
+   - Execute as: Me
+   - Who has access: Anyone
+
+
+ไฟล์ในโฟลเดอร์นี้
+---------------
+- worker.js              Worker รวมหน้า LIFF + API proxy
+- Code.gs.router.js      doGet/doPost สำหรับ Apps Script
+- liff-test.html         หน้าทดสอบ LIFF (ฝังใน worker แล้ว)
+- DEPLOY-STEPS.txt       ขั้นตอน deploy ทีละขั้น

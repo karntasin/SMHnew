@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\LineAuthController;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Support\PostLoginRedirect;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -18,9 +20,13 @@ class AuthenticatedSessionController extends Controller
      */
     public function create(Request $request): Response
     {
+        $lineEnabled = (bool) config('services.line.enabled');
+
         return Inertia::render('auth/login', [
             'canResetPassword' => Route::has('password.request'),
             'status' => $request->session()->get('status'),
+            'lineLoginEnabled' => $lineEnabled,
+            'lineQr' => $lineEnabled ? LineAuthController::createDesktopTicket('login') : null,
         ]);
     }
 
@@ -32,8 +38,9 @@ class AuthenticatedSessionController extends Controller
         $request->authenticate();
 
         $request->session()->regenerate();
+        session()->forget('url.intended');
 
-        return redirect()->intended(route('dashboard', absolute: false));
+        return redirect()->away(PostLoginRedirect::toCurrent('dashboard', $request));
     }
 
     /**

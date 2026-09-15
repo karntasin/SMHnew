@@ -11,7 +11,7 @@ use App\Models\Menu;
 $menu = Menu::where('route', '/quality')->first();
 
 if ($menu) {
-    $menu->title = 'ศูนย์รวมงานคุณภาพ (Quality Hub)';
+    $menu->title = 'ศูนย์พัฒนาคุณภาพ (Quality Hub)';
     $menu->icon = 'Star';
     $menu->order = 0; // Move to top for visibility test
     $menu->save();

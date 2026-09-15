@@ -9,8 +9,11 @@ return new class extends Migration
 {
     public function up()
     {
-        // Parent ID for "ระบบขอใช้รถ" is 35 (from previous migration)
-        $parentId = 35;
+        $parentId = Menu::where('title', 'ระบบขอใช้รถ')->value('id');
+
+        if (!$parentId) {
+            return;
+        }
 
         // 1. Fix "จัดการรถ" (Manage Vehicles)
         Menu::updateOrCreate(

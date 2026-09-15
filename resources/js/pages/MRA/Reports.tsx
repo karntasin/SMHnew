@@ -1,309 +1,388 @@
-import React, { useState } from 'react';
-import { Head, Link, router } from '@inertiajs/react';
-import AppLayout from '@/layouts/app-layout';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import React, { useMemo, useState } from 'react';
+import { Link, router } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
-  ArrowLeft,
-  Download,
-  Printer,
-  Filter,
-  BarChart3,
-  Target,
-  CheckCircle2,
-  XCircle,
-  AlertTriangle,
-  Calendar,
-  FileText,
+    Download,
+    Printer,
+    BarChart3,
+    Target,
+    CheckCircle2,
+    Calendar,
+    FileText,
+    FileSearch,
+    Stethoscope,
+    BedDouble,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { QualityPage, StatCard, Panel, StatusPill, EmptyState, Field, qualityInput } from '@/components/quality/quality-ui';
+import MraSubNav, { mraBreadcrumbs } from './MraSubNav';
 
 interface CategoryStat {
-  id: number;
-  code: string;
-  name: string;
-  total: number;
-  passed: number;
-  failed: number;
-  accuracy: number;
+    id: number;
+    code: string;
+    name: string;
+    audit_type?: string;
+    total: number;
+    passed: number;
+    failed: number;
+    accuracy: number;
 }
 
 interface TopError {
-  criteria_code: string;
-  criteria_name: string;
-  category_name: string;
-  fail_count: number;
+    criteria_code: string;
+    criteria_name: string;
+    category_name: string;
+    audit_type?: string;
+    fail_count: number;
 }
 
-interface Props {
-  stats: {
+interface ChannelStats {
     total_audits: number;
     completed_audits: number;
     avg_accuracy: number;
+    passed_audits?: number;
     target: number;
-  };
-  categoryStats: CategoryStat[];
-  topErrors: TopError[];
-  filters: {
-    from_date: string;
-    to_date: string;
-  };
 }
 
-export default function MraReports({ stats, categoryStats, topErrors, filters }: Props) {
-  const [fromDate, setFromDate] = useState(filters.from_date);
-  const [toDate, setToDate] = useState(filters.to_date);
+interface ChannelBlock {
+    stats: ChannelStats;
+    categoryStats: CategoryStat[];
+    topErrors: TopError[];
+}
 
-  const breadcrumbs = [
-    { title: 'งานคุณภาพ', href: '/quality' },
-    { title: 'MRA', href: '/mra' },
-    { title: 'รายงาน', href: '#' },
-  ];
+interface Props {
+    stats: ChannelStats;
+    opd: ChannelBlock;
+    ipd: ChannelBlock;
+    categoryStats?: CategoryStat[];
+    topErrors?: TopError[];
+    filters: {
+        from_date: string;
+        to_date: string;
+        channel?: 'all' | 'opd' | 'ipd';
+    };
+}
 
-  const handleFilter = () => {
-    router.get('/mra/reports', {
-      from_date: fromDate,
-      to_date: toDate,
-    }, { preserveState: true });
-  };
+function CategoryTable({ rows, emptyText }: { rows: CategoryStat[]; emptyText: string }) {
+    if (rows.length === 0) {
+        return <EmptyState text={emptyText} />;
+    }
 
-  const handlePrint = () => {
-    window.print();
-  };
+    return (
+        <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+                <thead>
+                    <tr className="border-b border-slate-100 text-left text-xs uppercase text-slate-400">
+                        <th className="w-24 py-2 pr-3">รหัส</th>
+                        <th className="py-2 pr-3">หมวดหมู่</th>
+                        <th className="py-2 pr-3 text-center">ตรวจ</th>
+                        <th className="py-2 pr-3 text-center">ผ่าน</th>
+                        <th className="py-2 pr-3 text-center">ไม่ผ่าน</th>
+                        <th className="w-48 py-2 pr-3">ความถูกต้อง</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows.map((cat) => (
+                        <tr key={cat.id} className="border-b border-slate-50">
+                            <td className="py-2.5 pr-3 font-mono text-slate-600">{cat.code}</td>
+                            <td className="py-2.5 pr-3 font-medium text-slate-800">{cat.name}</td>
+                            <td className="py-2.5 pr-3 text-center text-slate-600">{cat.total}</td>
+                            <td className="py-2.5 pr-3 text-center text-emerald-600">{cat.passed}</td>
+                            <td className="py-2.5 pr-3 text-center text-rose-600">{cat.failed}</td>
+                            <td className="py-2.5 pr-3">
+                                <div className="flex items-center gap-2">
+                                    <Progress
+                                        value={cat.accuracy}
+                                        className={cn(
+                                            'h-2 flex-1',
+                                            cat.accuracy >= 80
+                                                ? '[&>div]:bg-emerald-500'
+                                                : cat.accuracy >= 70
+                                                  ? '[&>div]:bg-amber-500'
+                                                  : '[&>div]:bg-rose-500',
+                                        )}
+                                    />
+                                    <span
+                                        className={cn(
+                                            'w-12 text-right text-sm font-medium',
+                                            cat.accuracy >= 80
+                                                ? 'text-emerald-600'
+                                                : cat.accuracy >= 70
+                                                  ? 'text-amber-600'
+                                                  : 'text-rose-600',
+                                        )}
+                                    >
+                                        {cat.accuracy}%
+                                    </span>
+                                </div>
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+}
 
-  return (
-    <AppLayout breadcrumbs={breadcrumbs}>
-      <Head title="รายงาน MRA" />
+function ErrorsTable({ rows, emptyText }: { rows: TopError[]; emptyText: string }) {
+    if (rows.length === 0) {
+        return <EmptyState text={emptyText} />;
+    }
 
-      <div className="p-6 space-y-6 print:p-0">
-        {/* Header */}
-        <div className="flex items-center justify-between print:hidden">
-          <div className="flex items-center gap-4">
-            <Link href="/mra">
-              <Button variant="ghost" size="icon">
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            </Link>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">รายงาน MRA</h1>
-              <p className="text-muted-foreground">
-                สรุปผลการตรวจสอบคุณภาพเวชระเบียน
-              </p>
+    return (
+        <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+                <thead>
+                    <tr className="border-b border-slate-100 text-left text-xs uppercase text-slate-400">
+                        <th className="w-12 py-2 pr-3">#</th>
+                        <th className="w-24 py-2 pr-3">รหัส</th>
+                        <th className="py-2 pr-3">รายการ</th>
+                        <th className="py-2 pr-3">หมวด</th>
+                        <th className="py-2 pr-3 text-center">จำนวนครั้ง</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows.map((error, index) => (
+                        <tr key={`${error.criteria_code}-${index}`} className="border-b border-slate-50">
+                            <td className="py-2.5 pr-3 text-slate-500">{index + 1}</td>
+                            <td className="py-2.5 pr-3 font-mono text-xs text-slate-600">{error.criteria_code}</td>
+                            <td className="py-2.5 pr-3 font-medium text-slate-800">{error.criteria_name}</td>
+                            <td className="py-2.5 pr-3 text-slate-500">{error.category_name}</td>
+                            <td className="py-2.5 pr-3 text-center">
+                                <StatusPill label={String(error.fail_count)} className="border-rose-200 bg-rose-50 text-rose-700" />
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+}
+
+function ChannelSection({
+    title,
+    badge,
+    tone,
+    icon: Icon,
+    block,
+}: {
+    title: string;
+    badge: string;
+    tone: 'emerald' | 'violet';
+    icon: React.ComponentType<{ className?: string }>;
+    block: ChannelBlock;
+}) {
+    const shell =
+        tone === 'emerald'
+            ? 'border-emerald-200 bg-gradient-to-br from-emerald-50/80 via-white to-white'
+            : 'border-violet-200 bg-gradient-to-br from-violet-50/80 via-white to-white';
+    const badgeClass =
+        tone === 'emerald'
+            ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+            : 'border-violet-200 bg-violet-50 text-violet-800';
+
+    return (
+        <section className={cn('space-y-4 rounded-[1.75rem] border p-4 shadow-sm sm:p-5', shell)}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                    <div
+                        className={cn(
+                            'flex h-11 w-11 items-center justify-center rounded-2xl',
+                            tone === 'emerald' ? 'bg-emerald-600 text-white' : 'bg-violet-600 text-white',
+                        )}
+                    >
+                        <Icon className="h-5 w-5" />
+                    </div>
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <h2 className="text-lg font-bold text-slate-900">{title}</h2>
+                            <StatusPill label={badge} className={badgeClass} />
+                        </div>
+                        <p className="text-sm text-slate-500">
+                            สรุปผลการตรวจ · เกณฑ์ผ่าน {block.stats.target}% · ตรวจเสร็จ {block.stats.completed_audits} ราย
+                        </p>
+                    </div>
+                </div>
             </div>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={handlePrint}>
-              <Printer className="mr-2 h-4 w-4" />
-              พิมพ์
-            </Button>
-            <Button variant="outline">
-              <Download className="mr-2 h-4 w-4" />
-              Export Excel
-            </Button>
-          </div>
-        </div>
 
-        {/* Print Header */}
-        <div className="hidden print:block text-center mb-6">
-          <h1 className="text-xl font-bold">รายงานสรุปผลการตรวจสอบคุณภาพเวชระเบียน</h1>
-          <p className="text-sm">ตามเกณฑ์ สรพ. 2563</p>
-          <p className="text-sm mt-2">
-            ช่วงวันที่: {new Date(fromDate).toLocaleDateString('th-TH')} - {new Date(toDate).toLocaleDateString('th-TH')}
-          </p>
-        </div>
-
-        {/* Filters */}
-        <Card className="print:hidden">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Filter className="h-4 w-4" />
-              ช่วงเวลา
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap items-end gap-4">
-              <div>
-                <Label>จากวันที่</Label>
-                <Input
-                  type="date"
-                  value={fromDate}
-                  onChange={(e) => setFromDate(e.target.value)}
-                  className="w-40"
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                <StatCard label="ตรวจสอบทั้งหมด" value={block.stats.total_audits} icon={FileText} tone="indigo" />
+                <StatCard label="ตรวจเสร็จสิ้น" value={block.stats.completed_audits} icon={CheckCircle2} tone="emerald" />
+                <StatCard
+                    label="ความถูกต้องเฉลี่ย"
+                    value={`${block.stats.avg_accuracy}%`}
+                    icon={BarChart3}
+                    tone={block.stats.avg_accuracy >= 80 ? 'emerald' : block.stats.avg_accuracy >= 70 ? 'amber' : 'rose'}
                 />
-              </div>
-              <div>
-                <Label>ถึงวันที่</Label>
-                <Input
-                  type="date"
-                  value={toDate}
-                  onChange={(e) => setToDate(e.target.value)}
-                  className="w-40"
+                <StatCard
+                    label={`ผ่านเกณฑ์ ≥${block.stats.target}%`}
+                    value={block.stats.passed_audits ?? 0}
+                    icon={Target}
+                    tone="violet"
                 />
-              </div>
-              <Button onClick={handleFilter}>
-                <Calendar className="mr-2 h-4 w-4" />
-                แสดงรายงาน
-              </Button>
             </div>
-          </CardContent>
-        </Card>
 
-        {/* Summary Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-4 text-center">
-              <FileText className="h-8 w-8 mx-auto text-muted-foreground/50 mb-2" />
-              <div className="text-2xl font-bold">{stats.total_audits}</div>
-              <div className="text-xs text-muted-foreground">ตรวจสอบทั้งหมด</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 text-center">
-              <CheckCircle2 className="h-8 w-8 mx-auto text-green-500/50 mb-2" />
-              <div className="text-2xl font-bold text-green-600">{stats.completed_audits}</div>
-              <div className="text-xs text-muted-foreground">ตรวจเสร็จสิ้น</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 text-center">
-              <BarChart3 className="h-8 w-8 mx-auto text-blue-500/50 mb-2" />
-              <div className={cn(
-                "text-2xl font-bold",
-                stats.avg_accuracy >= 90 ? "text-green-600" :
-                stats.avg_accuracy >= 70 ? "text-yellow-600" : "text-red-600"
-              )}>
-                {stats.avg_accuracy}%
-              </div>
-              <div className="text-xs text-muted-foreground">ความถูกต้องเฉลี่ย</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 text-center">
-              <Target className="h-8 w-8 mx-auto text-purple-500/50 mb-2" />
-              <div className="text-2xl font-bold text-purple-600">{stats.target}%</div>
-              <div className="text-xs text-muted-foreground">เป้าหมาย</div>
-            </CardContent>
-          </Card>
-        </div>
+            <Panel
+                title={`ผลตามหมวด · ${badge}`}
+                description={badge === 'OPD' ? '7 หมวดตามเกณฑ์ผู้ป่วยนอก MRA 2563' : '12 หมวดตามเกณฑ์ผู้ป่วยใน MRA 2563'}
+            >
+                <CategoryTable rows={block.categoryStats} emptyText={`ยังไม่มีข้อมูลหมวด${badge}ในช่วงที่เลือก`} />
+            </Panel>
 
-        {/* Category Performance */}
-        <Card>
-          <CardHeader>
-            <CardTitle>ผลตามหมวดหมู่</CardTitle>
-            <CardDescription>อัตราความถูกต้องแยกตามหมวดการตรวจสอบ 9 หมวด</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-24">รหัส</TableHead>
-                  <TableHead>หมวดหมู่</TableHead>
-                  <TableHead className="text-center">ตรวจ</TableHead>
-                  <TableHead className="text-center">ผ่าน</TableHead>
-                  <TableHead className="text-center">ไม่ผ่าน</TableHead>
-                  <TableHead className="w-48">ความถูกต้อง</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {categoryStats.map((cat) => (
-                  <TableRow key={cat.id}>
-                    <TableCell className="font-mono">{cat.code}</TableCell>
-                    <TableCell className="font-medium">{cat.name}</TableCell>
-                    <TableCell className="text-center">{cat.total}</TableCell>
-                    <TableCell className="text-center text-green-600">{cat.passed}</TableCell>
-                    <TableCell className="text-center text-red-600">{cat.failed}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Progress
-                          value={cat.accuracy}
-                          className={cn(
-                            "h-2 flex-1",
-                            cat.accuracy >= 90 ? "[&>div]:bg-green-500" :
-                            cat.accuracy >= 70 ? "[&>div]:bg-yellow-500" : "[&>div]:bg-red-500"
-                          )}
+            <Panel title={`ข้อผิดพลาดที่พบบ่อย · ${badge}`} description="Top 10 รายการที่ไม่ผ่านบ่อยที่สุดในช่องทางนี้">
+                <ErrorsTable rows={block.topErrors} emptyText={`ไม่พบข้อผิดพลาด${badge}ในช่วงเวลาที่เลือก`} />
+            </Panel>
+        </section>
+    );
+}
+
+export default function MraReports({ stats, opd, ipd, filters }: Props) {
+    const [fromDate, setFromDate] = useState(filters.from_date);
+    const [toDate, setToDate] = useState(filters.to_date);
+    const [channel, setChannel] = useState<'all' | 'opd' | 'ipd'>(filters.channel || 'all');
+
+    const handleFilter = () => {
+        router.get(
+            '/mra/reports',
+            {
+                from_date: fromDate,
+                to_date: toDate,
+                channel,
+            },
+            { preserveState: true },
+        );
+    };
+
+    const pdfHref = useMemo(() => {
+        const params = new URLSearchParams({
+            from_date: fromDate,
+            to_date: toDate,
+            channel,
+        });
+
+        return `${route('mra.reports.export-pdf')}?${params.toString()}`;
+    }, [fromDate, toDate, channel]);
+
+    const visibleSections = useMemo(() => {
+        if (channel === 'opd') return ['opd'] as const;
+        if (channel === 'ipd') return ['ipd'] as const;
+        return ['opd', 'ipd'] as const;
+    }, [channel]);
+
+    return (
+        <QualityPage
+            tone="indigo"
+            icon={FileSearch}
+            badge="ศูนย์พัฒนาคุณภาพ · MRA"
+            title="รายงานสรุปผลการตรวจ"
+            subtitle="แยกสรุป OPD และ IPD ตามเกณฑ์ MRA ปี 2563"
+            breadcrumbs={mraBreadcrumbs({ title: 'รายงาน', href: route('mra.reports') })}
+            headTitle="รายงาน MRA"
+            actions={
+                <div className="flex gap-2 print:hidden">
+                    <Button variant="outline" onClick={() => window.print()} className="rounded-xl">
+                        <Printer className="mr-2 h-4 w-4" />
+                        พิมพ์
+                    </Button>
+                    <Button variant="outline" className="rounded-xl" asChild>
+                        <a href={pdfHref} target="_blank" rel="noreferrer">
+                            <Download className="mr-2 h-4 w-4" />
+                            ส่งออก PDF
+                        </a>
+                    </Button>
+                </div>
+            }
+            subNav={<MraSubNav active="mra.reports" />}
+        >
+            <div className="hidden text-center print:block">
+                <h1 className="text-xl font-bold">รายงานสรุปผลการตรวจสอบคุณภาพเวชระเบียน</h1>
+                <p className="text-sm">แยก OPD / IPD · ตามเกณฑ์ MRA 2563</p>
+                <p className="mt-2 text-sm">
+                    ช่วงวันที่: {new Date(fromDate).toLocaleDateString('th-TH')} - {new Date(toDate).toLocaleDateString('th-TH')}
+                </p>
+            </div>
+
+            <Panel title="ตัวกรองรายงาน" description="เลือกช่วงวันที่และช่องทางที่ต้องการดู" className="print:hidden">
+                <div className="flex flex-wrap items-end gap-4">
+                    <Field label="จากวันที่">
+                        <input
+                            type="date"
+                            value={fromDate}
+                            onChange={(e) => setFromDate(e.target.value)}
+                            className={cn(qualityInput, 'w-44')}
                         />
-                        <span className={cn(
-                          "text-sm font-medium w-12 text-right",
-                          cat.accuracy >= 90 ? "text-green-600" :
-                          cat.accuracy >= 70 ? "text-yellow-600" : "text-red-600"
-                        )}>
-                          {cat.accuracy}%
-                        </span>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                    </Field>
+                    <Field label="ถึงวันที่">
+                        <input
+                            type="date"
+                            value={toDate}
+                            onChange={(e) => setToDate(e.target.value)}
+                            className={cn(qualityInput, 'w-44')}
+                        />
+                    </Field>
+                    <Field label="ช่องทาง">
+                        <div className="flex flex-wrap gap-2">
+                            {(
+                                [
+                                    ['all', 'ทั้งหมด'],
+                                    ['opd', 'OPD'],
+                                    ['ipd', 'IPD'],
+                                ] as const
+                            ).map(([key, label]) => (
+                                <Button
+                                    key={key}
+                                    type="button"
+                                    variant={channel === key ? 'default' : 'outline'}
+                                    className={cn(
+                                        'rounded-xl',
+                                        channel === key && key === 'opd' && 'bg-emerald-600 hover:bg-emerald-700',
+                                        channel === key && key === 'ipd' && 'bg-violet-600 hover:bg-violet-700',
+                                        channel === key && key === 'all' && 'bg-indigo-600 hover:bg-indigo-700',
+                                    )}
+                                    onClick={() => setChannel(key)}
+                                >
+                                    {label}
+                                </Button>
+                            ))}
+                        </div>
+                    </Field>
+                    <Button onClick={handleFilter} className="rounded-xl bg-indigo-600 hover:bg-indigo-700">
+                        <Calendar className="mr-2 h-4 w-4" />
+                        แสดงรายงาน
+                    </Button>
+                </div>
+            </Panel>
 
-        {/* Top Errors */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-red-500" />
-              ข้อผิดพลาดที่พบบ่อย (Top 10)
-            </CardTitle>
-            <CardDescription>รายการที่มักพบปัญหาจากการตรวจสอบ</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {topErrors.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12">#</TableHead>
-                    <TableHead className="w-24">รหัส</TableHead>
-                    <TableHead>รายการ</TableHead>
-                    <TableHead>หมวด</TableHead>
-                    <TableHead className="text-center">จำนวนครั้ง</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {topErrors.map((error, index) => (
-                    <TableRow key={index}>
-                      <TableCell>{index + 1}</TableCell>
-                      <TableCell className="font-mono text-xs">{error.criteria_code}</TableCell>
-                      <TableCell className="font-medium">{error.criteria_name}</TableCell>
-                      <TableCell className="text-muted-foreground">{error.category_name}</TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant="destructive">{error.fail_count}</Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <CheckCircle2 className="h-12 w-12 mx-auto mb-2 text-green-500/50" />
-                <p>ไม่พบข้อผิดพลาดในช่วงเวลาที่เลือก</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+            {channel === 'all' ? (
+                <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                    <StatCard label="ทั้งหมด (OPD+IPD)" value={stats.total_audits} icon={FileText} tone="indigo" />
+                    <StatCard label="ตรวจเสร็จสิ้น" value={stats.completed_audits} icon={CheckCircle2} tone="emerald" />
+                    <StatCard
+                        label="ความถูกต้องเฉลี่ยรวม"
+                        value={`${stats.avg_accuracy}%`}
+                        icon={BarChart3}
+                        tone={stats.avg_accuracy >= 80 ? 'emerald' : stats.avg_accuracy >= 70 ? 'amber' : 'rose'}
+                    />
+                    <StatCard label="เป้าหมายผ่าน" value={`${stats.target}%`} icon={Target} tone="violet" />
+                </div>
+            ) : null}
 
-        {/* Actions */}
-        <div className="flex justify-between print:hidden">
-          <Link href="/mra">
-            <Button variant="outline">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              กลับ
-            </Button>
-          </Link>
-        </div>
-      </div>
-    </AppLayout>
-  );
+            {visibleSections.includes('opd') ? (
+                <ChannelSection title="ผู้ป่วยนอก" badge="OPD" tone="emerald" icon={Stethoscope} block={opd} />
+            ) : null}
+
+            {visibleSections.includes('ipd') ? (
+                <ChannelSection title="ผู้ป่วยใน" badge="IPD" tone="violet" icon={BedDouble} block={ipd} />
+            ) : null}
+
+            <div className="print:hidden">
+                <Link href="/mra">
+                    <Button variant="outline" className="rounded-xl">
+                        กลับรายการตรวจ
+                    </Button>
+                </Link>
+            </div>
+        </QualityPage>
+    );
 }

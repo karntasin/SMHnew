@@ -1,9 +1,11 @@
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Transition } from '@headlessui/react';
-import { Head, Link, useForm, usePage, router } from '@inertiajs/react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { FormEventHandler, useRef, useState } from 'react';
+import { Camera, MessageCircle, User } from 'lucide-react';
 
 import DeleteUser from '@/components/delete-user';
+import DepartmentPicker from '@/components/department-picker';
 import HeadingSmall from '@/components/heading-small';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
@@ -11,7 +13,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/app-layout';
 import SettingsLayout from '@/layouts/settings/layout';
-import { Camera, User } from 'lucide-react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -20,31 +21,52 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function Profile({ mustVerifyEmail, status }: { mustVerifyEmail: boolean; status?: string }) {
-    const { auth } = usePage<SharedData>().props;
-    const fileInputRef = useRef<HTMLInputElement>(null);
-    const [previewUrl, setPreviewUrl] = useState<string | null>(
-        auth.user.avatar || auth.user.line_picture_url || null
-    );
+interface DepartmentOption {
+    id: number;
+    name: string;
+}
 
-    const { data, setData, patch, errors, processing, recentlySuccessful } = useForm({
+interface ProfilePageProps {
+    mustVerifyEmail: boolean;
+    status?: string;
+    departments?: DepartmentOption[];
+    chatLiffUrl?: string;
+    addFriendUrl?: string;
+}
+
+export default function Profile({
+    mustVerifyEmail,
+    status,
+    departments = [],
+    chatLiffUrl,
+    addFriendUrl,
+}: ProfilePageProps) {
+    const { auth, errors, lineLoginEnabled } = usePage<SharedData>().props;
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [previewUrl, setPreviewUrl] = useState<string | null>(auth.user.avatar || auth.user.line_picture_url || null);
+    const [uploadingAvatar, setUploadingAvatar] = useState(false);
+    const [unlinking, setUnlinking] = useState(false);
+
+    const initialDeptIds = Array.isArray(auth.user.department_ids)
+        ? (auth.user.department_ids as number[])
+        : [];
+    const initialPrimary =
+        typeof auth.user.primary_department_id === 'number' ? auth.user.primary_department_id : initialDeptIds[0] ?? null;
+
+    const { data, setData, patch, processing, recentlySuccessful } = useForm({
         name: auth.user.name,
         email: auth.user.email,
+        chat_display_name: (auth.user.chat_display_name as string | null) || '',
+        department_ids: initialDeptIds,
+        primary_department_id: initialPrimary,
     });
-
-    const [avatarFile, setAvatarFile] = useState<File | null>(null);
-    const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
     const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            setAvatarFile(file);
             setPreviewUrl(URL.createObjectURL(file));
-            
-            // Auto upload
             const formData = new FormData();
             formData.append('avatar', file);
-            
             setUploadingAvatar(true);
             router.post(route('profile.avatar.update'), formData, {
                 forceFormData: true,
@@ -53,29 +75,83 @@ export default function Profile({ mustVerifyEmail, status }: { mustVerifyEmail: 
         }
     };
 
+    const toggleDepartment = (deptId: number) => {
+        const next = data.department_ids.includes(deptId)
+            ? data.department_ids.filter((id) => id !== deptId)
+            : [...data.department_ids, deptId];
+        let primary = data.primary_department_id;
+        if (next.length === 1) {
+            primary = next[0];
+        } else if (!next.includes(primary as number)) {
+            primary = next[0] ?? null;
+        }
+        setData({
+            ...data,
+            department_ids: next,
+            primary_department_id: primary,
+        });
+    };
+
+    const removeDepartment = (deptId: number) => {
+        const next = data.department_ids.filter((id) => id !== deptId);
+        setData({
+            ...data,
+            department_ids: next,
+            primary_department_id: data.primary_department_id === deptId ? next[0] ?? null : data.primary_department_id,
+        });
+    };
+
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
-
+        if (data.department_ids.length === 0) {
+            return;
+        }
         patch(route('profile.update'));
     };
+
+    const unlinkLine = () => {
+        if (!window.confirm('ยกเลิกการเชื่อมต่อ LINE จากบัญชีนี้? ยังเข้าสู่ระบบด้วยอีเมลได้ตามปกติ')) {
+            return;
+        }
+        setUnlinking(true);
+        router.delete(route('profile.line.unlink'), {
+            onFinish: () => setUnlinking(false),
+        });
+    };
+
+    const statusMessage =
+        status === 'line-linked'
+            ? 'เชื่อมต่อ LINE แล้ว'
+            : status === 'line-unlinked'
+              ? 'ยกเลิกการเชื่อมต่อ LINE แล้ว'
+              : status === 'avatar-updated'
+                ? 'อัปเดตรูปโปรไฟล์แล้ว'
+                : status === 'profile-updated'
+                  ? 'บันทึกโปรไฟล์แล้ว'
+                  : null;
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="ตั้งค่าโปรไฟล์" />
 
             <SettingsLayout>
-                <div className="space-y-6">
-                    <HeadingSmall title="ข้อมูลโปรไฟล์" description="อัปเดตชื่อและที่อยู่อีเมลของคุณ" />
+                {statusMessage && (
+                    <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+                        {statusMessage}
+                    </div>
+                )}
 
-                    {/* รูปโปรไฟล์ */}
-                    <div className="flex items-start gap-6 mb-6">
+                <div className="space-y-6">
+                    <HeadingSmall title="ข้อมูลโปรไฟล์" description="อัปเดตชื่อ ที่อยู่อีเมล แผนก และชื่อในแชท" />
+
+                    <div className="mb-6 flex items-start gap-6">
                         <div className="relative">
-                            <div className="w-20 h-20 rounded-full overflow-hidden bg-gray-100 border-2 border-gray-200">
+                            <div className="h-20 w-20 overflow-hidden rounded-full border-2 border-gray-200 bg-gray-100">
                                 {previewUrl ? (
-                                    <img src={previewUrl} alt="Avatar" className="w-full h-full object-cover" />
+                                    <img src={previewUrl} alt="Avatar" className="h-full w-full object-cover" />
                                 ) : (
-                                    <div className="w-full h-full flex items-center justify-center">
-                                        <User className="w-10 h-10 text-gray-400" />
+                                    <div className="flex h-full w-full items-center justify-center">
+                                        <User className="h-10 w-10 text-gray-400" />
                                     </div>
                                 )}
                             </div>
@@ -83,9 +159,9 @@ export default function Profile({ mustVerifyEmail, status }: { mustVerifyEmail: 
                                 type="button"
                                 onClick={() => fileInputRef.current?.click()}
                                 disabled={uploadingAvatar}
-                                className="absolute bottom-0 right-0 w-7 h-7 bg-blue-600 rounded-full flex items-center justify-center text-white hover:bg-blue-700 transition-colors shadow-lg disabled:opacity-50"
+                                className="absolute right-0 bottom-0 flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg transition-colors hover:bg-blue-700 disabled:opacity-50"
                             >
-                                <Camera className="w-3.5 h-3.5" />
+                                <Camera className="h-3.5 w-3.5" />
                             </button>
                             <input
                                 ref={fileInputRef}
@@ -107,10 +183,10 @@ export default function Profile({ mustVerifyEmail, status }: { mustVerifyEmail: 
                                     <span className="font-semibold">ชื่อ LINE:</span> {auth.user.line_display_name}
                                 </div>
                             )}
-                            {/* ตำแหน่งงาน */}
                             {auth.user.positions && Array.isArray(auth.user.positions) && auth.user.positions.length > 0 && (
                                 <div className="mb-1">
-                                    <span className="font-semibold">ตำแหน่งงาน:</span> {(auth.user.positions as any[]).map((pos: any) => pos.name).join(', ')}
+                                    <span className="font-semibold">ตำแหน่งงาน:</span>{' '}
+                                    {(auth.user.positions as { name: string }[]).map((pos) => pos.name).join(', ')}
                                 </div>
                             )}
                         </div>
@@ -128,7 +204,7 @@ export default function Profile({ mustVerifyEmail, status }: { mustVerifyEmail: 
                                 autoComplete="name"
                                 placeholder="กรอกชื่อ-นามสกุล"
                             />
-                            <InputError className="mt-2" message={errors.name} />
+                            <InputError className="mt-2" message={errors.name as string | undefined} />
                         </div>
                         <div className="grid gap-2">
                             <Label htmlFor="email">อีเมล</Label>
@@ -142,7 +218,7 @@ export default function Profile({ mustVerifyEmail, status }: { mustVerifyEmail: 
                                 autoComplete="username"
                                 placeholder="กรอกอีเมล"
                             />
-                            <InputError className="mt-2" message={errors.email} />
+                            <InputError className="mt-2" message={errors.email as string | undefined} />
                         </div>
                         {mustVerifyEmail && auth.user.email_verified_at === null && (
                             <div>
@@ -164,8 +240,35 @@ export default function Profile({ mustVerifyEmail, status }: { mustVerifyEmail: 
                                 )}
                             </div>
                         )}
+
+                        <div className="grid gap-2">
+                            <Label htmlFor="chat_display_name">ชื่อที่ใช้ใน FSHH Chat</Label>
+                            <Input
+                                id="chat_display_name"
+                                className="mt-1 block w-full"
+                                value={data.chat_display_name}
+                                onChange={(e) => setData('chat_display_name', e.target.value)}
+                                placeholder={data.name || 'ชื่อที่เพื่อนในแชทจะเห็น'}
+                                maxLength={80}
+                            />
+                            <p className="text-xs text-gray-500">
+                                ถ้าว่าง ระบบจะใช้ชื่อ-นามสกุลด้านบน · หลังบันทึกจะอัปเดตในแชทเมื่อบัญชีเชื่อม LINE แล้ว
+                            </p>
+                            <InputError className="mt-2" message={errors.chat_display_name as string | undefined} />
+                        </div>
+
+                        <DepartmentPicker
+                            departments={departments}
+                            selectedIds={data.department_ids}
+                            primaryId={data.primary_department_id}
+                            onToggle={toggleDepartment}
+                            onRemove={removeDepartment}
+                            onSetPrimary={(id) => setData('primary_department_id', id)}
+                            error={(errors.department_ids as string | undefined) || (errors.primary_department_id as string | undefined)}
+                        />
+
                         <div className="flex items-center gap-4">
-                            <Button disabled={processing}>บันทึก</Button>
+                            <Button disabled={processing || data.department_ids.length === 0}>บันทึก</Button>
                             <Transition
                                 show={recentlySuccessful}
                                 enter="transition ease-in-out"
@@ -180,7 +283,10 @@ export default function Profile({ mustVerifyEmail, status }: { mustVerifyEmail: 
                 </div>
 
                 <div className="space-y-6">
-                    <HeadingSmall title="บัญชีที่เชื่อมต่อ" description="จัดการบัญชีโซเชียลที่เชื่อมต่อ" />
+                    <HeadingSmall
+                        title="เชื่อมระบบ LINE และแชท"
+                        description="ผูกบัญชี LINE เพื่อเข้า FSHH Chat และรับกลุ่มตามแผนก"
+                    />
 
                     <div className="flex items-center justify-between rounded-lg border p-4">
                         <div className="flex items-center gap-3">
@@ -190,25 +296,63 @@ export default function Profile({ mustVerifyEmail, status }: { mustVerifyEmail: 
                             <div>
                                 <div className="font-medium">LINE</div>
                                 <div className="text-sm text-muted-foreground">
-                                    {auth.user.line_id ? 'เชื่อมต่อแล้ว' : 'ยังไม่ได้เชื่อมต่อ'}
+                                    {auth.user.line_id
+                                        ? `เชื่อมต่อแล้ว${auth.user.line_display_name ? ` · ${auth.user.line_display_name}` : ''}`
+                                        : 'ยังไม่ได้เชื่อมต่อ'}
                                 </div>
                             </div>
                         </div>
 
-                        {auth.user.line_id ? (
-                            <Button variant="outline" disabled>
-                                เชื่อมต่อแล้ว
-                            </Button>
+                        {lineLoginEnabled ? (
+                            auth.user.line_id ? (
+                                <div className="flex flex-wrap gap-2">
+                                    <Button
+                                        variant="outline"
+                                        className="border-[#06C755] text-[#06C755] hover:bg-[#06C755] hover:text-white"
+                                        onClick={() => (window.location.href = route('auth.line'))}
+                                    >
+                                        เปลี่ยนบัญชี
+                                    </Button>
+                                    <Button variant="outline" disabled={unlinking} onClick={unlinkLine}>
+                                        ยกเลิกการเชื่อมต่อ
+                                    </Button>
+                                </div>
+                            ) : (
+                                <Button
+                                    variant="outline"
+                                    className="border-[#06C755] text-[#06C755] hover:bg-[#06C755] hover:text-white"
+                                    onClick={() => (window.location.href = route('auth.line'))}
+                                >
+                                    เชื่อมต่อ
+                                </Button>
+                            )
                         ) : (
-                            <Button
-                                variant="outline"
-                                className="border-[#06C755] text-[#06C755] hover:bg-[#06C755] hover:text-white"
-                                onClick={() => (window.location.href = route('auth.line'))}
-                            >
-                                เชื่อมต่อ
-                            </Button>
+                            <p className="text-xs text-amber-700">ยังไม่ได้เปิด LINE Login</p>
                         )}
                     </div>
+
+                    {typeof errors.line === 'string' && <InputError message={errors.line} />}
+
+                    {(addFriendUrl || chatLiffUrl) && (
+                        <div className="space-y-1 text-sm text-gray-600">
+                            {addFriendUrl && (
+                                <p>
+                                    <a href={addFriendUrl} target="_blank" rel="noreferrer" className="text-[#06C755] hover:underline">
+                                        แอดเพื่อนบัญชีทางการ LINE
+                                    </a>{' '}
+                                    เพื่อรับข้อความแจ้งเตือน
+                                </p>
+                            )}
+                            {chatLiffUrl && (
+                                <p className="flex items-center gap-1">
+                                    <MessageCircle className="h-4 w-4" />
+                                    <a href={chatLiffUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
+                                        เปิด FSHH Chat
+                                    </a>
+                                </p>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 <DeleteUser />

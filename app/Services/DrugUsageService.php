@@ -15,6 +15,8 @@ class DrugUsageService
 
     public const FORM_INJECTION = 'injection';
 
+    public const FORM_TOPICAL = 'topical';
+
     public const FORM_OTHER = 'other';
 
     /** @var array<string, bool> */
@@ -35,7 +37,46 @@ class DrugUsageService
             self::FORM_TABLET => 'ยาเม็ด',
             self::FORM_LIQUID => 'ยาน้ำ',
             self::FORM_INJECTION => 'ยาฉีด',
+            self::FORM_TOPICAL => 'ยาใช้ภายนอก',
             self::FORM_OTHER => 'อื่นๆ',
+        ];
+    }
+
+    /** @return array<string, array<string, string>> */
+    public function subFormCatalog(): array
+    {
+        return [
+            self::FORM_TABLET => [
+                'tab' => 'Tab',
+                'capsule' => 'แคปซูล',
+                'sachet' => 'Sachet',
+                'jar' => 'กระปุก',
+                'box' => 'กล่อง',
+                'other' => 'อื่นๆ',
+            ],
+            self::FORM_LIQUID => [
+                'bottle' => 'ขวด',
+                'sachet' => 'ซอง',
+                'other' => 'อื่นๆ',
+            ],
+            self::FORM_INJECTION => [
+                'amp' => 'Amp',
+                'vial' => 'Vial',
+                'syringe' => 'Syringe',
+                'tube' => 'หลอด',
+                'unit' => 'Unit',
+                'dose' => 'Dose',
+                'pen' => 'Pen',
+                'other' => 'อื่นๆ',
+            ],
+            self::FORM_TOPICAL => [
+                'tube' => 'หลอด',
+                'patch' => 'Patch',
+                'other' => 'อื่นๆ',
+            ],
+            self::FORM_OTHER => [
+                'other' => 'อื่นๆ',
+            ],
         ];
     }
 
@@ -89,6 +130,8 @@ class DrugUsageService
                         'units' => (string) $units,
                         'form' => $this->classifyForm((string) $units),
                         'form_label' => $this->formLabel($this->classifyForm((string) $units)),
+                        'sub_form' => $this->classifySubForm((string) $units),
+                        'sub_form_label' => $this->subFormLabel((string) $units),
                         'drug_count' => $group->count(),
                         'total_qty' => $qty,
                         'total_amount' => $amount,
@@ -181,7 +224,7 @@ class DrugUsageService
             $byForm = $this->buildByForm($all, $totalQty, $totalAmount);
 
             $filtered = $this->filterByForm($all, $form)
-                ->sortBy([['form_sort', 'asc'], ['units', 'asc'], ['name', 'asc']])
+                ->sortBy([['form_sort', 'asc'], ['sub_form_sort', 'asc'], ['units', 'asc'], ['name', 'asc']])
                 ->values();
 
             $total = $filtered->count();
@@ -195,6 +238,8 @@ class DrugUsageService
                     'units' => $row->units,
                     'form' => $row->form,
                     'form_label' => $row->form_label,
+                    'sub_form' => $row->sub_form,
+                    'sub_form_label' => $row->sub_form_label,
                     'unitprice' => (float) ($row->unitprice ?? 0),
                     'total_qty' => (float) ($row->total_qty ?? 0),
                     'total_amount' => (float) ($row->total_amount ?? 0),
@@ -245,7 +290,7 @@ class DrugUsageService
                     ->map(fn ($row) => $this->enrichRow($row)),
                 $form
             )
-                ->sortBy([['form_sort', 'asc'], ['units', 'asc'], ['name', 'asc']])
+                ->sortBy([['form_sort', 'asc'], ['sub_form_sort', 'asc'], ['units', 'asc'], ['name', 'asc']])
                 ->values();
         } catch (\Throwable $e) {
             Log::error('DrugUsageService::exportRows failed: '.$e->getMessage());
@@ -261,6 +306,14 @@ class DrugUsageService
             return self::FORM_OTHER;
         }
 
+        if ($this->matchesAny($u, ['patch', 'pacth'])) {
+            return self::FORM_TOPICAL;
+        }
+
+        if ($this->matchesAny($u, ['หลอด']) && $this->matchesAny($u, [' g.', ' g)', 'gram', 'กรัม'])) {
+            return self::FORM_TOPICAL;
+        }
+
         foreach ($this->formPatterns()[self::FORM_INJECTION] as $pattern) {
             if (str_contains($u, $pattern)) {
                 return self::FORM_INJECTION;
@@ -273,6 +326,10 @@ class DrugUsageService
             }
         }
 
+        if ($this->matchesAny($u, ['หลอด'])) {
+            return self::FORM_INJECTION;
+        }
+
         foreach ($this->formPatterns()[self::FORM_TABLET] as $pattern) {
             if (str_contains($u, $pattern)) {
                 return self::FORM_TABLET;
@@ -282,9 +339,48 @@ class DrugUsageService
         return self::FORM_OTHER;
     }
 
+    public function classifySubForm(?string $units, ?string $form = null): string
+    {
+        $form = $form ?? $this->classifyForm($units);
+        $u = mb_strtolower(trim((string) $units));
+
+        if ($u === '' || $u === '-') {
+            return 'other';
+        }
+
+        foreach ($this->subFormPatterns()[$form] ?? [] as $key => $patterns) {
+            foreach ($patterns as $pattern) {
+                if (str_contains($u, $pattern)) {
+                    return $key;
+                }
+            }
+        }
+
+        return 'other';
+    }
+
+    public function subFormLabel(?string $units, ?string $form = null, ?string $subForm = null): string
+    {
+        $form = $form ?? $this->classifyForm($units);
+        $subForm = $subForm ?? $this->classifySubForm($units, $form);
+
+        return $this->subFormCatalog()[$form][$subForm] ?? 'อื่นๆ';
+    }
+
     public function formLabel(string $form): string
     {
         return $this->formCatalog()[$form] ?? 'อื่นๆ';
+    }
+
+    private function matchesAny(string $value, array $patterns): bool
+    {
+        foreach ($patterns as $pattern) {
+            if (str_contains($value, $pattern)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** @return array<string, array<int, string>> */
@@ -292,15 +388,50 @@ class DrugUsageService
     {
         return [
             self::FORM_TABLET => [
-                'tab', 'tablet', 'เม็ด', 'cap', 'capsule', 'แคปซูล', 'แค็บซูล', 'แคบซูล', 'แคป', 'แค็บ', 'softgel', 'pill',
+                'tab', 'tablet', 'เม็ด', 'cap', 'capsule', 'แคปซูล', 'แค็บซูล', 'แคบซูล', 'แคป', 'แค็บ',
+                'softgel', 'pill', 'sachet', 'ซอง', 'กระปุก', 'กล่อง',
             ],
             self::FORM_LIQUID => [
-                'ml', 'มล', 'cc', 'ซีซี', 'bottle', 'ขวด', 'syrup', 'drop', 'gtt', 'หยด',
-                'susp', 'solution', 'elixir', 'liquid', 'น้ำ', 'oral sol',
+                'ml', 'มล', 'cc', 'ซีซี', 'bottle', 'bott', 'ขวด', 'syrup', 'drop', 'gtt', 'หยด',
+                'susp', 'solution', 'elixir', 'liquid', 'น้ำ', 'oral sol', 'mdi',
             ],
             self::FORM_INJECTION => [
-                'amp', 'ampoule', 'ampule', 'vial', 'inj', 'injection', 'syringe',
-                'หลอด', 'ฉีด', 'prefilled', 'iv ', ' im', 'sc ', 'iu/ml',
+                'amp', 'amphule', 'ampoule', 'ampule', 'vial', 'syring', 'syringe',
+                'unit', 'dose', 'pen', 'inj', 'injection', 'ฉีด', 'prefilled', 'iv ', ' im', 'sc ', 'iu/ml',
+            ],
+        ];
+    }
+
+    /** @return array<string, array<string, array<int, string>>> */
+    private function subFormPatterns(): array
+    {
+        return [
+            self::FORM_TABLET => [
+                'capsule' => ['capsule', 'แคปซูล', 'แค็บซูล', 'แคบซูล', 'cap', 'แคป', 'แค็บ', 'softgel'],
+                'sachet' => ['sachet', 'ซอง'],
+                'jar' => ['กระปุก'],
+                'box' => ['กล่อง'],
+                'tab' => ['tab', 'tablet', 'เม็ด', 'pill'],
+            ],
+            self::FORM_LIQUID => [
+                'bottle' => ['bottle', 'bott', 'ขวด', 'ml', 'มล', 'cc', 'ซีซี', 'syrup', 'drop', 'gtt', 'หยด', 'susp', 'solution', 'elixir', 'liquid', 'น้ำ', 'mdi'],
+                'sachet' => ['sachet', 'ซอง'],
+            ],
+            self::FORM_INJECTION => [
+                'amp' => ['amp', 'amphule', 'ampoule', 'ampule'],
+                'vial' => ['vial'],
+                'syringe' => ['syring', 'syringe'],
+                'tube' => ['หลอด'],
+                'unit' => ['unit'],
+                'dose' => ['dose'],
+                'pen' => ['pen'],
+            ],
+            self::FORM_TOPICAL => [
+                'patch' => ['patch', 'pacth'],
+                'tube' => ['หลอด'],
+            ],
+            self::FORM_OTHER => [
+                'other' => [],
             ],
         ];
     }
@@ -311,16 +442,29 @@ class DrugUsageService
             self::FORM_TABLET => 1,
             self::FORM_LIQUID => 2,
             self::FORM_INJECTION => 3,
-            default => 4,
+            self::FORM_TOPICAL => 4,
+            default => 5,
         };
+    }
+
+    private function subFormSortOrder(string $form, string $subForm): int
+    {
+        $order = array_keys($this->subFormCatalog()[$form] ?? ['other' => 'อื่นๆ']);
+        $index = array_search($subForm, $order, true);
+
+        return $index === false ? 99 : $index + 1;
     }
 
     private function enrichRow(object $row): object
     {
         $form = $this->classifyForm($row->units ?? null);
+        $subForm = $this->classifySubForm($row->units ?? null, $form);
         $row->form = $form;
         $row->form_label = $this->formLabel($form);
         $row->form_sort = $this->formSortOrder($form);
+        $row->sub_form = $subForm;
+        $row->sub_form_label = $this->subFormLabel($row->units ?? null, $form, $subForm);
+        $row->sub_form_sort = $this->subFormSortOrder($form, $subForm);
 
         return $row;
     }
@@ -356,6 +500,7 @@ class DrugUsageService
         $qty = (float) ($row->total_qty ?? 0);
         $amount = (float) ($row->total_amount ?? 0);
         $form = $this->classifyForm($row->units ?? null);
+        $subForm = $this->classifySubForm($row->units ?? null, $form);
 
         return [
             'rank' => $rank,
@@ -365,6 +510,8 @@ class DrugUsageService
             'units' => $row->units,
             'form' => $form,
             'form_label' => $this->formLabel($form),
+            'sub_form' => $subForm,
+            'sub_form_label' => $this->subFormLabel($row->units ?? null, $form, $subForm),
             'unitprice' => (float) ($row->unitprice ?? 0),
             'total_qty' => $qty,
             'total_amount' => $amount,
@@ -384,6 +531,25 @@ class DrugUsageService
             $qty = (float) $group->sum('total_qty');
             $amount = (float) $group->sum('total_amount');
 
+            $subGrouped = $group->groupBy(fn ($row) => $this->classifySubForm($row->units ?? null, $key));
+            $subCatalog = $this->subFormCatalog()[$key] ?? ['other' => 'อื่นๆ'];
+
+            $subtypes = collect($subCatalog)->map(function (string $subLabel, string $subKey) use ($subGrouped, $qty, $amount) {
+                $subGroup = $subGrouped->get($subKey, collect());
+                $subQty = (float) $subGroup->sum('total_qty');
+                $subAmount = (float) $subGroup->sum('total_amount');
+
+                return [
+                    'sub_form' => $subKey,
+                    'label' => $subLabel,
+                    'drug_count' => $subGroup->count(),
+                    'total_qty' => $subQty,
+                    'total_amount' => $subAmount,
+                    'qty_share_percent' => $qty > 0 ? round($subQty / $qty * 100, 1) : 0,
+                    'amount_share_percent' => $amount > 0 ? round($subAmount / $amount * 100, 1) : 0,
+                ];
+            })->filter(fn ($item) => $item['drug_count'] > 0 || $item['total_qty'] > 0)->values()->all();
+
             return [
                 'form' => $key,
                 'label' => $label,
@@ -392,6 +558,7 @@ class DrugUsageService
                 'total_amount' => $amount,
                 'qty_share_percent' => $totalQty > 0 ? round($qty / $totalQty * 100, 1) : 0,
                 'amount_share_percent' => $totalAmount > 0 ? round($amount / $totalAmount * 100, 1) : 0,
+                'subtypes' => $subtypes,
             ];
         })->values()->all();
     }
@@ -571,6 +738,7 @@ class DrugUsageService
                 'total_amount' => 0,
                 'qty_share_percent' => 0,
                 'amount_share_percent' => 0,
+                'subtypes' => [],
             ])->values()->all(),
             'by_account' => [
                 ['key' => 'in', 'label' => 'ยาในบัญชี', 'drug_count' => 0, 'total_qty' => 0, 'total_amount' => 0, 'qty_share_percent' => 0, 'amount_share_percent' => 0],

@@ -1,11 +1,20 @@
-import React from 'react';
-import AppLayout from '@/layouts/app-layout';
-import { Head, Link, usePage } from '@inertiajs/react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, FileText, CheckCircle, Clock } from 'lucide-react';
+import React, { useState } from 'react';
+import { Link, router } from '@inertiajs/react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '@/components/ui/table';
+import { Plus, Search, Eye } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import DocumentShell from './DocumentShell';
+import { DOCUMENT_STATUS_BADGE, DOCUMENT_STATUS_LABELS, documentBreadcrumbs } from './DocumentSubNav';
 
 interface Document {
     id: number;
@@ -16,104 +25,178 @@ interface Document {
     document_date: string;
     origin_type: string;
     type: string;
-    creator: { name: string };
+    creator?: { name: string };
 }
 
-interface IndexProps {
+interface Props {
     documents: {
         data: Document[];
         links: any[];
+        current_page?: number;
+        last_page?: number;
     };
+    filters: {
+        status: string;
+        search: string;
+    };
+    statusCounts: Record<string, number>;
+    inboxCount?: number;
 }
 
-export default function Index({ documents }: IndexProps) {
-    const getStatusBadge = (status: string) => {
-        switch (status) {
-            case 'pending': return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">รอดำเนินการ</Badge>;
-            case 'in_progress': return <Badge variant="default" className="bg-blue-100 text-blue-800">กำลังดำเนินการ</Badge>;
-            case 'approved': return <Badge variant="default" className="bg-green-100 text-green-800">อนุมัติแล้ว</Badge>;
-            case 'distributed': return <Badge variant="default" className="bg-purple-100 text-purple-800">เวียนทราบ</Badge>;
-            case 'completed': return <Badge variant="outline" className="bg-gray-100 text-gray-800">เสร็จสิ้น</Badge>;
-            default: return <Badge variant="outline">{status}</Badge>;
-        }
-    };
+const FILTERS = [
+    { key: 'all', label: 'ทั้งหมด' },
+    { key: 'registered', label: 'รับเข้าแล้ว' },
+    { key: 'pending_director', label: 'รอ ผอ.' },
+    { key: 'approved', label: 'อนุมัติแล้ว' },
+    { key: 'in_progress', label: 'กำลังติดตาม' },
+    { key: 'completed', label: 'เสร็จสิ้น' },
+    { key: 'archived', label: 'เข้าคลัง' },
+];
 
-    const getTypeBadge = (type: string) => {
-        return type === 'circular' 
-            ? <Badge variant="outline" className="border-purple-500 text-purple-500">หนังสือเวียน</Badge>
-            : <Badge variant="outline">หนังสือปกติ</Badge>;
+export default function Index({ documents, filters, statusCounts = {} }: Props) {
+    const [search, setSearch] = useState(filters?.search || '');
+    const currentStatus = filters?.status || 'all';
+
+    const apply = (status = currentStatus, page?: number) => {
+        router.get(
+            route('documents.index'),
+            {
+                status: status !== 'all' ? status : undefined,
+                search: search || undefined,
+                page,
+            },
+            { preserveState: true },
+        );
     };
 
     return (
-        <AppLayout breadcrumbs={[{ title: 'ระบบรับส่งหนังสือ', href: '/documents' }]}>
-            <Head title="ระบบรับส่งหนังสือ" />
-            
-            <div className="p-6 space-y-6">
-                <div className="flex justify-between items-center">
-                    <h1 className="text-2xl font-bold">รายการหนังสือ</h1>
+        <DocumentShell
+            active="documents.index"
+            title="รายการหนังสือ"
+            breadcrumbs={documentBreadcrumbs([{ title: 'รายการหนังสือ', href: route('documents.index') }])}
+        >
+            <div className="flex flex-wrap items-end justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold text-slate-900">รายการหนังสือ</h1>
+                    <p className="mt-1 text-sm text-slate-500">ค้นหา กรองสถานะ และเปิดดูรายละเอียดการดำเนินงาน</p>
+                </div>
+                <Button asChild className="rounded-xl bg-indigo-600 hover:bg-indigo-700">
                     <Link href={route('documents.create')}>
-                        <Button>
-                            <Plus className="mr-2 h-4 w-4" />
-                            ลงทะเบียนรับหนังสือ
-                        </Button>
+                        <Plus className="mr-2 h-4 w-4" />
+                        รับหนังสือเข้า
                     </Link>
+                </Button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
+                {FILTERS.map((f) => {
+                    const count = statusCounts[f.key] ?? 0;
+                    const active = currentStatus === f.key;
+                    return (
+                        <button
+                            key={f.key}
+                            type="button"
+                            onClick={() => apply(f.key)}
+                            className={cn(
+                                'rounded-2xl border p-3 text-left transition',
+                                active
+                                    ? 'border-indigo-400 bg-indigo-50 shadow-sm ring-2 ring-indigo-200'
+                                    : 'border-slate-200 bg-white hover:border-indigo-200',
+                            )}
+                        >
+                            <div className="text-xs text-slate-500">{f.label}</div>
+                            <div className="mt-1 text-xl font-semibold tabular-nums text-slate-900">{count}</div>
+                        </button>
+                    );
+                })}
+            </div>
+
+            <div className="rounded-3xl border border-indigo-100/80 bg-white/90 p-4 shadow-xl shadow-indigo-900/5 backdrop-blur">
+                <div className="mb-4 flex flex-wrap gap-3">
+                    <div className="relative min-w-[220px] flex-1">
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <Input
+                            className="rounded-xl border-slate-200 pl-10"
+                            placeholder="ค้นหาเลขที่ / เรื่อง / ผู้ส่ง..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && apply()}
+                        />
+                    </div>
+                    <Button onClick={() => apply()} className="rounded-xl bg-indigo-600 hover:bg-indigo-700">
+                        ค้นหา
+                    </Button>
                 </div>
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle>รายการหนังสือทั้งหมด</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>เลขที่หนังสือ</TableHead>
-                                    <TableHead>เรื่อง</TableHead>
-                                    <TableHead>ประเภท</TableHead>
-                                    <TableHead>สถานะ</TableHead>
-                                    <TableHead>ผู้สร้าง</TableHead>
-                                    <TableHead>ลงวันที่</TableHead>
-                                    <TableHead>จัดการ</TableHead>
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>เลขที่</TableHead>
+                            <TableHead>เรื่อง</TableHead>
+                            <TableHead>ประเภท</TableHead>
+                            <TableHead>สถานะ</TableHead>
+                            <TableHead>ผู้สร้าง</TableHead>
+                            <TableHead>ลงวันที่</TableHead>
+                            <TableHead className="text-right">จัดการ</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {documents.data.length === 0 ? (
+                            <TableRow>
+                                <TableCell colSpan={7} className="py-10 text-center text-slate-400">
+                                    ไม่พบหนังสือตามเงื่อนไข
+                                </TableCell>
+                            </TableRow>
+                        ) : (
+                            documents.data.map((doc) => (
+                                <TableRow key={doc.id} className="hover:bg-indigo-50/40">
+                                    <TableCell className="font-mono text-xs text-indigo-700">{doc.document_number || '-'}</TableCell>
+                                    <TableCell className="max-w-[280px] truncate font-medium">{doc.title}</TableCell>
+                                    <TableCell>
+                                        {doc.type === 'circular' ? (
+                                            <Badge variant="outline" className="border-violet-300 text-violet-700">เวียน</Badge>
+                                        ) : (
+                                            <Badge variant="outline">ปกติ</Badge>
+                                        )}
+                                    </TableCell>
+                                    <TableCell>
+                                        <Badge variant="outline" className={cn(DOCUMENT_STATUS_BADGE[doc.status])}>
+                                            {DOCUMENT_STATUS_LABELS[doc.status] || doc.status}
+                                        </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-slate-500">{doc.creator?.name || '-'}</TableCell>
+                                    <TableCell className="text-slate-500">
+                                        {doc.document_date ? new Date(doc.document_date).toLocaleDateString('th-TH') : '-'}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <Button asChild size="sm" variant="outline" className="rounded-xl">
+                                            <Link href={route('documents.show', doc.id)}>
+                                                <Eye className="mr-1 h-3.5 w-3.5" /> เปิด
+                                            </Link>
+                                        </Button>
+                                    </TableCell>
                                 </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {documents.data.length === 0 ? (
-                                    <TableRow>
-                                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                                            ไม่พบข้อมูลหนังสือ
-                                        </TableCell>
-                                    </TableRow>
-                                ) : (
-                                    documents.data.map((doc) => (
-                                        <TableRow key={doc.id}>
-                                            <TableCell className="font-medium">{doc.document_number || '-'}</TableCell>
-                                            <TableCell>
-                                                <div className="max-w-[300px] truncate" title={doc.title}>
-                                                    {doc.title}
-                                                </div>
-                                                <div className="text-xs text-muted-foreground">
-                                                    {doc.origin_type === 'internal' ? 'ภายใน' : 'ภายนอก'}
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                {getTypeBadge(doc.type)}
-                                            </TableCell>
-                                            <TableCell>{getStatusBadge(doc.status)}</TableCell>
-                                            <TableCell>{doc.creator?.name}</TableCell>
-                                            <TableCell>{new Date(doc.document_date).toLocaleDateString('th-TH')}</TableCell>
-                                            <TableCell>
-                                                <Link href={route('documents.show', doc.id)}>
-                                                    <Button variant="ghost" size="sm">รายละเอียด</Button>
-                                                </Link>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))
-                                )}
-                            </TableBody>
-                        </Table>
-                    </CardContent>
-                </Card>
+                            ))
+                        )}
+                    </TableBody>
+                </Table>
+
+                {(documents.last_page ?? 1) > 1 && (
+                    <div className="mt-4 flex justify-end gap-2">
+                        {documents.links?.map((link: any, i: number) => (
+                            <Button
+                                key={i}
+                                size="sm"
+                                variant={link.active ? 'default' : 'outline'}
+                                className="rounded-lg"
+                                disabled={!link.url}
+                                onClick={() => link.url && router.get(link.url, {}, { preserveState: true })}
+                                dangerouslySetInnerHTML={{ __html: link.label }}
+                            />
+                        ))}
+                    </div>
+                )}
             </div>
-        </AppLayout>
+        </DocumentShell>
     );
 }

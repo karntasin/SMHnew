@@ -3,9 +3,9 @@ import { useForm, Link } from '@inertiajs/react';
 import { Head } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { BreadcrumbItem } from '@/types';
@@ -19,9 +19,10 @@ interface Position {
 
 interface Props {
   position?: Position;
+  positionOptions: string[];
 }
 
-export default function PositionForm({ position }: Props) {
+export default function PositionForm({ position, positionOptions }: Props) {
   const isEdit = !!position;
 
   const { data, setData, post, put, processing, errors } = useForm({
@@ -39,7 +40,7 @@ export default function PositionForm({ position }: Props) {
   };
 
   const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'ตั้งค่า', href: '/settingsapp' },
+    { title: 'ตั้งค่าโปรไฟล์', href: '/settings/profile' },
     { title: 'จัดการตำแหน่งงาน', href: '/settings/positions' },
     { title: isEdit ? 'แก้ไขตำแหน่ง' : 'เพิ่มตำแหน่งใหม่', href: '#' },
   ];
@@ -83,13 +84,24 @@ export default function PositionForm({ position }: Props) {
                   <Label htmlFor="name" className="flex items-center gap-2">
                     ชื่อตำแหน่ง <span className="text-red-500">*</span>
                   </Label>
-                  <Input
-                    id="name"
-                    placeholder="เช่น PCT, RM, IC, ศูนย์สารสนเทศ"
+                  <Select
                     value={data.name}
-                    onChange={(e) => setData('name', e.target.value)}
-                    className={errors.name ? 'border-red-500 focus-visible:ring-red-500' : ''}
-                  />
+                    onValueChange={(value) => setData('name', value)}
+                  >
+                    <SelectTrigger id="name" className={errors.name ? 'border-red-500 focus-visible:ring-red-500' : ''}>
+                      <SelectValue placeholder="เลือกตำแหน่งงาน" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {positionOptions.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    รายการนี้ดึงจากตำแหน่งผู้ใช้ในระบบและตำแหน่งที่เคยบันทึกไว้
+                  </p>
                   {errors.name && <p className="text-sm text-red-500">{errors.name}</p>}
                 </div>
 

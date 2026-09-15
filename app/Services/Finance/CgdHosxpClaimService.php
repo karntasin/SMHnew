@@ -47,7 +47,44 @@ class CgdHosxpClaimService
             $excludeDeps = ['021'];
         }
 
+        $this->prepareHeavyQuery();
+
         $visitDates = $this->normalizeVisitDates($visitDates);
+        $mapped = [];
+
+        if ($visitDates !== []) {
+            foreach (array_chunk($visitDates, 31) as $dateChunk) {
+                foreach ($this->selectClaimRows($dateChunk, null, null, $pttypeLike, $excludeDeps) as $row) {
+                    $mapped[] = $this->mapClaimRow($row);
+                }
+            }
+
+            return $mapped;
+        }
+
+        foreach ($this->monthWindows($startDate, $endDate) as [$from, $to]) {
+            foreach ($this->selectClaimRows([], $from, $to, $pttypeLike, $excludeDeps) as $row) {
+                $mapped[] = $this->mapClaimRow($row);
+            }
+        }
+
+        return $mapped;
+    }
+
+    /**
+     * ดึง Visit จาก HOSxP เป็นช่วง (ลดการใช้ RAM ของผลลัพธ์ชุดเดียว)
+     *
+     * @param  list<string>  $visitDates
+     * @param  list<string>  $excludeDeps
+     * @return list<object>
+     */
+    private function selectClaimRows(
+        array $visitDates,
+        ?string $startDate,
+        ?string $endDate,
+        string $pttypeLike,
+        array $excludeDeps,
+    ): array {
         $schema = $this->detectSchema();
         $depPlaceholders = implode(',', array_fill(0, count($excludeDeps), '?'));
         $nameExpr = $this->patientNameSql($schema);
@@ -60,7 +97,7 @@ class CgdHosxpClaimService
             $params = array_merge($visitDates, $excludeDeps, [$pttypeLike]);
         } else {
             $dateClause = 'v.vstdate BETWEEN ? AND ?';
-            $params = array_merge([$startDate, $endDate], $excludeDeps, [$pttypeLike]);
+            $params = array_merge([(string) $startDate, (string) $endDate], $excludeDeps, [$pttypeLike]);
         }
 
         $sql = "
@@ -120,34 +157,64 @@ class CgdHosxpClaimService
             ORDER BY v.vn
         ";
 
-        $rows = DB::connection('hosxp')->select($sql, $params);
+        return DB::connection('hosxp')->select($sql, $params);
+    }
 
-        return array_map(function ($row) {
-            $item = (array) $row;
-            $item['patient_name'] = $this->cleanName($item['patient_name'] ?? null);
-            $item['pid'] = CgdClaimMatchKey::normalizePid($item['pid'] ?? null) ?: null;
-            $item['pttype_code'] = trim((string) ($item['pttype_code'] ?? '')) ?: null;
-            $item['pttype_name'] = trim((string) ($item['pttype_name'] ?? '')) ?: null;
-            $item['hipdata_code'] = trim((string) ($item['hipdata_code'] ?? '')) ?: null;
-            $item['pttype_label'] = $this->formatPttypeLabel(
-                $item['pttype_code'],
-                $item['pttype_name'],
-                $item['hipdata_code']
-            );
-            $item['match_key'] = CgdClaimMatchKey::make(
-                $item['hn'] ?? null,
-                $item['pid'] ?? null,
-                $item['seq_no'] ?? null
-            );
-            $item['total'] = CgdClaimMatchKey::parseMoney($item['total'] ?? 0);
-            $item['drug'] = CgdClaimMatchKey::parseMoney($item['drug'] ?? 0);
-            $item['artificial_organ'] = CgdClaimMatchKey::parseMoney($item['artificial_organ'] ?? 0);
-            $item['service_charge'] = CgdClaimMatchKey::parseMoney($item['service_charge'] ?? 0);
-            $item['paid_money'] = CgdClaimMatchKey::parseMoney($item['paid_money'] ?? 0);
-            $item['uc_money'] = CgdClaimMatchKey::parseMoney($item['uc_money'] ?? 0);
+    /**
+     * @return array<string, mixed>
+     */
+    private function mapClaimRow(object|array $row): array
+    {
+        $item = (array) $row;
+        $item['patient_name'] = $this->cleanName($item['patient_name'] ?? null);
+        $item['pid'] = CgdClaimMatchKey::normalizePid($item['pid'] ?? null) ?: null;
+        $item['pttype_code'] = trim((string) ($item['pttype_code'] ?? '')) ?: null;
+        $item['pttype_name'] = trim((string) ($item['pttype_name'] ?? '')) ?: null;
+        $item['hipdata_code'] = trim((string) ($item['hipdata_code'] ?? '')) ?: null;
+        $item['pttype_label'] = $this->formatPttypeLabel(
+            $item['pttype_code'],
+            $item['pttype_name'],
+            $item['hipdata_code']
+        );
+        $item['match_key'] = CgdClaimMatchKey::make(
+            $item['hn'] ?? null,
+            $item['pid'] ?? null,
+            $item['seq_no'] ?? null
+        );
+        $item['total'] = CgdClaimMatchKey::parseMoney($item['total'] ?? 0);
+        $item['drug'] = CgdClaimMatchKey::parseMoney($item['drug'] ?? 0);
+        $item['artificial_organ'] = CgdClaimMatchKey::parseMoney($item['artificial_organ'] ?? 0);
+        $item['service_charge'] = CgdClaimMatchKey::parseMoney($item['service_charge'] ?? 0);
+        $item['paid_money'] = CgdClaimMatchKey::parseMoney($item['paid_money'] ?? 0);
+        $item['uc_money'] = CgdClaimMatchKey::parseMoney($item['uc_money'] ?? 0);
 
-            return $item;
-        }, $rows);
+        return $item;
+    }
+
+    /**
+     * @return list<array{0:string,1:string}>
+     */
+    private function monthWindows(string $startDate, string $endDate): array
+    {
+        $windows = [];
+        $cursor = new \DateTimeImmutable($startDate);
+        $end = new \DateTimeImmutable($endDate);
+
+        while ($cursor <= $end) {
+            $monthEnd = $cursor->modify('last day of this month');
+            $to = $monthEnd < $end ? $monthEnd : $end;
+            $windows[] = [$cursor->format('Y-m-d'), $to->format('Y-m-d')];
+            $cursor = $to->modify('+1 day');
+        }
+
+        return $windows;
+    }
+
+    private function prepareHeavyQuery(): void
+    {
+        @ini_set('memory_limit', '512M');
+        @set_time_limit(300);
+        DB::connection('hosxp')->disableQueryLog();
     }
 
     /**
@@ -196,6 +263,63 @@ class CgdHosxpClaimService
         }
 
         return implode("\n            ", $joins);
+    }
+
+    /**
+     * ดึงชื่อผู้ป่วยจาก HOSxP ตาม HN (สำหรับเติมชื่อในรายการ REP Error)
+     *
+     * @param  list<string>  $hns
+     * @return array<string,string> keyed by normalized HN
+     */
+    public function fetchNamesByHn(array $hns): array
+    {
+        $hns = array_values(array_unique(array_filter(array_map('strval', $hns))));
+        if ($hns === [] || ! $this->available()) {
+            return [];
+        }
+
+        $padded = [];
+        foreach ($hns as $hn) {
+            $norm = CgdClaimMatchKey::normalizeHn($hn);
+            if ($norm === '') {
+                continue;
+            }
+            $padded[$norm] = true;
+            $padded[str_pad($norm, 9, '0', STR_PAD_LEFT)] = true;
+            $padded[$hn] = true;
+        }
+        $lookup = array_keys($padded);
+        if ($lookup === []) {
+            return [];
+        }
+
+        $placeholders = implode(',', array_fill(0, count($lookup), '?'));
+        $schema = $this->detectSchema();
+        $nameExpr = $this->patientNameSql($schema);
+
+        try {
+            $rows = DB::connection('hosxp')->select(
+                "SELECT p.hn, {$nameExpr} AS patient_name
+                 FROM patient p
+                 WHERE p.hn IN ({$placeholders})",
+                $lookup
+            );
+        } catch (\Throwable $e) {
+            Log::warning('HOSxP fetchNamesByHn failed: '.$e->getMessage());
+
+            return [];
+        }
+
+        $map = [];
+        foreach ($rows as $row) {
+            $name = $this->cleanName($row->patient_name ?? null);
+            $hnKey = CgdClaimMatchKey::normalizeHn($row->hn ?? null);
+            if ($hnKey !== '' && $name && ! isset($map[$hnKey])) {
+                $map[$hnKey] = $name;
+            }
+        }
+
+        return $map;
     }
 
     private function patientNameSql(array $schema): string

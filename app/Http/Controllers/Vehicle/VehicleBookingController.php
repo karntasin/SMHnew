@@ -9,6 +9,7 @@ use App\Models\VehicleBooking;
 use App\Models\VehicleCategory;
 use App\Notifications\VehicleBookingApprovedNotification;
 use App\Notifications\VehicleDriverNotification;
+use App\Services\FshhChat\FshhChatSyncService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
@@ -16,6 +17,66 @@ use Carbon\Carbon;
 
 class VehicleBookingController extends Controller
 {
+    public function select(Request $request)
+    {
+        $vehicles = Vehicle::with('category')
+            ->where('is_active', true)
+            ->where('status', '!=', 'maintenance')
+            ->orderBy('license_plate')
+            ->get()
+            ->map(fn (Vehicle $vehicle) => [
+                'id' => $vehicle->id,
+                'license_plate' => $vehicle->license_plate,
+                'brand' => $vehicle->brand,
+                'model' => $vehicle->model,
+                'seats' => $vehicle->seats,
+                'status' => $vehicle->status,
+                'image_url' => $vehicle->image_url,
+                'category' => $vehicle->category ? [
+                    'id' => $vehicle->category->id,
+                    'name' => $vehicle->category->name,
+                    'color' => $vehicle->category->color,
+                ] : null,
+            ]);
+
+        $upcoming = VehicleBooking::with(['vehicle', 'user'])
+            ->whereNotIn('status', ['rejected', 'cancelled'])
+            ->where('end_datetime', '>=', now())
+            ->orderBy('start_datetime')
+            ->limit(8)
+            ->get()
+            ->map(fn (VehicleBooking $booking) => [
+                'id' => $booking->id,
+                'booking_number' => $booking->booking_number,
+                'purpose' => $booking->purpose,
+                'destination' => $booking->destination,
+                'start_datetime' => $booking->start_datetime,
+                'end_datetime' => $booking->end_datetime,
+                'status' => $booking->status,
+                'user' => $booking->user ? ['name' => $booking->user->name] : null,
+                'vehicle' => $booking->vehicle ? [
+                    'license_plate' => $booking->vehicle->license_plate,
+                    'brand' => $booking->vehicle->brand,
+                    'model' => $booking->vehicle->model,
+                    'image_url' => $booking->vehicle->image_url,
+                ] : null,
+            ]);
+
+        $stats = [
+            'active_vehicles' => Vehicle::where('is_active', true)->where('status', '!=', 'maintenance')->count(),
+            'pending' => VehicleBooking::where('status', 'pending')->count(),
+            'today' => VehicleBooking::whereDate('start_datetime', Carbon::today())->count(),
+            'approved' => VehicleBooking::where('status', 'approved')->count(),
+        ];
+
+        return Inertia::render('vehicles/Index', [
+            'vehicles' => $vehicles,
+            'upcoming' => $upcoming,
+            'stats' => $stats,
+            'preselectVehicleId' => $request->integer('vehicle_id') ?: null,
+        ]);
+    }
+
     public function index(Request $request)
     {
         $filter = $request->input('filter', 'all'); // all, pending, today, my
@@ -49,7 +110,7 @@ class VehicleBookingController extends Controller
         ]);
     }
 
-    public function create()
+    public function create(Request $request)
     {
         // Fetch vehicles with their category to help frontend selection
         $vehicles = Vehicle::with('category')
@@ -63,6 +124,7 @@ class VehicleBookingController extends Controller
         return Inertia::render('vehicles/bookings/Create', [
             'categories' => $categories,
             'vehicles' => $vehicles,
+            'preselectVehicleId' => $request->integer('vehicle_id') ?: null,
         ]);
     }
 
@@ -113,6 +175,9 @@ class VehicleBookingController extends Controller
         $booking->status = 'pending';
         
         $booking->save();
+        $booking->load(['user', 'vehicle']);
+
+        $this->notifyLogisticsChat($booking);
 
         return redirect()->route('vehicles.bookings.index')->with('success', 'บันทึกคำขอใช้รถเรียบร้อยแล้ว');
     }
@@ -367,27 +432,43 @@ class VehicleBookingController extends Controller
 
     public function calendar(Request $request)
     {
-        $start = Carbon::parse($request->input('start'));
-        $end = Carbon::parse($request->input('end'));
-
-        $bookings = VehicleBooking::with('vehicle')
+        $bookings = VehicleBooking::with(['vehicle', 'user'])
             ->where('status', '!=', 'cancelled')
             ->where('status', '!=', 'rejected')
-            ->whereBetween('start_datetime', [$start, $end])
+            ->when($request->filled('start') && $request->filled('end'), function ($query) use ($request) {
+                $start = Carbon::parse($request->input('start'));
+                $end = Carbon::parse($request->input('end'));
+                $query->whereBetween('start_datetime', [$start, $end]);
+            })
+            ->orderBy('start_datetime')
             ->get()
             ->map(function ($booking) {
+                $vehicle = $booking->vehicle;
+
                 return [
                     'id' => $booking->id,
-                    'title' => $booking->vehicle->license_plate . ' - ' . $booking->purpose,
+                    'title' => $booking->purpose,
+                    'calendar_title' => trim(($vehicle?->license_plate ? $vehicle->license_plate.' · ' : '').$booking->purpose),
                     'start' => $booking->start_datetime->toIso8601String(),
                     'end' => $booking->end_datetime->toIso8601String(),
+                    'status' => $booking->status,
                     'backgroundColor' => $booking->status === 'pending' ? '#f59e0b' : ($booking->status === 'approved' ? '#10b981' : '#6b7280'),
                     'borderColor' => $booking->status === 'pending' ? '#f59e0b' : ($booking->status === 'approved' ? '#10b981' : '#6b7280'),
+                    'url' => route('vehicles.bookings.show', $booking),
+                    'user' => [
+                        'name' => $booking->user?->name ?? '-',
+                    ],
+                    'resource' => $vehicle ? [
+                        'name' => $vehicle->name,
+                        'location' => $vehicle->license_plate,
+                        'image_url' => $vehicle->image_url,
+                        'color' => $booking->status === 'pending' ? '#f59e0b' : '#10b981',
+                    ] : null,
                     'extendedProps' => [
-                        'vehicle' => $booking->vehicle->name,
-                        'user' => $booking->user->name,
+                        'vehicle' => $vehicle?->name,
+                        'user' => $booking->user?->name,
                         'status' => $booking->status,
-                    ]
+                    ],
                 ];
             });
 
@@ -524,6 +605,32 @@ class VehicleBookingController extends Controller
         }
 
         return back()->withErrors(['action' => 'กรุณาเลือกการกระทำที่ถูกต้อง']);
+    }
+
+    protected function notifyLogisticsChat(VehicleBooking $booking): void
+    {
+        $chat = app(FshhChatSyncService::class);
+        $department = $chat->logisticsDepartment();
+        if (! $department) {
+            return;
+        }
+
+        $vehicle = $booking->vehicle;
+        $vehicleLabel = $vehicle
+            ? trim(($vehicle->license_plate ?? '').' '.trim(($vehicle->brand ?? '').' '.($vehicle->model ?? '')))
+            : 'ยังไม่ระบุรถ';
+        $start = optional($booking->start_datetime)->format('d/m/Y H:i') ?? '-';
+        $end = optional($booking->end_datetime)->format('d/m/Y H:i') ?? '-';
+
+        $chat->notifyCard($department, 'คำขอใช้รถใหม่', [
+            'เลขที่' => $booking->booking_number,
+            'ผู้ขอ' => $booking->user?->display_name ?: 'ไม่ระบุ',
+            'วัตถุประสงค์' => $booking->purpose,
+            'ปลายทาง' => $booking->destination,
+            'รถ' => $vehicleLabel,
+            'วันเวลา' => $start.' - '.$end,
+            'หมายเหตุ' => $booking->note,
+        ], '#22C55E');
     }
 
     /**

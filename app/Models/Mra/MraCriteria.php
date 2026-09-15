@@ -14,6 +14,8 @@ class MraCriteria extends Model
     protected $fillable = [
         'mra_category_id',
         'code',
+        'group_key',
+        'group_title',
         'name',
         'name_en',
         'description',
@@ -24,12 +26,14 @@ class MraCriteria extends Model
         'max_score',
         'sort_order',
         'is_required',
+        'is_bonus',
         'is_active',
     ];
 
     protected $casts = [
         'max_score' => 'integer',
         'is_required' => 'boolean',
+        'is_bonus' => 'boolean',
         'is_active' => 'boolean',
     ];
 

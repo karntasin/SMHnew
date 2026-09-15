@@ -36,7 +36,7 @@ import { Plus, Search, MoreHorizontal, Pencil, Trash2, Briefcase, ArrowLeft } fr
 import { useDebounce } from 'use-debounce';
 
 const breadcrumbs: BreadcrumbItem[] = [
-  { title: 'ตั้งค่า', href: '/settingsapp' },
+  { title: 'ตั้งค่าโปรไฟล์', href: '/settings/profile' },
   { title: 'จัดการตำแหน่งงาน', href: '/settings/positions' },
 ];
 
@@ -89,7 +89,7 @@ export default function PositionIndex({ positions, filters }: Props) {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <Link href="/settingsapp" className="text-muted-foreground hover:text-primary">
+              <Link href="/settings/profile" className="text-muted-foreground hover:text-primary">
                 <ArrowLeft className="h-4 w-4" />
               </Link>
               <h1 className="text-2xl font-bold tracking-tight">จัดการตำแหน่งงาน</h1>

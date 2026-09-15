@@ -71,13 +71,13 @@ export default function Edit({ maintenanceRequest, categories, priorities }: Edi
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <Label htmlFor="category">หมวดหมู่</Label>
-                                    <Select value={data.category_id} onValueChange={val => setData('category_id', val)}>
-                                        <SelectTrigger>
+                                    <Select value={data.category_id || undefined} onValueChange={val => setData('category_id', val)}>
+                                        <SelectTrigger id="category">
                                             <SelectValue placeholder="เลือกหมวดหมู่" />
                                         </SelectTrigger>
                                         <SelectContent>
                                             {categories.map(cat => (
-                                                <SelectItem key={cat.id} value={cat.id.toString()}>
+                                                <SelectItem key={cat.id} value={String(cat.id)}>
                                                     {cat.name}
                                                 </SelectItem>
                                             ))}
@@ -88,13 +88,13 @@ export default function Edit({ maintenanceRequest, categories, priorities }: Edi
 
                                 <div className="space-y-2">
                                     <Label htmlFor="priority">ความสำคัญ</Label>
-                                    <Select value={data.priority_id} onValueChange={val => setData('priority_id', val)}>
-                                        <SelectTrigger>
+                                    <Select value={data.priority_id || undefined} onValueChange={val => setData('priority_id', val)}>
+                                        <SelectTrigger id="priority">
                                             <SelectValue placeholder="เลือกระดับความสำคัญ" />
                                         </SelectTrigger>
                                         <SelectContent>
                                             {priorities.map(prio => (
-                                                <SelectItem key={prio.id} value={prio.id.toString()}>
+                                                <SelectItem key={prio.id} value={String(prio.id)}>
                                                     {prio.name}
                                                 </SelectItem>
                                             ))}

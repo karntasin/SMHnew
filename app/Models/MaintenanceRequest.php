@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -12,33 +13,42 @@ class MaintenanceRequest extends Model
 
     protected $fillable = [
         'ticket_number',
+        'user_id',
         'category_id',
         'priority_id',
-        'requester_id',
-        'assigned_to',
         'title',
         'description',
         'location',
-        'asset_name',
         'status',
-        'technician_notes',
-        'resolution',
-        'cost',
+        'technician_id',
         'assigned_at',
         'started_at',
         'completed_at',
-        'cancelled_at',
-        'rating',
-        'feedback',
+        'resolution_notes',
+        'cost',
     ];
 
     protected $casts = [
         'assigned_at' => 'datetime',
         'started_at' => 'datetime',
         'completed_at' => 'datetime',
-        'cancelled_at' => 'datetime',
         'cost' => 'decimal:2',
     ];
+
+    protected function technicianNotes(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => $this->resolution_notes,
+            set: fn (?string $value) => ['resolution_notes' => $value],
+        );
+    }
+
+    protected function resolution(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => $this->resolution_notes,
+        );
+    }
 
     public function category()
     {
@@ -52,12 +62,12 @@ class MaintenanceRequest extends Model
 
     public function requester()
     {
-        return $this->belongsTo(User::class, 'requester_id');
+        return $this->belongsTo(User::class, 'user_id');
     }
 
     public function technician()
     {
-        return $this->belongsTo(User::class, 'assigned_to');
+        return $this->belongsTo(User::class, 'technician_id');
     }
 
     public function images()

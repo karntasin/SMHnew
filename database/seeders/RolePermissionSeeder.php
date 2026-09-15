@@ -51,5 +51,10 @@ class RolePermissionSeeder extends Seeder
                 }
             }
         }
+
+        $dashboardView = Permission::findByName('dashboard-view');
+        if ($dashboardView && ! $user->hasPermissionTo($dashboardView)) {
+            $user->givePermissionTo($dashboardView);
+        }
     }
 }

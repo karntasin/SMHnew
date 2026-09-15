@@ -25,24 +25,19 @@ class ShareMenus
 
             // Helper function to convert route name to URL
             $getRouteUrl = function ($routeName) {
-                if (!$routeName) return null;
-                // If already a URL path, return as-is
-                if (str_starts_with($routeName, '/') || str_starts_with($routeName, 'http')) {
-                    return $routeName;
-                }
-                // Try to convert route name to URL
-                try {
-                    return route($routeName, [], false); // false = relative URL
-                } catch (\Exception $e) {
-                    return null;
-                }
+                return app_route_url($routeName);
             };
 
             // Recursive builder (filtered by permission)
             $buildTree = function ($parentId = null) use (&$buildTree, $indexed, $user, $getRouteUrl) {
                 return $indexed
-                    ->filter(function ($menu) use ($parentId, $user, $getRouteUrl) {
+                    ->filter(function ($menu) use ($parentId, $user) {
                         if ($menu->parent_id !== $parentId) return false;
+
+                        if (in_array((string) $menu->route, ['dashboard', '/dashboard'], true)
+                            || $menu->permission_name === 'dashboard-view') {
+                            return true;
+                        }
 
                         // Special check for Technician menu
                         if ($menu->route === 'technician.work-orders.index') {

@@ -7,20 +7,30 @@ use App\Http\Controllers\Auth\EmailVerificationPromptController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
+use App\Http\Controllers\Auth\StaffRosterLookupController;
 use App\Http\Controllers\Auth\VerifyEmailController;
 use App\Http\Controllers\LineAuthController;
 use App\Http\Controllers\CompleteProfileController;
+use App\Http\Controllers\LineWebhookController;
 use Illuminate\Support\Facades\Route;
 
 // LINE Authentication Routes (Accessible by both guests and authenticated users)
 Route::get('auth/line', [LineAuthController::class, 'redirectToProvider'])->name('auth.line');
 Route::get('auth/line/callback', [LineAuthController::class, 'handleProviderCallback'])->name('auth.line.callback');
+Route::get('auth/line/qr/status', [LineAuthController::class, 'qrStatus'])->name('auth.line.qr.status');
+Route::get('auth/line/qr/claim', [LineAuthController::class, 'qrClaim'])->name('auth.line.qr.claim');
+Route::get('auth/line/transfer', [LineAuthController::class, 'transfer'])->name('auth.line.transfer');
+Route::post('line/webhook', LineWebhookController::class)->name('line.webhook');
 
 Route::middleware('guest')->group(function () {
     Route::get('register', [RegisteredUserController::class, 'create'])
         ->name('register');
 
     Route::post('register', [RegisteredUserController::class, 'store']);
+
+    Route::post('register/roster-lookup', StaffRosterLookupController::class)
+        ->middleware('throttle:30,1')
+        ->name('register.roster-lookup');
 
     Route::get('login', [AuthenticatedSessionController::class, 'create'])
         ->name('login');
@@ -41,6 +51,10 @@ Route::middleware('guest')->group(function () {
 });
 
 Route::middleware('auth')->group(function () {
+    Route::post('profile/roster-lookup', StaffRosterLookupController::class)
+        ->middleware('throttle:30,1')
+        ->name('profile.roster-lookup');
+
     // Complete Profile (for new LINE users)
     Route::get('profile/complete', [CompleteProfileController::class, 'show'])
         ->name('profile.complete');

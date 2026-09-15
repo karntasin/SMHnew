@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Head, Link, router, useForm } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,7 +32,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { BreadcrumbItem } from '@/types';
-import { Plus, Search, MoreHorizontal, Pencil, Trash2, Users, ArrowLeft } from 'lucide-react';
+import { Plus, Search, MoreHorizontal, Pencil, Trash2, Users, ArrowLeft, FileDown } from 'lucide-react';
 import { useDebounce } from 'use-debounce';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -45,6 +45,7 @@ interface TeamHa {
   abbreviation: string;
   name_th: string;
   name_en: string | null;
+  members_count?: number;
   created_at: string;
 }
 
@@ -94,9 +95,8 @@ export default function TeamhaIndex({ teams, filters }: Props) {
     <AppLayout breadcrumbs={breadcrumbs}>
       <Head title="จัดการทีม HA" />
 
-      <div className="container mx-auto py-6 px-4 max-w-6xl">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+      <div className="container mx-auto max-w-6xl px-4 py-6">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-4">
             <Link href="/settingsapp">
               <Button variant="ghost" size="icon">
@@ -104,29 +104,36 @@ export default function TeamhaIndex({ teams, filters }: Props) {
               </Button>
             </Link>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+              <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
                 <Users className="h-6 w-6 text-primary" />
                 จัดการทีม HA
               </h1>
               <p className="text-muted-foreground">
-                จัดการข้อมูลทีม HA ในระบบ
+                จัดการทีม HA รายชื่อสมาชิก และตำแหน่งในทีม
               </p>
             </div>
           </div>
-          <Link href="/settings/teamha/create">
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              เพิ่มทีม HA
-            </Button>
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <a href="/settings/teamha/export-pdf" target="_blank" rel="noreferrer">
+              <Button variant="outline">
+                <FileDown className="mr-2 h-4 w-4" />
+                PDF รายชื่อทีมทั้งหมด
+              </Button>
+            </a>
+            <Link href="/settings/teamha/create">
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                เพิ่มทีม HA
+              </Button>
+            </Link>
+          </div>
         </div>
 
-        {/* Search & Stats */}
         <Card className="mb-6">
           <CardContent className="pt-6">
-            <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+            <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
               <div className="relative w-full sm:w-96">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder="ค้นหาทีม HA..."
                   value={search}
@@ -141,7 +148,6 @@ export default function TeamhaIndex({ teams, filters }: Props) {
           </CardContent>
         </Card>
 
-        {/* Table */}
         <Card>
           <CardHeader>
             <CardTitle>รายการทีม HA</CardTitle>
@@ -157,13 +163,14 @@ export default function TeamhaIndex({ teams, filters }: Props) {
                     <TableHead className="w-[100px]">รหัสย่อ</TableHead>
                     <TableHead>ชื่อ (ภาษาไทย)</TableHead>
                     <TableHead>ชื่อ (ภาษาอังกฤษ)</TableHead>
-                    <TableHead className="text-right w-[100px]">จัดการ</TableHead>
+                    <TableHead className="w-[100px] text-center">สมาชิก</TableHead>
+                    <TableHead className="w-[100px] text-right">จัดการ</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {teams.data.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
                         ไม่พบข้อมูลทีม HA
                       </TableCell>
                     </TableRow>
@@ -177,6 +184,9 @@ export default function TeamhaIndex({ teams, filters }: Props) {
                         <TableCell className="text-muted-foreground">
                           {team.name_en || '-'}
                         </TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant="secondary">{team.members_count ?? 0}</Badge>
+                        </TableCell>
                         <TableCell className="text-right">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -189,8 +199,14 @@ export default function TeamhaIndex({ teams, filters }: Props) {
                               <DropdownMenuItem asChild>
                                 <Link href={`/settings/teamha/${team.id}/edit`}>
                                   <Pencil className="mr-2 h-4 w-4" />
-                                  แก้ไข
+                                  แก้ไข / จัดการสมาชิก
                                 </Link>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem asChild>
+                                <a href={`/settings/teamha/export-pdf?team_id=${team.id}`} target="_blank" rel="noreferrer">
+                                  <FileDown className="mr-2 h-4 w-4" />
+                                  ดาวน์โหลด PDF
+                                </a>
                               </DropdownMenuItem>
                               <AlertDialog open={deleteId === team.id} onOpenChange={(open) => !open && setDeleteId(null)}>
                                 <AlertDialogTrigger asChild>
@@ -209,7 +225,7 @@ export default function TeamhaIndex({ teams, filters }: Props) {
                                   <AlertDialogHeader>
                                     <AlertDialogTitle>ยืนยันการลบ</AlertDialogTitle>
                                     <AlertDialogDescription>
-                                      คุณต้องการลบทีม "{team.name_th}" หรือไม่? การดำเนินการนี้ไม่สามารถย้อนกลับได้
+                                      คุณต้องการลบทีม "{team.name_th}" หรือไม่? รายชื่อสมาชิกในทีมจะถูกลบด้วย
                                     </AlertDialogDescription>
                                   </AlertDialogHeader>
                                   <AlertDialogFooter>
@@ -233,9 +249,8 @@ export default function TeamhaIndex({ teams, filters }: Props) {
               </Table>
             </div>
 
-            {/* Pagination */}
             {teams.last_page > 1 && (
-              <div className="flex items-center justify-center gap-2 mt-4">
+              <div className="mt-4 flex items-center justify-center gap-2">
                 {teams.links.map((link, index) => (
                   <Button
                     key={index}

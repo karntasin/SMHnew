@@ -8,15 +8,14 @@ use Illuminate\Notifications\Notification;
 class RoomBookingNotification extends Notification
 {
     protected RoomBooking $booking;
-    protected string $actionType; // new_booking, approved, rejected, cancelled
+    protected string $actionType;
+    public bool $forwardToFshhChat = true;
 
-    /**
-     * Create a new notification instance.
-     */
     public function __construct(RoomBooking $booking, string $actionType)
     {
         $this->booking = $booking;
         $this->actionType = $actionType;
+        $this->forwardToFshhChat = $actionType !== 'new_booking';
     }
 
     /**

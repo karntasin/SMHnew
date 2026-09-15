@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Head, useForm, router } from '@inertiajs/react';
-import AppLayout from '@/layouts/app-layout';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { useForm, router } from '@inertiajs/react';
+import { QualityPage, StatCard, Panel, EmptyState } from '@/components/quality/quality-ui';
+import IcSubNav from '@/pages/IC/IcSubNav';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -52,27 +52,30 @@ interface EducationRecord {
     training_date: string;
     duration_hours: number;
     location: string | null;
-    objectives: string | null;
-    materials_url: string | null;
+    objectives?: string | null;
+    content_summary?: string | null;
+    materials_url?: string | null;
+    total_participants?: number;
     attendees_count?: number;
     attendees?: Attendee[];
 }
 
 interface Attendee {
     id: number;
-    employee_code: string;
-    employee_name: string;
-    department: string;
+    employee_code?: string;
+    employee_name?: string;
+    attendee_name?: string;
+    department: string | null;
     post_test_score: number | null;
     passed: boolean;
 }
 
 interface Stats {
-    total_trainings: number;
-    total_attendees: number;
-    total_hours: number;
-    by_type: { training_type: string; total: number }[];
-    by_month: { month: string; total: number }[];
+    total_trainings?: number;
+    total_attendees?: number;
+    total_hours?: number;
+    by_type?: { training_type: string; total: number }[];
+    by_month?: { month: string; total: number }[];
 }
 
 interface Props {
@@ -80,14 +83,38 @@ interface Props {
         data: EducationRecord[];
         links: any[];
     };
-    stats: Stats;
+    stats?: Stats;
     filters: {
         training_type?: string;
         month?: string;
     };
 }
 
-export default function Education({ records, stats, filters }: Props) {
+const defaultStats: Stats = {
+    total_trainings: 0,
+    total_attendees: 0,
+    total_hours: 0,
+    by_type: [],
+    by_month: [],
+};
+
+const attendeeCount = (record: EducationRecord) =>
+    record.attendees_count ?? record.total_participants ?? record.attendees?.length ?? 0;
+
+const recordObjectives = (record: EducationRecord) =>
+    record.objectives ?? record.content_summary ?? null;
+
+const attendeeName = (attendee: Attendee) =>
+    attendee.employee_name ?? attendee.attendee_name ?? '-';
+
+export default function Education({ records, stats: rawStats, filters }: Props) {
+    const stats = {
+        ...defaultStats,
+        ...rawStats,
+        by_type: rawStats?.by_type ?? [],
+        by_month: rawStats?.by_month ?? [],
+    };
+    const recordRows = records?.data ?? [];
     const [isOpen, setIsOpen] = useState(false);
     const [isAttendeeOpen, setIsAttendeeOpen] = useState(false);
     const [selectedRecord, setSelectedRecord] = useState<EducationRecord | null>(null);
@@ -171,42 +198,13 @@ export default function Education({ records, stats, filters }: Props) {
         'การควบคุมการระบาด',
     ];
 
-    const breadcrumbs = [
-        { title: 'IC', href: '/ic' },
-        { title: 'Education & Training', href: '#' },
-    ];
-
-    return (
-        <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="IC Education & Training" />
-
-            <div className="flex flex-col min-h-screen">
-                {/* Hero Header */}
-                <div className="relative overflow-hidden bg-gradient-to-br from-indigo-600 via-purple-600 to-violet-600 text-white">
-                    <div className="absolute inset-0 bg-grid-white/10"></div>
-                    <div className="absolute -top-24 -right-24 w-96 h-96 bg-white/10 rounded-full blur-3xl"></div>
-
-                    <div className="relative px-6 py-8">
-                        <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-4">
-                                <div className="p-3 bg-white/20 backdrop-blur-sm rounded-2xl">
-                                    <GraduationCap className="h-10 w-10" />
-                                </div>
-                                <div>
-                                    <h1 className="text-3xl font-bold tracking-tight">
-                                        IC Education & Training
-                                    </h1>
-                                    <p className="text-white/80 text-lg">
-                                        การอบรมและพัฒนาความรู้ด้านการควบคุมการติดเชื้อ
-                                    </p>
-                                </div>
-                            </div>
-                            <Dialog open={isOpen} onOpenChange={setIsOpen}>
-                                <DialogTrigger asChild>
-                                    <Button className="gap-2 bg-white text-indigo-600 hover:bg-white/90">
-                                        <Plus className="h-4 w-4" /> เพิ่มการอบรม
-                                    </Button>
-                                </DialogTrigger>
+    const trainingDialog = (
+        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+            <DialogTrigger asChild>
+                <Button className="gap-2 rounded-xl bg-rose-600 hover:bg-rose-700">
+                    <Plus className="h-4 w-4" /> เพิ่มการอบรม
+                </Button>
+            </DialogTrigger>
                                 <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
                                     <DialogHeader>
                                         <DialogTitle>เพิ่มการอบรม IC</DialogTitle>
@@ -310,67 +308,52 @@ export default function Education({ records, stats, filters }: Props) {
                                             />
                                         </div>
 
-                                        <Button type="submit" className="w-full" disabled={processing}>
+                                        <Button type="submit" className="w-full rounded-xl bg-rose-600 hover:bg-rose-700" disabled={processing}>
                                             บันทึกการอบรม
                                         </Button>
                                     </form>
                                 </DialogContent>
-                            </Dialog>
-                        </div>
+        </Dialog>
+    );
 
-                        {/* Stats */}
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
-                            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                                <div className="flex items-center gap-2 text-white/70 text-sm mb-1">
-                                    <BookOpen className="h-4 w-4" /> การอบรมทั้งหมด
-                                </div>
-                                <div className="text-3xl font-bold">{stats.total_trainings}</div>
-                            </div>
-                            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                                <div className="flex items-center gap-2 text-white/70 text-sm mb-1">
-                                    <Users className="h-4 w-4" /> ผู้เข้าอบรมสะสม
-                                </div>
-                                <div className="text-3xl font-bold">{stats.total_attendees}</div>
-                            </div>
-                            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                                <div className="flex items-center gap-2 text-white/70 text-sm mb-1">
-                                    <Clock className="h-4 w-4" /> ชั่วโมงอบรมสะสม
-                                </div>
-                                <div className="text-3xl font-bold">{stats.total_hours}</div>
-                            </div>
-                            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                                <div className="flex items-center gap-2 text-white/70 text-sm mb-1">
-                                    <Award className="h-4 w-4" /> เฉลี่ย/คน
-                                </div>
-                                <div className="text-3xl font-bold">
-                                    {stats.total_attendees > 0 
-                                        ? (stats.total_hours / stats.total_attendees * stats.total_trainings).toFixed(1)
-                                        : 0
-                                    } ชม.
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+    return (
+        <QualityPage
+            tone="rose"
+            icon={GraduationCap}
+            badge="ศูนย์พัฒนาคุณภาพ · IC"
+            title="IC Education & Training"
+            subtitle="การอบรมและพัฒนาความรู้ด้านการควบคุมการติดเชื้อ"
+            headTitle="IC Education & Training"
+            breadcrumbs={[
+                { title: 'ศูนย์พัฒนาคุณภาพ', href: '/quality' },
+                { title: 'Infection Control (IC)', href: '/ic' },
+                { title: 'อบรม', href: '/ic/education' },
+            ]}
+            subNav={<IcSubNav active="ic.education" />}
+            actions={trainingDialog}
+        >
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                <StatCard label="การอบรมทั้งหมด" value={stats.total_trainings ?? 0} icon={BookOpen} tone="slate" />
+                <StatCard label="ผู้เข้าอบรมสะสม" value={stats.total_attendees ?? 0} icon={Users} tone="rose" />
+                <StatCard label="ชั่วโมงอบรมสะสม" value={stats.total_hours ?? 0} icon={Clock} tone="violet" />
+                <StatCard
+                    label="เฉลี่ย/คน"
+                    value={`${(stats.total_attendees ?? 0) > 0 ? ((stats.total_hours ?? 0) / (stats.total_attendees ?? 1)).toFixed(1) : 0} ชม.`}
+                    icon={Award}
+                    tone="amber"
+                />
+            </div>
 
-                {/* Main Content */}
-                <div className="flex-1 p-6 space-y-6 bg-gray-50 dark:bg-gray-900">
-                    {/* Stats by Type */}
                     <div className="grid gap-4 md:grid-cols-5">
                         {trainingTypes.map((type) => {
-                            const count = stats.by_type.find(t => t.training_type === type.value)?.total || 0;
+                            const count = (stats.by_type ?? []).find(t => t.training_type === type.value)?.total || 0;
                             return (
-                                <Card key={type.value} className="text-center">
-                                    <CardContent className="pt-4">
-                                        <div className="text-2xl font-bold text-indigo-600">{count}</div>
-                                        <div className="text-sm text-muted-foreground">{type.label}</div>
-                                    </CardContent>
-                                </Card>
+                                <StatCard key={type.value} label={type.label} value={count} icon={GraduationCap} tone="indigo" />
                             );
                         })}
                     </div>
 
-                    {/* Filter */}
+                    <Panel title="กรองข้อมูล">
                     <div className="flex gap-4">
                         <Select
                             value={filters.training_type || 'all'}
@@ -393,75 +376,69 @@ export default function Education({ records, stats, filters }: Props) {
                             className="w-[200px]"
                         />
                     </div>
+                    </Panel>
 
-                    {/* Training Records */}
-                    {records.data.length === 0 ? (
-                        <Card>
-                            <CardContent className="flex flex-col items-center justify-center py-12">
-                                <GraduationCap className="h-16 w-16 text-muted-foreground mb-4" />
-                                <p className="text-xl font-medium">ยังไม่มีข้อมูลการอบรม</p>
-                                <p className="text-muted-foreground">กดปุ่ม "เพิ่มการอบรม" เพื่อเริ่มต้น</p>
-                            </CardContent>
-                        </Card>
+                    {recordRows.length === 0 ? (
+                        <EmptyState text="ยังไม่มีข้อมูลการอบรม — กดปุ่มเพิ่มการอบรมเพื่อเริ่มต้น" />
                     ) : (
                         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                            {records.data.map((record) => (
-                                <Card key={record.id} className="hover:shadow-lg transition-shadow">
-                                    <CardHeader className="pb-2">
+                            {recordRows.map((record) => (
+                                <div key={record.id} className="rounded-2xl border border-slate-200/70 bg-white shadow-sm transition-shadow hover:shadow-md">
+                                    <div className="border-b border-slate-100 px-4 pb-2 pt-4">
                                         <div className="flex items-start justify-between">
                                             <Badge variant="outline">
                                                 {trainingTypes.find(t => t.value === record.training_type)?.label}
                                             </Badge>
-                                            <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                                            <div className="flex items-center gap-1 text-sm text-slate-500">
                                                 <Calendar className="h-4 w-4" />
                                                 {new Date(record.training_date).toLocaleDateString('th-TH')}
                                             </div>
                                         </div>
-                                        <CardTitle className="text-lg mt-2">{record.topic}</CardTitle>
-                                        <CardDescription>
+                                        <h3 className="mt-2 text-lg font-bold text-slate-900">{record.topic}</h3>
+                                        <p className="text-xs text-slate-500">
                                             {targetAudiences.find(t => t.value === record.target_audience)?.label}
-                                        </CardDescription>
-                                    </CardHeader>
-                                    <CardContent className="space-y-3">
+                                        </p>
+                                    </div>
+                                    <div className="space-y-3 p-4">
                                         <div className="flex items-center gap-4 text-sm">
                                             <div className="flex items-center gap-1">
-                                                <Users className="h-4 w-4 text-muted-foreground" />
-                                                <span>{record.attendees_count || 0} คน</span>
+                                                <Users className="h-4 w-4 text-slate-400" />
+                                                <span>{attendeeCount(record)} คน</span>
                                             </div>
                                             <div className="flex items-center gap-1">
-                                                <Clock className="h-4 w-4 text-muted-foreground" />
+                                                <Clock className="h-4 w-4 text-slate-400" />
                                                 <span>{record.duration_hours} ชม.</span>
                                             </div>
                                         </div>
                                         <div className="text-sm">
-                                            <span className="text-muted-foreground">วิทยากร: </span>
+                                            <span className="text-slate-500">วิทยากร: </span>
                                             {record.trainer_name}
                                         </div>
                                         {record.location && (
                                             <div className="text-sm">
-                                                <span className="text-muted-foreground">สถานที่: </span>
+                                                <span className="text-slate-500">สถานที่: </span>
                                                 {record.location}
                                             </div>
                                         )}
                                         <div className="flex gap-2 pt-2">
-                                            <Button 
-                                                variant="outline" 
-                                                size="sm" 
-                                                className="flex-1"
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="flex-1 rounded-xl"
                                                 onClick={() => setViewingRecord(record)}
                                             >
-                                                <Eye className="h-4 w-4 mr-1" /> ดูรายละเอียด
+                                                <Eye className="mr-1 h-4 w-4" /> ดูรายละเอียด
                                             </Button>
-                                            <Button 
-                                                size="sm" 
-                                                className="flex-1"
+                                            <Button
+                                                size="sm"
+                                                className="flex-1 rounded-xl bg-rose-600 hover:bg-rose-700"
                                                 onClick={() => handleAddAttendee(record)}
                                             >
-                                                <Plus className="h-4 w-4 mr-1" /> เพิ่มผู้เข้าอบรม
+                                                <Plus className="mr-1 h-4 w-4" /> เพิ่มผู้เข้าอบรม
                                             </Button>
                                         </div>
-                                    </CardContent>
-                                </Card>
+                                    </div>
+                                </div>
                             ))}
                         </div>
                     )}
@@ -564,17 +541,17 @@ export default function Education({ records, stats, filters }: Props) {
                                         </div>
                                     </div>
 
-                                    {viewingRecord.objectives && (
+                                    {recordObjectives(viewingRecord) && (
                                         <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg">
                                             <h4 className="font-medium text-indigo-700 dark:text-indigo-400 mb-2">วัตถุประสงค์</h4>
-                                            <p className="text-sm whitespace-pre-wrap">{viewingRecord.objectives}</p>
+                                            <p className="text-sm whitespace-pre-wrap">{recordObjectives(viewingRecord)}</p>
                                         </div>
                                     )}
 
                                     {/* Attendees Table */}
                                     <div>
                                         <div className="flex items-center justify-between mb-2">
-                                            <h4 className="font-medium">รายชื่อผู้เข้าอบรม ({viewingRecord.attendees_count || 0} คน)</h4>
+                                            <h4 className="font-medium">รายชื่อผู้เข้าอบรม ({attendeeCount(viewingRecord)} คน)</h4>
                                             <Button size="sm" onClick={() => {
                                                 setViewingRecord(null);
                                                 handleAddAttendee(viewingRecord);
@@ -595,14 +572,14 @@ export default function Education({ records, stats, filters }: Props) {
                                                         </TableRow>
                                                     </TableHeader>
                                                     <TableBody>
-                                                        {viewingRecord.attendees.map((a) => (
-                                                            <TableRow key={a.id}>
-                                                                <TableCell>{a.employee_code}</TableCell>
-                                                                <TableCell>{a.employee_name}</TableCell>
-                                                                <TableCell>{a.department}</TableCell>
-                                                                <TableCell>{a.post_test_score ?? '-'}</TableCell>
+                                                        {viewingRecord.attendees.map((attendee) => (
+                                                            <TableRow key={attendee.id}>
+                                                                <TableCell>{attendee.employee_code || '-'}</TableCell>
+                                                                <TableCell>{attendeeName(attendee)}</TableCell>
+                                                                <TableCell>{attendee.department || '-'}</TableCell>
+                                                                <TableCell>{attendee.post_test_score ?? '-'}</TableCell>
                                                                 <TableCell>
-                                                                    {a.passed ? (
+                                                                    {attendee.passed ? (
                                                                         <Badge className="bg-green-500">
                                                                             <CheckCircle2 className="h-3 w-3 mr-1" /> ผ่าน
                                                                         </Badge>
@@ -625,8 +602,6 @@ export default function Education({ records, stats, filters }: Props) {
                             )}
                         </DialogContent>
                     </Dialog>
-                </div>
-            </div>
-        </AppLayout>
+        </QualityPage>
     );
 }

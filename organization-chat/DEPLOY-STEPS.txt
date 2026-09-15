@@ -1,0 +1,116 @@
+============================================================
+ORGANIZATION CHAT — ขั้นตอน Deploy (แก้ให้ใช้งานได้)
+============================================================
+
+เป้าหมาย
+-------
+ให้ URL เดียวทำ 2 งาน:
+1) เป็น LIFF Endpoint (หน้าเว็บ)
+2) เป็น API proxy ไป Google Apps Script
+
+
+ขั้นตอนที่ 1 — แก้ Cloudflare Worker (สำคัญที่สุด)
+------------------------------------------------
+⚠️ อย่าใช้ปุ่ม "Upload" / Static Assets
+   ข้อความ "This uploader currently only supports static assets..."
+   แปลว่าอัปโหลดผิดช่องทาง (ใช้ได้แค่ HTML/CSS/JS แบบ static ไม่ใช่ Worker script)
+
+วิธีที่ 1 — วางโค้ดใน Dashboard (ง่ายสุด)
+1. https://dash.cloudflare.com → Workers & Pages
+2. คลิก Worker: polished-river-f1bb
+3. กด "Edit code" หรือ "Quick edit" (ไม่ใช่ Upload)
+4. ลบโค้ดเก่าทั้งหมด
+5. Copy ทั้งไฟล์ organization-chat/worker.js วางลง editor
+6. Save and Deploy
+
+วิธีที่ 2 — ใช้ Wrangler CLI
+1. เปิด PowerShell:
+   cd d:\Xampp\htdocs\sss\my-app\organization-chat
+2. npx wrangler login
+3. npx wrangler deploy
+   (wrangler.toml ตั้งชื่อ polished-river-f1bb ไว้แล้ว)
+
+ปัญหาปัจจุบัน:
+https://polished-river-f1bb.karntasin5.workers.dev/
+คืนค่าเป็นโค้ด JS ดิบ → LIFF ใช้ไม่ได้
+
+วิธีแก้:
+1. เปิด https://dash.cloudflare.com → Workers
+2. เลือก Worker: polished-river-f1bb
+   (หรือสร้างใหม่แล้วเปลี่ยน LIFF Endpoint ตาม)
+3. ลบโค้ดเก่าทั้งหมด
+4. วางเนื้อหาจากไฟล์: organization-chat/worker.js
+5. Save and Deploy
+
+ตรวจทันทีในเบราว์เซอร์:
+- https://polished-river-f1bb.karntasin5.workers.dev/
+  ต้องเห็นหน้า Organization Chat (HTML) ไม่ใช่ข้อความ "export default"
+- https://polished-river-f1bb.karntasin5.workers.dev/api/test
+  ต้องได้ JSON success:true
+- https://polished-river-f1bb.karntasin5.workers.dev/api/gas?action=health
+  ต้องได้ gas.success:true
+
+
+ขั้นตอนที่ 2 — ตั้ง LINE LIFF Endpoint
+------------------------------------
+LINE Developers → Provider → LIFF → ตัวที่ LIFF ID = 2011190976-nGVbTYZD
+
+Endpoint URL:
+https://polished-river-f1bb.karntasin5.workers.dev/
+
+หมายเหตุ:
+- ต้องเป็น HTTPS
+- ควรลงท้ายด้วย /
+- ต้องตรงกับ Worker ที่ deploy ในขั้น 1
+
+
+ขั้นตอนที่ 3 — แก้ Google Apps Script ให้เป็น API จริง
+----------------------------------------------------
+1. เปิดโปรเจกต์ Apps Script จาก App Script.md
+2. ใน Code.gs:
+   - ลบ/อย่าใช้ doGet() แบบ createHtmlOutputFromFile('LIFF_TEST')
+   - วางฟังก์ชันจากไฟล์ Code.gs.router.js เข้าไป
+     (doGet / doPost / routeApi_)
+3. ตรวจว่ามี Spreadsheet:
+   - ถ้าเป็น Standalone Script ต้องใส่ SPREADSHEET_ID ใน CONFIG
+   - ต้องมีชีต Users / Conversations / Messages
+4. Deploy → New deployment → Web app
+   - Execute as: Me
+   - Who has access: Anyone
+5. คัดลอก Web App URL ใหม่ (ถ้าเปลี่ยน)
+   แล้วอัปเดต CONFIG.GAS_URL ใน worker.js แล้ว Deploy Worker อีกครั้ง
+
+
+ขั้นตอนที่ 4 — ทดสอบลำดับนี้
+--------------------------
+1) เปิด Worker URL ใน Chrome → กด "ทดสอบ Worker"
+2) กด "ทดสอบ GAS (ผ่าน Worker)"
+3) กด "ดึง Users"
+4) เปิดผ่าน LINE (LIFF) → กดเข้าสู่ระบบ LINE
+5) ดู Debug log ว่า Server login สำเร็จ
+
+
+อย่าทำแบบนี้ (ผิด)
+-----------------
+- เรียก script.google.com จาก JavaScript ในเบราว์เซอร์โดยตรง
+- วางไฟล์ worker.js เป็น "static response" / return โค้ดดิบ
+- ใช้ Worker คนละตัว: ตัวหนึ่งเป็น LIFF อีกตัวเป็น API โดยไม่ได้เชื่อมกัน
+- สับสนเวอร์ชันใน App Script.md (มีทั้ง V4 และ V5)
+
+
+เชื่อมกับ Laravel web app ในอนาคต
+--------------------------------
+เมื่อ LIFF + Worker + GAS เสถียรแล้ว:
+- ให้ Laravel เรียก Worker API (/api/gas) แทนการคุยกับ GAS โดยตรง
+- หรือย้าย logic จาก Sheets มาเป็น DB ใน Laravel ค่อย ๆ
+- ใช้ sessionToken จาก chat ผูกกับ user ในระบบโรงพยาบาล
+
+
+ถ้ายังพัง หลัง Deploy
+--------------------
+ส่งผลลัพธ์ 3 URL นี้มาให้ตรวจ:
+1. Worker /
+2. Worker /api/test
+3. Worker /api/gas?action=health
+
+และข้อความ error จากหน้า LIFF Debug log

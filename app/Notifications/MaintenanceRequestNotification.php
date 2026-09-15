@@ -18,7 +18,7 @@ class MaintenanceRequestNotification extends Notification
     /**
      * Create a new notification instance.
      */
-    public function __construct(MaintenanceRequest $maintenanceRequest, string $action = 'created')
+    public function __construct(MaintenanceRequest $maintenanceRequest, string $action = 'created', public bool $forwardToFshhChat = true)
     {
         $this->maintenanceRequest = $maintenanceRequest;
         $this->action = $action;

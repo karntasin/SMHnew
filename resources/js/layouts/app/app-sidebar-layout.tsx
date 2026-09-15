@@ -8,6 +8,8 @@ import { type BreadcrumbItem } from '@/types';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
 import UrgentNotificationPopup from '@/components/UrgentNotificationPopup';
+import HosxpConnectionBanner from '@/components/HosxpConnectionBanner';
+import FshhChatFab from '@/components/fshh-chat-fab';
 
 interface Props {
   children: React.ReactNode;
@@ -39,7 +41,7 @@ export default function AppSidebarLayout({
     if (flash.error) toast.error(flash.error);
   }, [flash]);
 
-  const primaryColor = setting?.warna || '#0ea5e9';
+  const primaryColor = setting?.warna || '#7C3AED';
   const primaryForeground = '#ffffff';
 
   useEffect(() => {
@@ -90,6 +92,7 @@ export default function AppSidebarLayout({
           <AppSidebar />
           <AppContent variant="sidebar">
             <AppSidebarHeader breadcrumbs={breadcrumbs} />
+            <HosxpConnectionBanner />
             {children}
           </AppContent>
         </AppShell>
@@ -99,6 +102,7 @@ export default function AppSidebarLayout({
       
       {/* Urgent Notification Popup - check every 1 minute */}
       <UrgentNotificationPopup checkInterval={60000} />
+      <FshhChatFab />
     </>
   );
 }

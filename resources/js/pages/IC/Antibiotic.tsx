@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Head, useForm, router } from '@inertiajs/react';
-import AppLayout from '@/layouts/app-layout';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { useForm, router } from '@inertiajs/react';
+import { QualityPage, StatCard, Panel, EmptyState } from '@/components/quality/quality-ui';
+import IcSubNav from '@/pages/IC/IcSubNav';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,14 +22,6 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
-import {
     Pill,
     Plus,
     Filter,
@@ -39,9 +31,10 @@ import {
     AlertTriangle,
     Search,
     Loader2,
+    Target,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import axios from 'axios';
+import axios from '@/lib/axios';
 
 interface AntibioticRecord {
     id: number;
@@ -252,42 +245,13 @@ export default function Antibiotic({ records, stats, filters }: Props) {
         }
     };
 
-    const breadcrumbs = [
-        { title: 'IC', href: '/ic' },
-        { title: 'Antibiotic Stewardship', href: '#' },
-    ];
-
-    return (
-        <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Antibiotic Stewardship - IC" />
-
-            <div className="flex flex-col min-h-screen">
-                {/* Hero Header */}
-                <div className="relative overflow-hidden bg-gradient-to-br from-pink-600 via-rose-600 to-red-600 text-white">
-                    <div className="absolute inset-0 bg-grid-white/10"></div>
-                    <div className="absolute -top-24 -right-24 w-96 h-96 bg-white/10 rounded-full blur-3xl"></div>
-
-                    <div className="relative px-6 py-8">
-                        <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-4">
-                                <div className="p-3 bg-white/20 backdrop-blur-sm rounded-2xl">
-                                    <Pill className="h-10 w-10" />
-                                </div>
-                                <div>
-                                    <h1 className="text-3xl font-bold tracking-tight">
-                                        Antibiotic Stewardship
-                                    </h1>
-                                    <p className="text-white/80 text-lg">
-                                        ติดตามและทบทวนการใช้ยาปฏิชีวนะ
-                                    </p>
-                                </div>
-                            </div>
-                            <Dialog open={isOpen} onOpenChange={setIsOpen}>
-                                <DialogTrigger asChild>
-                                    <Button className="gap-2 bg-white text-pink-600 hover:bg-white/90">
-                                        <Plus className="h-4 w-4" /> บันทึกการใช้ยา
-                                    </Button>
-                                </DialogTrigger>
+    const addRecordDialog = (
+        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+            <DialogTrigger asChild>
+                <Button className="gap-2 rounded-xl bg-rose-600 hover:bg-rose-700">
+                    <Plus className="h-4 w-4" /> บันทึกการใช้ยา
+                </Button>
+            </DialogTrigger>
                                 <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                                     <DialogHeader>
                                         <DialogTitle>บันทึกการใช้ยาปฏิชีวนะ</DialogTitle>
@@ -453,56 +417,57 @@ export default function Antibiotic({ records, stats, filters }: Props) {
                                                 </div>
                                             </div>
 
-                                            <Button type="submit" className="w-full" disabled={processing}>
+                                            <Button type="submit" className="w-full rounded-xl bg-rose-600 hover:bg-rose-700" disabled={processing}>
                                                 บันทึกข้อมูล
                                             </Button>
                                         </form>
                                     </div>
                                 </DialogContent>
-                            </Dialog>
-                        </div>
+        </Dialog>
+    );
 
-                        {/* Stats */}
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
-                            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                                <div className="text-white/70 text-sm mb-1">บันทึกทั้งหมด</div>
-                                <div className="text-3xl font-bold">{stats.total_records}</div>
-                            </div>
-                            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                                <div className="text-white/70 text-sm mb-1">รอ Review</div>
-                                <div className="text-3xl font-bold text-yellow-300">{stats.pending_review}</div>
-                            </div>
-                            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                                <div className="text-white/70 text-sm mb-1">Appropriate Rate</div>
-                                <div className="text-3xl font-bold flex items-center gap-2">
-                                    {stats.appropriate_rate}%
-                                    {stats.appropriate_rate >= 80 ? (
-                                        <CheckCircle2 className="h-6 w-6 text-green-300" />
-                                    ) : (
-                                        <AlertTriangle className="h-6 w-6 text-yellow-300" />
-                                    )}
-                                </div>
-                            </div>
-                            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                                <div className="text-white/70 text-sm mb-1">เป้าหมาย</div>
-                                <div className="text-3xl font-bold">≥80%</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+    return (
+        <QualityPage
+            tone="rose"
+            icon={Pill}
+            badge="ศูนย์พัฒนาคุณภาพ · IC"
+            title="Antibiotic Stewardship"
+            subtitle="ติดตามและทบทวนการใช้ยาปฏิชีวนะ"
+            headTitle="Antibiotic Stewardship - IC"
+            breadcrumbs={[
+                { title: 'ศูนย์พัฒนาคุณภาพ', href: '/quality' },
+                { title: 'Infection Control (IC)', href: '/ic' },
+                { title: 'ยาปฏิชีวนะ', href: '/ic/antibiotic' },
+            ]}
+            subNav={<IcSubNav active="ic.antibiotic" />}
+            actions={addRecordDialog}
+        >
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                <StatCard label="บันทึกทั้งหมด" value={stats.total_records} icon={Pill} tone="slate" />
+                <StatCard label="รอ Review" value={stats.pending_review} icon={Clock} tone="amber" />
+                <StatCard
+                    label="Appropriate Rate"
+                    value={
+                        <span className="flex items-center gap-2">
+                            {stats.appropriate_rate}%
+                            {stats.appropriate_rate >= 80 ? (
+                                <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                            ) : (
+                                <AlertTriangle className="h-5 w-5 text-amber-500" />
+                            )}
+                        </span>
+                    }
+                    icon={CheckCircle2}
+                    tone="rose"
+                />
+                <StatCard label="เป้าหมาย" value="≥80%" icon={Target} tone="emerald" sub="Appropriate rate" />
+            </div>
 
-                {/* Main Content */}
-                <div className="flex-1 p-6 space-y-6 bg-gray-50 dark:bg-gray-900">
-                    {/* Stats by Class */}
                     <div className="grid gap-4 md:grid-cols-2">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>ตามกลุ่มยา</CardTitle>
-                            </CardHeader>
-                            <CardContent>
+                        <Panel title="ตามกลุ่มยา">
                                 <div className="space-y-2">
                                     {stats.by_class.length === 0 ? (
-                                        <p className="text-muted-foreground">ยังไม่มีข้อมูล</p>
+                                        <EmptyState text="ยังไม่มีข้อมูล" />
                                     ) : (
                                         stats.by_class.map((item, index) => {
                                             const classInfo = antibioticClasses.find(c => c.value === item.antibiotic_class);
@@ -515,16 +480,11 @@ export default function Antibiotic({ records, stats, filters }: Props) {
                                         })
                                     )}
                                 </div>
-                            </CardContent>
-                        </Card>
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>ตาม Indication</CardTitle>
-                            </CardHeader>
-                            <CardContent>
+                        </Panel>
+                        <Panel title="ตาม Indication">
                                 <div className="space-y-2">
                                     {stats.by_indication.length === 0 ? (
-                                        <p className="text-muted-foreground">ยังไม่มีข้อมูล</p>
+                                        <EmptyState text="ยังไม่มีข้อมูล" />
                                     ) : (
                                         stats.by_indication.map((item, index) => {
                                             const indicationInfo = indications.find(i => i.value === item.indication);
@@ -537,21 +497,19 @@ export default function Antibiotic({ records, stats, filters }: Props) {
                                         })
                                     )}
                                 </div>
-                            </CardContent>
-                        </Card>
+                        </Panel>
                     </div>
 
-                    {/* Records Table */}
-                    <Card>
-                        <CardHeader>
-                            <div className="flex items-center justify-between">
-                                <CardTitle>รายการใช้ยาปฏิชีวนะ</CardTitle>
-                                <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)}>
-                                    <Filter className="h-4 w-4 mr-1" /> กรอง
-                                </Button>
-                            </div>
+                    <Panel
+                        title="รายการใช้ยาปฏิชีวนะ"
+                        action={
+                            <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setShowFilters(!showFilters)}>
+                                <Filter className="mr-1 h-4 w-4" /> กรอง
+                            </Button>
+                        }
+                    >
                             {showFilters && (
-                                <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t">
+                                <div className="mb-4 grid grid-cols-3 gap-4 border-b border-slate-100 pb-4">
                                     <Select
                                         value={filters.appropriateness || ''}
                                         onValueChange={(v) => router.get('/ic/antibiotic', { ...filters, appropriateness: v }, { preserveState: true })}
@@ -587,57 +545,49 @@ export default function Antibiotic({ records, stats, filters }: Props) {
                                     />
                                 </div>
                             )}
-                        </CardHeader>
-                        <CardContent>
-                            <div className="rounded-md border">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>วันที่เริ่ม</TableHead>
-                                            <TableHead>ผู้ป่วย</TableHead>
-                                            <TableHead>หอผู้ป่วย</TableHead>
-                                            <TableHead>ยา</TableHead>
-                                            <TableHead>Route</TableHead>
-                                            <TableHead>Indication</TableHead>
-                                            <TableHead>Review</TableHead>
-                                            <TableHead></TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
+                            <div className="overflow-hidden rounded-xl border border-slate-200">
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="border-b border-slate-100 text-left text-xs uppercase text-slate-400">
+                                            <th className="p-3">วันที่เริ่ม</th>
+                                            <th className="p-3">ผู้ป่วย</th>
+                                            <th className="p-3">หอผู้ป่วย</th>
+                                            <th className="p-3">ยา</th>
+                                            <th className="p-3">Route</th>
+                                            <th className="p-3">Indication</th>
+                                            <th className="p-3">Review</th>
+                                            <th className="p-3"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
                                         {records.data.length === 0 ? (
-                                            <TableRow>
-                                                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                                                    ไม่พบข้อมูล
-                                                </TableCell>
-                                            </TableRow>
+                                            <tr><td colSpan={8}><EmptyState text="ไม่พบข้อมูล" /></td></tr>
                                         ) : (
                                             records.data.map((record) => (
-                                                <TableRow key={record.id}>
-                                                    <TableCell>{new Date(record.start_date).toLocaleDateString('th-TH')}</TableCell>
-                                                    <TableCell>
+                                                <tr key={record.id} className="border-t border-slate-100 hover:bg-slate-50/60">
+                                                    <td className="p-3">{new Date(record.start_date).toLocaleDateString('th-TH')}</td>
+                                                    <td className="p-3">
                                                         <div className="font-medium">{record.patient_name}</div>
-                                                        <div className="text-xs text-muted-foreground">HN: {record.hn}</div>
-                                                    </TableCell>
-                                                    <TableCell>{record.ward_name}</TableCell>
-                                                    <TableCell className="font-medium">{record.antibiotic_name}</TableCell>
-                                                    <TableCell>{record.route}</TableCell>
-                                                    <TableCell>{indications.find(i => i.value === record.indication)?.label || record.indication}</TableCell>
-                                                    <TableCell>{getAppropriateBadge(record.appropriateness)}</TableCell>
-                                                    <TableCell>
-                                                        <Button variant="ghost" size="sm" onClick={() => handleReview(record)}>
+                                                        <div className="text-xs text-slate-500">HN: {record.hn}</div>
+                                                    </td>
+                                                    <td className="p-3">{record.ward_name}</td>
+                                                    <td className="p-3 font-medium">{record.antibiotic_name}</td>
+                                                    <td className="p-3">{record.route}</td>
+                                                    <td className="p-3">{indications.find(i => i.value === record.indication)?.label || record.indication}</td>
+                                                    <td className="p-3">{getAppropriateBadge(record.appropriateness)}</td>
+                                                    <td className="p-3">
+                                                        <Button variant="ghost" size="sm" className="rounded-xl" onClick={() => handleReview(record)}>
                                                             Review
                                                         </Button>
-                                                    </TableCell>
-                                                </TableRow>
+                                                    </td>
+                                                </tr>
                                             ))
                                         )}
-                                    </TableBody>
-                                </Table>
+                                    </tbody>
+                                </table>
                             </div>
-                        </CardContent>
-                    </Card>
+                    </Panel>
 
-                    {/* Review Dialog */}
                     <Dialog open={isReviewOpen} onOpenChange={setIsReviewOpen}>
                         <DialogContent>
                             <DialogHeader>
@@ -645,7 +595,7 @@ export default function Antibiotic({ records, stats, filters }: Props) {
                             </DialogHeader>
                             {selectedRecord && (
                                 <form onSubmit={submitReview} className="space-y-4 py-4">
-                                    <div className="p-4 bg-muted rounded-lg">
+                                    <div className="rounded-lg bg-slate-50 p-4">
                                         <p><strong>ผู้ป่วย:</strong> {selectedRecord.patient_name} (HN: {selectedRecord.hn})</p>
                                         <p><strong>ยา:</strong> {selectedRecord.antibiotic_name} ({selectedRecord.route})</p>
                                         <p><strong>Indication:</strong> {selectedRecord.indication}</p>
@@ -675,15 +625,13 @@ export default function Antibiotic({ records, stats, filters }: Props) {
                                         />
                                     </div>
 
-                                    <Button type="submit" className="w-full" disabled={reviewForm.processing}>
+                                    <Button type="submit" className="w-full rounded-xl bg-rose-600 hover:bg-rose-700" disabled={reviewForm.processing}>
                                         บันทึก Review
                                     </Button>
                                 </form>
                             )}
                         </DialogContent>
                     </Dialog>
-                </div>
-            </div>
-        </AppLayout>
+        </QualityPage>
     );
 }

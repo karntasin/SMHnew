@@ -1,6 +1,8 @@
 <?php
 
+use App\Support\PostLoginRedirect;
 use Inertia\Inertia;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\HelpController;
 use App\Http\Controllers\DashboardController;
@@ -23,7 +25,23 @@ use App\Http\Controllers\Vehicle\VehicleController;
 use App\Http\Controllers\Vehicle\VehicleSettingController;
 use App\Http\Controllers\Ic\IcController;
 
-Route::get('/', fn () => redirect()->route('login'))->name('home');
+Route::get('/', function () {
+    if (Auth::check()) {
+        return redirect()->away(PostLoginRedirect::toCurrent('dashboard'));
+    }
+
+    return redirect()->away(url('/login'));
+})->name('home');
+
+Route::middleware(['auth'])->group(function () {
+    Route::get('/fshh-chat/open', [App\Http\Controllers\FshhChatController::class, 'open'])->name('fshh-chat.open');
+
+    // Notifications API (ไม่ผูก menu.permission เพื่อไม่ให้ polling พัง)
+    Route::get('/notifications/api', [App\Http\Controllers\NotificationController::class, 'index'])->name('notifications.api');
+    Route::get('/notifications/urgent', [App\Http\Controllers\NotificationController::class, 'urgent'])->name('notifications.urgent');
+    Route::post('/notifications/{id}/read', [App\Http\Controllers\NotificationController::class, 'markAsRead'])->name('notifications.read');
+    Route::post('/notifications/read-all', [App\Http\Controllers\NotificationController::class, 'markAllAsRead'])->name('notifications.read-all');
+});
 
 Route::middleware(['auth', 'menu.permission'])->group(function () {
     Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
@@ -42,12 +60,8 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::get('/{code}', [App\Http\Controllers\DepartmentDataController::class, 'show'])->name('show');
     });
 
-    // Notifications
+    // Notifications page
     Route::get('/notifications', [App\Http\Controllers\NotificationController::class, 'page'])->name('notifications.index');
-    Route::get('/notifications/api', [App\Http\Controllers\NotificationController::class, 'index'])->name('notifications.api');
-    Route::get('/notifications/urgent', [App\Http\Controllers\NotificationController::class, 'urgent'])->name('notifications.urgent');
-    Route::post('/notifications/{id}/read', [App\Http\Controllers\NotificationController::class, 'markAsRead'])->name('notifications.read');
-    Route::post('/notifications/read-all', [App\Http\Controllers\NotificationController::class, 'markAllAsRead'])->name('notifications.read-all');
 
     Route::resource('roles', RoleController::class);
     Route::resource('menus', MenuController::class);
@@ -81,11 +95,23 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
     // Department Settings (CRUD)
     Route::resource('settings/departments', App\Http\Controllers\DepartmentController::class)
         ->names('settings.departments');
+
+    Route::post('settings/staff/import', [App\Http\Controllers\StaffRosterController::class, 'import'])
+        ->name('settings.staff.import');
+    Route::patch('settings/staff/{staffRoster}/toggle', [App\Http\Controllers\StaffRosterController::class, 'toggle'])
+        ->name('settings.staff.toggle');
+    Route::resource('settings/staff', App\Http\Controllers\StaffRosterController::class)
+        ->parameters(['staff' => 'staffRoster'])
+        ->except(['show'])
+        ->names('settings.staff');
     
     // DB Settings
     Route::get('/settingsapp/database', [App\Http\Controllers\DBSettingsController::class, 'edit'])->name('setting.database');
     Route::post('/settingsapp/database', [App\Http\Controllers\DBSettingsController::class, 'update'])->name('setting.database.update');
     Route::post('/settingsapp/database/test', [App\Http\Controllers\DBSettingsController::class, 'testConnection'])->name('setting.database.test');
+    Route::get('/settingsapp/ngrok/status', [App\Http\Controllers\DBSettingsController::class, 'ngrokStatus'])->name('setting.ngrok.status');
+    Route::post('/settingsapp/ngrok/start', [App\Http\Controllers\DBSettingsController::class, 'ngrokStart'])->name('setting.ngrok.start');
+    Route::post('/settingsapp/ngrok/stop', [App\Http\Controllers\DBSettingsController::class, 'ngrokStop'])->name('setting.ngrok.stop');
 
     Route::get('/audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');
     Route::get('/backup', [BackupController::class, 'index'])->name('backup.index');
@@ -99,7 +125,7 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
     Route::delete('/files/{id}', [UserFileController::class, 'destroy'])->name('files.destroy');
     Route::resource('media', MediaFolderController::class);
 
-    // Quality Hub (ศูนย์รวมงานคุณภาพ)
+    // Quality Hub (ศูนย์พัฒนาคุณภาพ)
     Route::get('/quality', [App\Http\Controllers\QualityHubController::class, 'index'])->name('quality.index');
 
     // Quality Document Repository
@@ -141,6 +167,9 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::get('/{indicator}', [App\Http\Controllers\QualityIndicatorController::class, 'show'])->name('show');
         Route::put('/{indicator}', [App\Http\Controllers\QualityIndicatorController::class, 'update'])->name('update');
         Route::delete('/{indicator}', [App\Http\Controllers\QualityIndicatorController::class, 'destroy'])->name('destroy');
+        Route::post('/{indicator}/aliases', [App\Http\Controllers\QualityIndicatorController::class, 'storeAlias'])->name('aliases.store');
+        Route::post('/{indicator}/promote', [App\Http\Controllers\QualityIndicatorController::class, 'promote'])->name('promote');
+        Route::post('/{indicator}/unlink', [App\Http\Controllers\QualityIndicatorController::class, 'unlink'])->name('unlink');
         Route::post('/{indicator}/entries', [App\Http\Controllers\QualityIndicatorController::class, 'storeEntry'])->name('entries.store');
         Route::put('/{indicator}/entries/{entry}', [App\Http\Controllers\QualityIndicatorController::class, 'updateEntry'])->name('entries.update');
         Route::delete('/{indicator}/entries/{entry}', [App\Http\Controllers\QualityIndicatorController::class, 'destroyEntry'])->name('entries.destroy');
@@ -309,6 +338,8 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
     Route::get('/finance/revenue', [App\Http\Controllers\FinanceRevenueController::class, 'index'])->name('finance.revenue');
     Route::get('/finance/revenue/export', [App\Http\Controllers\FinanceRevenueController::class, 'exportExcel'])->name('finance.revenue.export');
     Route::get('/finance/revenue/export-pdf', [App\Http\Controllers\FinanceRevenueController::class, 'exportPdf'])->name('finance.revenue.export-pdf');
+    Route::get('/finance/revenue/export-pttype-pdf', [App\Http\Controllers\FinanceRevenueController::class, 'exportPttypePdf'])->name('finance.revenue.export-pttype-pdf');
+    Route::get('/finance/revenue/export-pttype-excel', [App\Http\Controllers\FinanceRevenueController::class, 'exportPttypeExcel'])->name('finance.revenue.export-pttype-excel');
 
     // Financial Data Hub — ศูนย์ข้อมูลการเงิน
     Route::get('/finance/data-hub', [App\Http\Controllers\FinanceDataHubController::class, 'index'])->name('finance.data-hub');
@@ -318,15 +349,57 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::get('/', [App\Http\Controllers\FinanceCgdClaimController::class, 'index'])->name('dashboard');
         Route::get('/import', [App\Http\Controllers\FinanceCgdClaimController::class, 'importForm'])->name('import');
         Route::post('/import', [App\Http\Controllers\FinanceCgdClaimController::class, 'import'])->name('import.store');
-        Route::get('/{batch}', [App\Http\Controllers\FinanceCgdClaimController::class, 'show'])->name('show');
-        Route::post('/{batch}/reconcile', [App\Http\Controllers\FinanceCgdClaimController::class, 'reconcile'])->name('reconcile');
-        Route::delete('/{batch}', [App\Http\Controllers\FinanceCgdClaimController::class, 'destroy'])->name('destroy');
-        Route::get('/{batch}/export', [App\Http\Controllers\FinanceCgdClaimController::class, 'exportExcel'])->name('export');
-        Route::get('/{batch}/export-pdf', [App\Http\Controllers\FinanceCgdClaimController::class, 'exportPdf'])->name('export-pdf');
+        Route::post('/appeal-cases/mark-submitted', [App\Http\Controllers\FinanceCgdClaimController::class, 'markAppealSubmitted'])->name('appeal-cases.mark-submitted');
+        Route::post('/nhso/start', [App\Http\Controllers\FinanceCgdClaimController::class, 'nhsoStart'])->name('nhso.start');
+        Route::post('/nhso/otp', [App\Http\Controllers\FinanceCgdClaimController::class, 'nhsoOtp'])->name('nhso.otp');
+        Route::post('/nhso/download', [App\Http\Controllers\FinanceCgdClaimController::class, 'nhsoDownload'])->name('nhso.download');
+        Route::post('/nhso/clear', [App\Http\Controllers\FinanceCgdClaimController::class, 'nhsoClearSession'])->name('nhso.clear');
+        Route::post('/reconcile-all', [App\Http\Controllers\FinanceCgdClaimController::class, 'reconcileAll'])->name('reconcile-all');
+        Route::get('/reconcile-all', fn () => redirect()->route('finance.cgd.dashboard'))->name('reconcile-all.get');
+        Route::get('/precheck', [App\Http\Controllers\FinanceCgdCDenyPrecheckController::class, 'index'])->name('precheck');
+        Route::get('/summary', [App\Http\Controllers\FinanceCgdClaimController::class, 'showSummary'])->name('summary');
+        Route::get('/summary/export', [App\Http\Controllers\FinanceCgdClaimController::class, 'exportSummaryExcel'])->name('summary.export');
+        Route::get('/summary/export-pdf', [App\Http\Controllers\FinanceCgdClaimController::class, 'exportSummaryPdf'])->name('summary.export-pdf');
+        Route::get('/stm', [App\Http\Controllers\FinanceStmImportController::class, 'index'])->name('stm.index');
+        Route::post('/stm', [App\Http\Controllers\FinanceStmImportController::class, 'store'])->name('stm.store');
+        Route::get('/stm/{stm}/compare', [App\Http\Controllers\FinanceCgdClaimController::class, 'showStmCompare'])->name('stm.compare');
+        Route::post('/stm/{stm}/reconcile', [App\Http\Controllers\FinanceCgdClaimController::class, 'reconcileStm'])->name('stm.reconcile');
+        Route::get('/stm/{stm}/compare/export', [App\Http\Controllers\FinanceCgdClaimController::class, 'exportStmCompareExcel'])->name('stm.compare.export');
+        Route::get('/stm/{stm}/compare/export-pdf', [App\Http\Controllers\FinanceCgdClaimController::class, 'exportStmComparePdf'])->name('stm.compare.export-pdf');
+        Route::get('/stm/{stm}', [App\Http\Controllers\FinanceStmImportController::class, 'show'])->name('stm.show');
+        Route::delete('/stm/{stm}', [App\Http\Controllers\FinanceStmImportController::class, 'destroy'])->name('stm.destroy');
+        Route::get('/{batch}', [App\Http\Controllers\FinanceCgdClaimController::class, 'show'])->name('show')->whereNumber('batch');
+        Route::post('/{batch}/reconcile', [App\Http\Controllers\FinanceCgdClaimController::class, 'reconcile'])->name('reconcile')->whereNumber('batch');
+        Route::delete('/{batch}', [App\Http\Controllers\FinanceCgdClaimController::class, 'destroy'])->name('destroy')->whereNumber('batch');
+        Route::get('/{batch}/export', [App\Http\Controllers\FinanceCgdClaimController::class, 'exportExcel'])->name('export')->whereNumber('batch');
+        Route::get('/{batch}/export-pdf', [App\Http\Controllers\FinanceCgdClaimController::class, 'exportPdf'])->name('export-pdf')->whereNumber('batch');
     });
 
-    // โมดูลย่อยเตรียมรองรับ — อปท. / ประกันสังคม / บัตรทอง (นำเข้าแยกหน้า)
-    foreach (['lgo', 'sso', 'uc'] as $scheme) {
+    // อปท. (LGO) — REP-first ไม่มี STM
+    Route::prefix('finance/data-hub/lgo')->name('finance.lgo.')->group(function () {
+        Route::get('/', [App\Http\Controllers\FinanceLgoClaimController::class, 'index'])->name('dashboard');
+        Route::get('/import', [App\Http\Controllers\FinanceLgoClaimController::class, 'importForm'])->name('import');
+        Route::post('/import', [App\Http\Controllers\FinanceLgoClaimController::class, 'import'])->name('import.store');
+        Route::post('/appeal-cases/mark-submitted', [App\Http\Controllers\FinanceLgoClaimController::class, 'markAppealSubmitted'])->name('appeal-cases.mark-submitted');
+        Route::post('/nhso/start', [App\Http\Controllers\FinanceLgoClaimController::class, 'nhsoStart'])->name('nhso.start');
+        Route::post('/nhso/otp', [App\Http\Controllers\FinanceLgoClaimController::class, 'nhsoOtp'])->name('nhso.otp');
+        Route::post('/nhso/download', [App\Http\Controllers\FinanceLgoClaimController::class, 'nhsoDownload'])->name('nhso.download');
+        Route::post('/nhso/clear', [App\Http\Controllers\FinanceLgoClaimController::class, 'nhsoClearSession'])->name('nhso.clear');
+        Route::post('/reconcile-all', [App\Http\Controllers\FinanceLgoClaimController::class, 'reconcileAll'])->name('reconcile-all');
+        Route::get('/reconcile-all', fn () => redirect()->route('finance.lgo.dashboard'))->name('reconcile-all.get');
+        Route::get('/summary', [App\Http\Controllers\FinanceLgoClaimController::class, 'showSummary'])->name('summary');
+        Route::get('/summary/export', [App\Http\Controllers\FinanceLgoClaimController::class, 'exportSummaryExcel'])->name('summary.export');
+        Route::get('/summary/export-pdf', [App\Http\Controllers\FinanceLgoClaimController::class, 'exportSummaryPdf'])->name('summary.export-pdf');
+        Route::get('/compare', [App\Http\Controllers\FinanceLgoClaimController::class, 'showCompare'])->name('compare');
+        Route::get('/{batch}', [App\Http\Controllers\FinanceLgoClaimController::class, 'show'])->name('show')->whereNumber('batch');
+        Route::post('/{batch}/reconcile', [App\Http\Controllers\FinanceLgoClaimController::class, 'reconcile'])->name('reconcile')->whereNumber('batch');
+        Route::delete('/{batch}', [App\Http\Controllers\FinanceLgoClaimController::class, 'destroy'])->name('destroy')->whereNumber('batch');
+        Route::get('/{batch}/export', [App\Http\Controllers\FinanceLgoClaimController::class, 'exportExcel'])->name('export')->whereNumber('batch');
+        Route::get('/{batch}/export-pdf', [App\Http\Controllers\FinanceLgoClaimController::class, 'exportPdf'])->name('export-pdf')->whereNumber('batch');
+    });
+
+    // โมดูลย่อยเตรียมรองรับ — ประกันสังคม / บัตรทอง (นำเข้าแยกหน้า)
+    foreach (['sso', 'uc'] as $scheme) {
         Route::prefix("finance/data-hub/{$scheme}")->name("finance.{$scheme}.")->group(function () use ($scheme) {
             Route::get('/', [App\Http\Controllers\FinanceDataHubSchemeController::class, 'dashboard'])
                 ->defaults('scheme', $scheme)
@@ -340,11 +413,31 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
     // redirect เส้นทางเดิม → Data Hub
     Route::redirect('/finance/cgd-claim', '/finance/data-hub/cgd-claim', 301);
     Route::redirect('/finance/cgd-claim/import', '/finance/data-hub/cgd-claim/import', 301);
-    Route::get('/finance/cgd-claim/{any}', function (string $any) {
+    Route::post('/finance/cgd-claim/reconcile-all', [App\Http\Controllers\FinanceCgdClaimController::class, 'reconcileAll']);
+    Route::match(['get', 'post'], '/finance/cgd-claim/{any}', function (string $any) {
         return redirect('/finance/data-hub/cgd-claim/'.$any, 301);
     })->where('any', '.*');
 
-    // RDU Reports (Rational Drug Use)
+    // Pharmacy (เภสัชกรรม) — แจ้งเตือนการใช้ยา / คลังยา / RDU / รายงานยา
+    Route::get('/pharmacy', [App\Http\Controllers\Pharmacy\PharmacyController::class, 'index'])->name('pharmacy.index');
+    Route::get('/pharmacy/drug-alerts', [App\Http\Controllers\Pharmacy\PharmacyController::class, 'drugAlerts'])->name('pharmacy.drug-alerts');
+
+    Route::prefix('pharmacy/inventory')->name('pharmacy.inventory.')->group(function () {
+        Route::get('/', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'index'])->name('index');
+        Route::get('/stock', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'stock'])->name('stock');
+        Route::get('/receive', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'receiveForm'])->name('receive');
+        Route::post('/receive', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'receiveStore'])->name('receive.store');
+        Route::get('/transfer', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'transferForm'])->name('transfer');
+        Route::post('/transfer', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'transferStore'])->name('transfer.store');
+        Route::get('/lots', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'lots'])->name('lots');
+        Route::get('/lots/{lot}', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'lotShow'])->name('lots.show');
+        Route::get('/movements', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'movements'])->name('movements');
+        Route::get('/drugs/search', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'searchDrugs'])->name('drugs.search');
+        Route::post('/sync-dispense', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'syncDispense'])->name('sync-dispense');
+        Route::patch('/balances/{balance}/threshold', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'updateThreshold'])->name('balances.threshold');
+    });
+
+    // RDU Reports (Rational Drug Use) — under Pharmacy channel
     Route::get('/rdu', [App\Http\Controllers\RduReportController::class, 'index'])->name('rdu.index');
     Route::get('/rdu/cases', [App\Http\Controllers\RduReportController::class, 'cases'])->name('rdu.cases');
     Route::get('/rdu/export', [App\Http\Controllers\RduReportController::class, 'export'])->name('rdu.export');
@@ -354,13 +447,13 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
     Route::get('/rdu/drugs/by-department', [App\Http\Controllers\RduReportController::class, 'drugsByDepartment'])->name('rdu.drugs.by-department');
     Route::get('/rdu/drugs/export', [App\Http\Controllers\RduReportController::class, 'exportDrugs'])->name('rdu.drugs.export');
 
-    // Drug Usage Reports (รายงานยาและการใช้ยา)
+    // Drug Usage Reports (รายงานยาและการใช้ยา) — under Pharmacy channel
     Route::get('/drug-usage', [App\Http\Controllers\DrugUsageController::class, 'index'])->name('drug-usage.index');
     Route::get('/drug-usage/report', [App\Http\Controllers\DrugUsageController::class, 'report'])->name('drug-usage.report');
     Route::get('/drug-usage/export', [App\Http\Controllers\DrugUsageController::class, 'export'])->name('drug-usage.export');
     Route::get('/drug-usage/export-pdf', [App\Http\Controllers\DrugUsageController::class, 'exportPdf'])->name('drug-usage.export-pdf');
 
-    // IM - IT Management (งานสารสนเทศ HAIT) ภายใต้ศูนย์คุณภาพ
+    // IM - IT Management (งานสารสนเทศ HAIT) ภายใต้ศูนย์พัฒนาคุณภาพ
     Route::prefix('im')->name('im.')->group(function () {
         Route::get('/', [App\Http\Controllers\Im\ImHubController::class, 'index'])->name('index');
         Route::get('/manual', [App\Http\Controllers\Im\ImHubController::class, 'manual'])->name('manual');
@@ -370,12 +463,15 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::post('/master-plan/plans', [App\Http\Controllers\Im\MasterPlanController::class, 'storePlan'])->name('master-plan.plans.store');
         Route::put('/master-plan/plans/{plan}', [App\Http\Controllers\Im\MasterPlanController::class, 'updatePlan'])->name('master-plan.plans.update');
         Route::delete('/master-plan/plans/{plan}', [App\Http\Controllers\Im\MasterPlanController::class, 'destroyPlan'])->name('master-plan.plans.destroy');
+        Route::post('/master-plan/plans/{plan}/attachments', [App\Http\Controllers\Im\MasterPlanController::class, 'storePlanAttachments'])->name('master-plan.plans.attachments.store');
         Route::post('/master-plan/mappings', [App\Http\Controllers\Im\MasterPlanController::class, 'storeMapping'])->name('master-plan.mappings.store');
         Route::put('/master-plan/mappings/{mapping}', [App\Http\Controllers\Im\MasterPlanController::class, 'updateMapping'])->name('master-plan.mappings.update');
         Route::delete('/master-plan/mappings/{mapping}', [App\Http\Controllers\Im\MasterPlanController::class, 'destroyMapping'])->name('master-plan.mappings.destroy');
         Route::post('/master-plan/actions', [App\Http\Controllers\Im\MasterPlanController::class, 'storeAction'])->name('master-plan.actions.store');
         Route::put('/master-plan/actions/{action}', [App\Http\Controllers\Im\MasterPlanController::class, 'updateAction'])->name('master-plan.actions.update');
         Route::delete('/master-plan/actions/{action}', [App\Http\Controllers\Im\MasterPlanController::class, 'destroyAction'])->name('master-plan.actions.destroy');
+        Route::post('/master-plan/actions/{action}/attachments', [App\Http\Controllers\Im\MasterPlanController::class, 'storeActionAttachments'])->name('master-plan.actions.attachments.store');
+        Route::delete('/master-plan/attachments/{attachment}', [App\Http\Controllers\Im\MasterPlanController::class, 'destroyAttachment'])->name('master-plan.attachments.destroy');
 
         // หมวด 2: Risk Management
         Route::get('/risk', [App\Http\Controllers\Im\RiskController::class, 'index'])->name('risk');
@@ -404,10 +500,13 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::put('/service-desk/incidents/{incident}', [App\Http\Controllers\Im\ServiceDeskController::class, 'updateIncident'])->name('service-desk.incidents.update');
         Route::delete('/service-desk/incidents/{incident}', [App\Http\Controllers\Im\ServiceDeskController::class, 'destroyIncident'])->name('service-desk.incidents.destroy');
         Route::post('/service-desk/timesheets', [App\Http\Controllers\Im\ServiceDeskController::class, 'storeTimesheet'])->name('service-desk.timesheets.store');
+        Route::post('/service-desk/timesheets/sync-google', [App\Http\Controllers\Im\ServiceDeskController::class, 'syncTimesheets'])->name('service-desk.timesheets.sync-google');
         Route::delete('/service-desk/timesheets/{timesheet}', [App\Http\Controllers\Im\ServiceDeskController::class, 'destroyTimesheet'])->name('service-desk.timesheets.destroy');
 
         // หมวด 4: ประเมินเจ้าหน้าที่ IT (ภายใต้ Service Desk)
         Route::get('/service-desk/evaluation', [App\Http\Controllers\Im\StaffEvaluationController::class, 'index'])->name('service-desk.evaluation');
+        Route::get('/service-desk/evaluation/cycles/export-pdf', [App\Http\Controllers\Im\StaffEvaluationController::class, 'exportCyclePdf'])->name('service-desk.evaluation.cycles.export-pdf');
+        Route::get('/service-desk/evaluation/{evaluation}/export-pdf', [App\Http\Controllers\Im\StaffEvaluationController::class, 'exportEvaluationPdf'])->name('service-desk.evaluation.export-pdf');
         Route::post('/service-desk/evaluation/topics', [App\Http\Controllers\Im\StaffEvaluationController::class, 'storeTopic'])->name('service-desk.evaluation.topics.store');
         Route::put('/service-desk/evaluation/topics/{topic}', [App\Http\Controllers\Im\StaffEvaluationController::class, 'updateTopic'])->name('service-desk.evaluation.topics.update');
         Route::delete('/service-desk/evaluation/topics/{topic}', [App\Http\Controllers\Im\StaffEvaluationController::class, 'destroyTopic'])->name('service-desk.evaluation.topics.destroy');
@@ -432,6 +531,9 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::post('/resource/assets', [App\Http\Controllers\Im\ResourceController::class, 'storeAsset'])->name('resource.assets.store');
         Route::put('/resource/assets/{asset}', [App\Http\Controllers\Im\ResourceController::class, 'updateAsset'])->name('resource.assets.update');
         Route::delete('/resource/assets/{asset}', [App\Http\Controllers\Im\ResourceController::class, 'destroyAsset'])->name('resource.assets.destroy');
+        Route::post('/resource/assets/{asset}/repairs', [App\Http\Controllers\Im\ResourceController::class, 'storeRepair'])->name('resource.assets.repairs.store');
+        Route::put('/resource/assets/{asset}/repairs/{repair}/complete', [App\Http\Controllers\Im\ResourceController::class, 'completeRepair'])->name('resource.assets.repairs.complete');
+        Route::post('/resource/assets/{asset}/disposals', [App\Http\Controllers\Im\ResourceController::class, 'storeDisposal'])->name('resource.assets.disposals.store');
         Route::post('/resource/competencies', [App\Http\Controllers\Im\ResourceController::class, 'storeCompetency'])->name('resource.competencies.store');
         Route::put('/resource/competencies/{competency}', [App\Http\Controllers\Im\ResourceController::class, 'updateCompetency'])->name('resource.competencies.update');
         Route::delete('/resource/competencies/{competency}', [App\Http\Controllers\Im\ResourceController::class, 'destroyCompetency'])->name('resource.competencies.destroy');
@@ -466,8 +568,27 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         
         // Assets
         Route::get('/assets', [App\Http\Controllers\EnvAssetController::class, 'index'])->name('assets.index');
+        Route::get('/assets/risk', [App\Http\Controllers\EnvAssetController::class, 'risk'])->name('assets.risk');
+        Route::get('/assets/risk/pdf', [App\Http\Controllers\EnvAssetController::class, 'riskPdf'])->name('assets.risk-pdf');
+        Route::get('/assets/inspection', [App\Http\Controllers\EnvAssetController::class, 'inspection'])->name('assets.inspection');
+        Route::get('/assets/inspection/cycles', [App\Http\Controllers\EnvAssetInspectionController::class, 'cyclesIndex'])->name('assets.inspection.cycles');
+        Route::post('/assets/inspection/cycles', [App\Http\Controllers\EnvAssetInspectionController::class, 'storeCycle'])->name('assets.inspection.cycles.store');
+        Route::get('/assets/inspection/cycles/{cycle}', [App\Http\Controllers\EnvAssetInspectionController::class, 'showCycle'])->name('assets.inspection.cycles.show');
+        Route::put('/assets/inspection/cycles/{cycle}', [App\Http\Controllers\EnvAssetInspectionController::class, 'updateCycle'])->name('assets.inspection.cycles.update');
+        Route::post('/assets/inspection/cycles/{cycle}/cancel', [App\Http\Controllers\EnvAssetInspectionController::class, 'cancelCycle'])->name('assets.inspection.cycles.cancel');
+        Route::post('/assets/inspection/cycles/{cycle}/items', [App\Http\Controllers\EnvAssetInspectionController::class, 'storeItems'])->name('assets.inspection.cycles.items.store');
+        Route::put('/assets/inspection/cycles/{cycle}/dates', [App\Http\Controllers\EnvAssetInspectionController::class, 'updateDates'])->name('assets.inspection.cycles.dates');
+        Route::post('/assets/inspection/cycles/{cycle}/cancel-date', [App\Http\Controllers\EnvAssetInspectionController::class, 'cancelByDate'])->name('assets.inspection.cycles.cancel-date');
+        Route::put('/assets/inspection/cycles/{cycle}/items/{item}', [App\Http\Controllers\EnvAssetInspectionController::class, 'updateItem'])->name('assets.inspection.cycles.items.update');
+        Route::delete('/assets/inspection/cycles/{cycle}/items/{item}', [App\Http\Controllers\EnvAssetInspectionController::class, 'destroyItem'])->name('assets.inspection.cycles.items.destroy');
+        Route::post('/assets/inspection/cycles/{cycle}/complete', [App\Http\Controllers\EnvAssetInspectionController::class, 'completeCycle'])->name('assets.inspection.cycles.complete');
+        Route::get('/assets/inspection/cycles/{cycle}/prepare-pdf', [App\Http\Controllers\EnvAssetInspectionController::class, 'preparePdf'])->name('assets.inspection.cycles.prepare-pdf');
+        Route::get('/assets/inspection/cycles/{cycle}/result-pdf', [App\Http\Controllers\EnvAssetInspectionController::class, 'resultPdf'])->name('assets.inspection.cycles.result-pdf');
+        Route::get('/assets/report', [App\Http\Controllers\EnvAssetController::class, 'report'])->name('assets.report');
+        Route::get('/assets/report/pdf', [App\Http\Controllers\EnvAssetController::class, 'reportPdf'])->name('assets.report-pdf');
         Route::post('/assets', [App\Http\Controllers\EnvAssetController::class, 'store'])->name('assets.store');
         Route::put('/assets/{asset}', [App\Http\Controllers\EnvAssetController::class, 'update'])->name('assets.update');
+        Route::post('/assets/{asset}/change-status', [App\Http\Controllers\EnvAssetController::class, 'changeStatus'])->name('assets.change-status');
         Route::delete('/assets/{asset}', [App\Http\Controllers\EnvAssetController::class, 'destroy'])->name('assets.destroy');
 
         // PM Tracking
@@ -480,11 +601,18 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::put('/incidents/{incident}', [App\Http\Controllers\EnvIncidentController::class, 'update'])->name('incidents.update');
         Route::delete('/incidents/{incident}', [App\Http\Controllers\EnvIncidentController::class, 'destroy'])->name('incidents.destroy');
 
-        // Utility Monitoring
-        Route::get('/utility', [App\Http\Controllers\EnvUtilityController::class, 'index'])->name('utility.index');
-        Route::post('/utility/system', [App\Http\Controllers\EnvUtilityController::class, 'storeSystem'])->name('utility.store-system');
-        Route::post('/utility/checklist', [App\Http\Controllers\EnvUtilityController::class, 'storeChecklist'])->name('utility.store-checklist');
-        Route::post('/utility/check', [App\Http\Controllers\EnvUtilityController::class, 'storeCheck'])->name('utility.store-check');
+        // Utilities / สาธารณูปโภค
+        Route::get('/utilities', [App\Http\Controllers\EnvUtilityExpenseController::class, 'index'])->name('utilities.index');
+        Route::get('/utilities/pdf', [App\Http\Controllers\EnvUtilityExpenseController::class, 'pdf'])->name('utilities.pdf');
+        Route::get('/utilities/ac-pdf', [App\Http\Controllers\EnvUtilityExpenseController::class, 'acPdf'])->name('utilities.ac-pdf');
+        Route::get('/utilities/category/{code}', [App\Http\Controllers\EnvUtilityExpenseController::class, 'category'])->name('utilities.category');
+        Route::post('/utilities/entries', [App\Http\Controllers\EnvUtilityExpenseController::class, 'storeEntry'])->name('utilities.entries.store');
+        Route::post('/utilities/ac-meters/batch', [App\Http\Controllers\EnvUtilityExpenseController::class, 'storeAcMeterBatch'])->name('utilities.ac-meters.batch');
+        Route::delete('/utilities/entries/{entry}', [App\Http\Controllers\EnvUtilityExpenseController::class, 'destroyEntry'])->name('utilities.entries.destroy');
+        Route::get('/utilities/sp3', [App\Http\Controllers\EnvUtilityExpenseController::class, 'sp3'])->name('utilities.sp3');
+        Route::post('/utilities/sp3/unlock', [App\Http\Controllers\EnvUtilityExpenseController::class, 'unlockSp3'])->name('utilities.sp3.unlock');
+        Route::post('/utilities/sp3/lock', [App\Http\Controllers\EnvUtilityExpenseController::class, 'lockSp3'])->name('utilities.sp3.lock');
+        Route::get('/utilities/sp3/pdf', [App\Http\Controllers\EnvUtilityExpenseController::class, 'sp3Pdf'])->name('utilities.sp3.pdf');
     });
 
     // Knowledge Management (KM)
@@ -507,6 +635,7 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
             Route::get('/courses', [App\Http\Controllers\HrdController::class, 'index'])->name('courses.index');
             Route::get('/courses/create', [App\Http\Controllers\HrdController::class, 'create'])->name('courses.create');
             Route::post('/courses', [App\Http\Controllers\HrdController::class, 'store'])->name('courses.store');
+            Route::get('/courses/builder/quiz-template', [App\Http\Controllers\HrdCourseBuilderController::class, 'downloadQuizTemplate'])->name('courses.builder.quiz-template');
             Route::get('/courses/{course}', [App\Http\Controllers\HrdController::class, 'show'])->name('courses.show');
             Route::put('/courses/{course}', [App\Http\Controllers\HrdController::class, 'update'])->name('courses.update');
             Route::delete('/courses/{course}', [App\Http\Controllers\HrdController::class, 'destroy'])->name('courses.destroy');
@@ -519,6 +648,8 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
             // Builder
             Route::get('/courses/{course}/builder', [App\Http\Controllers\HrdCourseBuilderController::class, 'edit'])->name('courses.builder');
             Route::put('/courses/{course}/builder', [App\Http\Controllers\HrdCourseBuilderController::class, 'update'])->name('courses.builder.update');
+            Route::post('/courses/{course}/builder/upload', [App\Http\Controllers\HrdCourseBuilderController::class, 'upload'])->name('courses.builder.upload');
+            Route::post('/courses/{course}/builder/quiz-import', [App\Http\Controllers\HrdCourseBuilderController::class, 'importQuiz'])->name('courses.builder.quiz-import');
         });
     });
 
@@ -534,12 +665,15 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         // Pages
         Route::get('/', [App\Http\Controllers\Mra\MraController::class, 'index'])->name('index');
         Route::get('/dashboard', [App\Http\Controllers\Mra\MraController::class, 'dashboard'])->name('dashboard');
+        Route::get('/dashboard/export-pdf', [App\Http\Controllers\Mra\MraController::class, 'exportDashboardPdf'])->name('dashboard.export-pdf');
         Route::get('/reports', [App\Http\Controllers\Mra\MraController::class, 'reports'])->name('reports');
+        Route::get('/reports/export-pdf', [App\Http\Controllers\Mra\MraController::class, 'exportReportsPdf'])->name('reports.export-pdf');
         Route::get('/settings', [App\Http\Controllers\Mra\MraController::class, 'settings'])->name('settings');
         Route::get('/guide', [App\Http\Controllers\Mra\MraController::class, 'guide'])->name('guide');
         Route::get('/create', [App\Http\Controllers\Mra\MraController::class, 'create'])->name('create');
         Route::post('/', [App\Http\Controllers\Mra\MraController::class, 'store'])->name('store');
         Route::get('/{audit}', [App\Http\Controllers\Mra\MraController::class, 'show'])->name('show');
+        Route::get('/{audit}/export-pdf', [App\Http\Controllers\Mra\MraController::class, 'exportPdf'])->name('export-pdf');
         Route::get('/{audit}/audit', [App\Http\Controllers\Mra\MraController::class, 'audit'])->name('audit');
         Route::post('/{audit}/audit', [App\Http\Controllers\Mra\MraController::class, 'saveAuditResults'])->name('audit.save');
         Route::put('/{audit}', [App\Http\Controllers\Mra\MraController::class, 'update'])->name('update');
@@ -603,6 +737,18 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
     // Administrative Hub
     Route::get('/admin-hub', [App\Http\Controllers\AdminHubController::class, 'index'])->name('admin.hub');
 
+    // Leave Management (ระบบบันทึกการลา)
+    Route::prefix('administration/leave')->name('leave.')->group(function () {
+        Route::get('/', [App\Http\Controllers\LeaveRequestController::class, 'index'])->name('index');
+        Route::get('/create', [App\Http\Controllers\LeaveRequestController::class, 'create'])->name('create');
+        Route::post('/', [App\Http\Controllers\LeaveRequestController::class, 'store'])->name('store');
+        Route::get('/{leave}', [App\Http\Controllers\LeaveRequestController::class, 'show'])->name('show');
+        Route::post('/{leave}/approve', [App\Http\Controllers\LeaveRequestController::class, 'approve'])->name('approve');
+        Route::post('/{leave}/forward-director', [App\Http\Controllers\LeaveRequestController::class, 'forwardToDirector'])->name('forward-director');
+        Route::post('/{leave}/cancel', [App\Http\Controllers\LeaveRequestController::class, 'cancel'])->name('cancel');
+        Route::get('/{leave}/pdf', [App\Http\Controllers\LeaveRequestController::class, 'exportPdf'])->name('pdf');
+    });
+
     // HOSxP Reports
     Route::get('/hosxp-reports', [App\Http\Controllers\HosxpReportController::class, 'index'])->name('hosxp-reports.index');
     Route::get('/hosxp-reports/preview', [App\Http\Controllers\HosxpReportController::class, 'preview'])->name('hosxp-reports.preview');
@@ -619,7 +765,29 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
     Route::get('/server-monitor', [App\Http\Controllers\ServerMonitorController::class, 'index'])->name('server-monitor.index');
     Route::get('/server-monitor/metrics', [App\Http\Controllers\ServerMonitorController::class, 'metrics'])->name('server-monitor.metrics');
     Route::post('/server-monitor/check-now', [App\Http\Controllers\ServerMonitorController::class, 'checkNow'])->name('server-monitor.check-now');
+
+    // FortiGate Firewall (F100)
+    Route::get('/firewall', [App\Http\Controllers\Firewall\FirewallController::class, 'index'])->name('firewall.index');
+    Route::get('/firewall/metrics', [App\Http\Controllers\Firewall\FirewallController::class, 'metrics'])->name('firewall.metrics');
+    Route::post('/firewall/poll-now', [App\Http\Controllers\Firewall\FirewallController::class, 'pollNow'])->name('firewall.poll-now');
+    Route::get('/firewall/syslog/status', [App\Http\Controllers\Firewall\FirewallController::class, 'syslogStatus'])->name('firewall.syslog.status');
+    Route::post('/firewall/syslog/start', [App\Http\Controllers\Firewall\FirewallController::class, 'syslogStart'])->name('firewall.syslog.start');
+    Route::post('/firewall/syslog/stop', [App\Http\Controllers\Firewall\FirewallController::class, 'syslogStop'])->name('firewall.syslog.stop');
+    Route::get('/firewall/web-watch', [App\Http\Controllers\Firewall\FirewallController::class, 'webWatch'])->name('firewall.web-watch');
+    Route::get('/firewall/threats', [App\Http\Controllers\Firewall\FirewallController::class, 'threats'])->name('firewall.threats');
+    Route::get('/firewall/logs', [App\Http\Controllers\Firewall\FirewallController::class, 'logs'])->name('firewall.logs');
+    Route::get('/firewall/threat-intel', [App\Http\Controllers\Firewall\FirewallController::class, 'threatIntel'])->name('firewall.threat-intel');
+    Route::post('/firewall/threat-intel/sync', [App\Http\Controllers\Firewall\FirewallController::class, 'syncThreatIntel'])->name('firewall.threat-intel.sync');
+    Route::post('/firewall/threat-intel/custom', [App\Http\Controllers\Firewall\FirewallController::class, 'storeCustomIndicator'])->name('firewall.threat-intel.custom.store');
+    Route::delete('/firewall/threat-intel/custom/{id}', [App\Http\Controllers\Firewall\FirewallController::class, 'destroyCustomIndicator'])->name('firewall.threat-intel.custom.destroy');
 });
+
+// Organization Chat API (LIFF / Cloudflare Worker — ไม่ใช้ auth session ของเว็บ)
+Route::match(
+    ['get', 'post', 'options'],
+    '/organization-chat/api',
+    [App\Http\Controllers\OrganizationChatApiController::class, 'handle']
+)->name('organization-chat.api');
 
 // Locale switcher (outside auth)
 Route::get('/locale/{locale}', [LanguageController::class, 'switch'])->name('locale.switch');

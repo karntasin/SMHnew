@@ -34,8 +34,8 @@ export default function SettingsHub() {
       href: '/users',
       links: [
         { label: 'ผู้ใช้ทั้งหมด', href: '/users' },
+        { label: 'จัดการเจ้าหน้าที่', href: '/settings/staff' },
         { label: 'สร้างผู้ใช้ใหม่', href: '/users/create' },
-        { label: 'กำหนดบทบาทหลายคน', href: '/users/bulk-roles' },
       ]
     },
     {
@@ -67,7 +67,7 @@ export default function SettingsHub() {
     },
     {
       title: 'ตั้งค่าองค์กร',
-      description: 'จัดการตำแหน่ง ทีม และแผนก',
+      description: 'จัดการตำแหน่ง ทีม แผนก และรายชื่อผู้มีสิทธิ์เข้าใช้ระบบ',
       icon: Building2,
       color: 'text-orange-600',
       bg: 'bg-orange-100',
@@ -77,6 +77,7 @@ export default function SettingsHub() {
         { label: 'ตำแหน่ง', href: '/settings/positions' },
         { label: 'ทีม HA', href: '/settings/teamha' },
         { label: 'แผนก', href: '/settings/departments' },
+        { label: 'จัดการเจ้าหน้าที่', href: '/settings/staff' },
       ]
     },
     {
@@ -90,6 +91,7 @@ export default function SettingsHub() {
       links: [
         { label: 'ตั้งค่าทั่วไป', href: '/settingsapp' },
         { label: 'ตั้งค่าฐานข้อมูล', href: '/settingsapp/database' },
+        { label: 'LINE และอุโมงค์ HTTPS', href: '/settingsapp/database' },
       ]
     },
     {

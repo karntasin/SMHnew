@@ -25,6 +25,7 @@ import {
     ArrowLeft,
     X
 } from 'lucide-react';
+import { storageUrl } from '@/lib/asset';
 
 interface MaintenanceImage {
     id: number;
@@ -305,10 +306,10 @@ export default function Show({ maintenanceRequest, technicians = [], canAssign =
                                             <div 
                                                 key={img.id} 
                                                 className="relative group cursor-pointer"
-                                                onClick={() => setSelectedImage(`/storage/${img.image_path}`)}
+                                                onClick={() => setSelectedImage(storageUrl(img.image_path))}
                                             >
                                                 <img 
-                                                    src={`/storage/${img.image_path}`} 
+                                                    src={storageUrl(img.image_path)} 
                                                     alt={img.caption || 'รูปภาพแจ้งซ่อม'} 
                                                     className="rounded-lg border object-cover h-32 w-full transition-transform group-hover:scale-105"
                                                     onError={(e) => {

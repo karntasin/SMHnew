@@ -16,7 +16,7 @@ class DocumentNotification extends Notification
     protected $action;
     protected $actorName;
 
-    public function __construct(Document $document, string $action, string $actorName = '')
+    public function __construct(Document $document, string $action, string $actorName = '', public bool $forwardToFshhChat = true)
     {
         $this->document = $document;
         $this->action = $action;
@@ -34,10 +34,13 @@ class DocumentNotification extends Notification
             'register' => 'มีการลงทะเบียนหนังสือใหม่',
             'forward' => 'มีหนังสือส่งต่อถึงแผนกของคุณ',
             'submit_boss' => 'มีหนังสือนำเรียนเพื่อพิจารณา',
-            'approve' => 'หนังสือได้รับการอนุมัติ/สั่งการแล้ว',
-            'reject' => 'หนังสือถูกตีกลับ/ไม่อนุมัติ',
+            'approve' => 'ผู้อำนวยการอนุมัติหนังสือแล้ว',
+            'reject' => 'ผู้อำนวยการไม่อนุมัติ — ส่งกลับต้นทาง',
             'circular' => 'แจ้งเวียนหนังสือเพื่อทราบ',
-            'acknowledged' => 'หนังสือได้รับการรับทราบแล้ว',
+            'acknowledged' => 'แผนกรับหนังสือแล้ว',
+            'implementation_update' => 'แผนกอัปเดตสถานะการปฏิบัติ',
+            'return_origin' => 'แผนกแจ้งไม่เกี่ยวข้อง — ส่งกลับต้นทาง',
+            'completed' => 'หนังสือดำเนินการเสร็จสิ้นทุกแผนก',
             'reminder_sender' => '⚠️ หนังสือยังไม่ได้รับการรับทราบเกิน 3 ชั่วโมง',
             'reminder_receiver' => '⚠️ คุณมีหนังสือรอรับทราบเกิน 3 ชั่วโมง',
         ];
@@ -49,7 +52,7 @@ class DocumentNotification extends Notification
             $message .= " (โดย {$this->actorName})";
         }
 
-        $isUrgent = in_array($this->action, ['submit_boss', 'approve', 'reminder_sender', 'reminder_receiver']);
+        $isUrgent = in_array($this->action, ['submit_boss', 'approve', 'reject', 'return_origin', 'reminder_sender', 'reminder_receiver']);
 
         return [
             'title' => $title,

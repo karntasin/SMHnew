@@ -1,11 +1,23 @@
 import axios from 'axios';
+import { resolveAppUrl } from '@/lib/asset';
 
-// Configure axios defaults for ngrok
-axios.defaults.baseURL = window.location.origin;
-axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
-axios.defaults.withCredentials = true;
+const api = axios.create({
+    baseURL: window.location.origin,
+    withCredentials: true,
+    xsrfCookieName: 'XSRF-TOKEN',
+    xsrfHeaderName: 'X-XSRF-TOKEN',
+    headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        Accept: 'application/json',
+    },
+});
 
-// Axios automatically handles CSRF via the XSRF-TOKEN cookie set by Laravel
-// We do not need to manually set the header from the meta tag, as that can become stale in an SPA
+api.interceptors.request.use((config) => {
+    if (typeof config.url === 'string' && config.url.startsWith('/') && !config.url.startsWith('//')) {
+        config.url = resolveAppUrl(config.url);
+    }
 
-export default axios;
+    return config;
+});
+
+export default api;

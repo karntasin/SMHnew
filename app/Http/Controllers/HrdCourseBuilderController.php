@@ -8,9 +8,12 @@ use App\Models\HrdLesson;
 use App\Models\HrdQuiz;
 use App\Models\HrdQuestion;
 use App\Models\HrdAnswer;
+use App\Services\Hrd\HrdQuizExcelService;
 use Illuminate\Http\Request;
-use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Inertia\Inertia;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class HrdCourseBuilderController extends Controller
 {
@@ -50,12 +53,11 @@ class HrdCourseBuilderController extends Controller
 
             foreach ($data['modules'] as $moduleIndex => $moduleData) {
                 $module = null;
-                if (isset($moduleData['id'])) {
-                    $module = HrdModule::find($moduleData['id']);
-                    $updatedModuleIds[] = $module->id;
+                if (! empty($moduleData['id'])) {
+                    $module = HrdModule::where('course_id', $course->id)->find($moduleData['id']);
                 }
-                
-                if (!$module) {
+
+                if (! $module) {
                     $module = new HrdModule();
                     $module->course_id = $course->id;
                 }
@@ -63,6 +65,7 @@ class HrdCourseBuilderController extends Controller
                 $module->title = $moduleData['title'];
                 $module->order = $moduleIndex;
                 $module->save();
+                $updatedModuleIds[] = $module->id;
 
                 // 2. Sync Lessons
                 $existingLessonIds = $module->lessons()->pluck('id')->toArray();
@@ -71,12 +74,11 @@ class HrdCourseBuilderController extends Controller
                 if (isset($moduleData['lessons'])) {
                     foreach ($moduleData['lessons'] as $lessonIndex => $lessonData) {
                         $lesson = null;
-                        if (isset($lessonData['id'])) {
-                            $lesson = HrdLesson::find($lessonData['id']);
-                            $updatedLessonIds[] = $lesson->id;
+                        if (! empty($lessonData['id'])) {
+                            $lesson = HrdLesson::where('module_id', $module->id)->find($lessonData['id']);
                         }
 
-                        if (!$lesson) {
+                        if (! $lesson) {
                             $lesson = new HrdLesson();
                             $lesson->module_id = $module->id;
                         }
@@ -85,8 +87,12 @@ class HrdCourseBuilderController extends Controller
                         $lesson->type = $lessonData['type'];
                         $lesson->content = $lessonData['content'] ?? '';
                         $lesson->video_url = $lessonData['video_url'] ?? null;
+                        if (array_key_exists('file_path', $lessonData)) {
+                            $lesson->file_path = $lessonData['file_path'] ?: null;
+                        }
                         $lesson->order = $lessonIndex;
                         $lesson->save();
+                        $updatedLessonIds[] = $lesson->id;
 
                         // 3. Sync Quiz (if type is quiz)
                         if ($lesson->type === 'quiz' && isset($lessonData['quiz'])) {
@@ -100,7 +106,10 @@ class HrdCourseBuilderController extends Controller
                             
                             $quiz->title = $quizData['title'] ?? $lesson->title;
                             $quiz->description = $quizData['description'] ?? '';
-                            $quiz->passing_score = $quizData['passing_score'] ?? 50;
+                            $quiz->passing_score = $quizData['passing_score'] ?? 70;
+                            $quiz->randomize_questions = array_key_exists('randomize_questions', $quizData)
+                                ? (bool) $quizData['randomize_questions']
+                                : true;
                             $quiz->save();
 
                             // 4. Sync Questions
@@ -174,6 +183,78 @@ class HrdCourseBuilderController extends Controller
             HrdModule::destroy($modulesToDelete);
         });
 
-        return redirect()->route('km.learn.courses.show', $course->id)->with('success', 'Course structure updated successfully.');
+        return redirect()
+            ->route('km.learn.courses.builder', $course->id)
+            ->with('success', 'บันทึกเนื้อหาหลักสูตรเรียบร้อย');
+    }
+
+    public function upload(Request $request, HrdCourse $course)
+    {
+        if (! auth()->user()->hasRole(['admin', 'header', 'Admin', 'Header'])) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $request->validate([
+            'file' => 'required|file|max:20480|mimes:pdf,doc,docx,ppt,pptx,xls,xlsx,txt,png,jpg,jpeg,gif,zip',
+        ]);
+
+        $path = $request->file('file')->store('hrd/lessons/'.$course->id, 'public');
+
+        return response()->json([
+            'path' => $path,
+            'url' => Storage::disk('public')->url($path),
+            'name' => $request->file('file')->getClientOriginalName(),
+            'size' => $request->file('file')->getSize(),
+        ]);
+    }
+
+    public function downloadQuizTemplate(HrdQuizExcelService $excel): StreamedResponse
+    {
+        if (! auth()->user()->hasRole(['admin', 'header', 'Admin', 'Header'])) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        return $excel->downloadTemplate();
+    }
+
+    public function importQuiz(Request $request, HrdCourse $course, HrdQuizExcelService $excel)
+    {
+        if (! auth()->user()->hasRole(['admin', 'header', 'Admin', 'Header'])) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $request->validate([
+            'file' => 'required|file|max:10240|mimes:xlsx,xls,csv',
+            'mode' => 'nullable|in:append,replace',
+        ]);
+
+        $uploaded = $request->file('file');
+        $stored = $uploaded->storeAs(
+            'hrd/quiz-imports/tmp',
+            uniqid('quiz_', true).'.'.$uploaded->getClientOriginalExtension(),
+            'local'
+        );
+        $absolute = Storage::disk('local')->path($stored);
+
+        try {
+            $parsed = $excel->parse($absolute);
+        } finally {
+            Storage::disk('local')->delete($stored);
+        }
+
+        if ($parsed['questions'] === [] && $parsed['errors'] !== []) {
+            return response()->json([
+                'message' => 'นำเข้าไม่สำเร็จ',
+                'errors' => $parsed['errors'],
+                'questions' => [],
+            ], 422);
+        }
+
+        return response()->json([
+            'message' => 'อ่านไฟล์สำเร็จ '.count($parsed['questions']).' คำถาม',
+            'questions' => $parsed['questions'],
+            'errors' => $parsed['errors'],
+            'mode' => $request->input('mode', 'append'),
+        ]);
     }
 }

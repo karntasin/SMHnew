@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, Check, CheckCheck, Info, AlertTriangle, XCircle, CheckCircle, Car, Wrench, CalendarDays } from 'lucide-react';
+import { Bell, Check, CheckCheck, Info, AlertTriangle, XCircle, CheckCircle, Car, Wrench, CalendarDays, Stethoscope } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -12,15 +12,15 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import axios from 'axios';
+import axios from '@/lib/axios';
 import { Link, usePage, router } from '@inertiajs/react';
 import { cn } from '@/lib/utils';
 
 interface Notification {
     id: string;
-    data: {
-        title: string;
-        message: string;
+    data?: {
+        title?: string;
+        message?: string;
         action_url?: string;
         url?: string;
         action_text?: string;
@@ -46,7 +46,7 @@ export default function NotificationDropdown() {
         }
         
         try {
-            const response = await axios.get('/notifications/api');
+            const response = await axios.get(route('notifications.api'));
             // Combine unread and read notifications
             const unread = response.data?.unread_notifications || [];
             const read = response.data?.read_notifications || [];
@@ -77,7 +77,7 @@ export default function NotificationDropdown() {
 
     const markAsRead = async (id: string) => {
         try {
-            await axios.post(`/notifications/${id}/read`);
+            await axios.post(route('notifications.read', id));
             setNotifications(notifications.map(n => 
                 n.id === id ? { ...n, read_at: new Date().toISOString() } : n
             ));
@@ -90,7 +90,7 @@ export default function NotificationDropdown() {
     const markAllAsRead = async () => {
         try {
             setLoading(true);
-            await axios.post('/notifications/read-all');
+            await axios.post(route('notifications.read-all'));
             setNotifications(notifications.map(n => ({ ...n, read_at: new Date().toISOString() })));
             setUnreadCount(0);
         } catch (error) {
@@ -109,12 +109,13 @@ export default function NotificationDropdown() {
             case 'vehicle_booking_status': return <Car className="h-4 w-4 text-blue-500" />;
             case 'room_booking': return <CalendarDays className="h-4 w-4 text-purple-500" />;
             case 'maintenance': return <Wrench className="h-4 w-4 text-orange-500" />;
+            case 'equipment_borrowing': return <Stethoscope className="h-4 w-4 text-teal-500" />;
             default: return <Info className="h-4 w-4 text-blue-500" />;
         }
     };
 
     const handleNotificationClick = (notification: Notification) => {
-        const url = notification.data.action_url || notification.data.url;
+        const url = notification.data?.action_url || notification.data?.url;
         if (url) {
             if (!notification.read_at) {
                 markAsRead(notification.id);
@@ -156,7 +157,8 @@ export default function NotificationDropdown() {
                     {notifications.length > 0 ? (
                         <div className="flex flex-col">
                             {notifications.map((notification) => {
-                                const hasLink = notification.data.action_url || notification.data.url;
+                                const data = notification.data || {};
+                                const hasLink = data.action_url || data.url;
                                 return (
                                     <div 
                                         key={notification.id} 
@@ -168,7 +170,7 @@ export default function NotificationDropdown() {
                                         onClick={() => hasLink && handleNotificationClick(notification)}
                                     >
                                         <div className="mt-1 flex-shrink-0">
-                                            {getIcon(notification.data.type)}
+                                            {getIcon(data.type)}
                                         </div>
                                         <div className="flex-1 space-y-1">
                                             <div className="flex items-start justify-between gap-2">
@@ -177,18 +179,18 @@ export default function NotificationDropdown() {
                                                     !notification.read_at && "text-primary",
                                                     hasLink && "hover:underline"
                                                 )}>
-                                                    {notification.data.title}
+                                                    {data.title}
                                                 </p>
                                                 <span className="text-xs text-muted-foreground whitespace-nowrap">
                                                     {notification.created_at}
                                                 </span>
                                             </div>
                                             <p className="text-sm text-muted-foreground line-clamp-2 whitespace-pre-line">
-                                                {notification.data.message}
+                                                {data.message}
                                             </p>
                                             {hasLink && (
                                                 <span className="text-xs text-primary hover:underline inline-block mt-1">
-                                                    {notification.data.action_text || 'ดูรายละเอียด →'}
+                                                    {data.action_text || 'ดูรายละเอียด →'}
                                                 </span>
                                             )}
                                         </div>

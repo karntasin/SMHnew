@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowLeft, Save } from 'lucide-react';
+import { storageUrl } from '@/lib/asset';
 
 interface Category {
     id: number;
@@ -155,7 +156,7 @@ export default function Edit({ vehicle, categories }: Props) {
                                 <Label htmlFor="image">รูปภาพรถ (อัปโหลดใหม่เพื่อเปลี่ยน)</Label>
                                 {vehicle.image && (
                                     <div className="mb-2">
-                                        <img src={`/storage/${vehicle.image}`} alt="Current" className="h-20 rounded" />
+                                        <img src={storageUrl(vehicle.image)} alt="Current" className="h-20 rounded" />
                                     </div>
                                 )}
                                 <Input 

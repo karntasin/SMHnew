@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Trash2 } from 'lucide-react';
+import MaintenanceSubNav from './MaintenanceSubNav';
 
 interface SettingsProps {
     categories: any[];
@@ -23,8 +24,19 @@ export default function Settings({ categories, priorities }: SettingsProps) {
         ]}>
             <Head title="ตั้งค่าระบบแจ้งซ่อม" />
 
-            <div className="p-6">
-                <div className="flex space-x-2 mb-6">
+            <div className="relative min-h-screen overflow-hidden">
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(249,115,22,0.14),_transparent_55%),radial-gradient(ellipse_at_bottom_right,_rgba(245,158,11,0.10),_transparent_45%)]" />
+                <div className="pointer-events-none absolute -left-24 top-24 h-72 w-72 rounded-full bg-orange-300/15 blur-3xl" />
+
+                <div className="relative container mx-auto space-y-6 px-4 py-6">
+                    <MaintenanceSubNav active="maintenance.settings.index" />
+
+                    <div>
+                        <h1 className="text-2xl font-bold text-slate-800">ตั้งค่าระบบแจ้งซ่อม</h1>
+                        <p className="text-sm text-slate-500">จัดการหมวดหมู่และระดับความสำคัญ</p>
+                    </div>
+
+                    <div className="flex space-x-2">
                     <Button 
                         variant={activeTab === 'categories' ? 'default' : 'outline'}
                         onClick={() => setActiveTab('categories')}
@@ -41,6 +53,7 @@ export default function Settings({ categories, priorities }: SettingsProps) {
 
                 {activeTab === 'categories' && <CategorySettings categories={categories} />}
                 {activeTab === 'priorities' && <PrioritySettings priorities={priorities} />}
+                </div>
             </div>
         </AppLayout>
     );

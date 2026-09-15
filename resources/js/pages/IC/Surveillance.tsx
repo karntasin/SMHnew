@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Head, useForm, router } from '@inertiajs/react';
-import AppLayout from '@/layouts/app-layout';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { useForm, router } from '@inertiajs/react';
+import { QualityPage, StatCard, Panel, EmptyState } from '@/components/quality/quality-ui';
+import IcSubNav from '@/pages/IC/IcSubNav';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,14 +22,6 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
-import {
     Search,
     Plus,
     Loader2,
@@ -37,7 +29,6 @@ import {
     AlertTriangle,
     CheckCircle2,
     XCircle,
-    Filter,
     Calendar,
     User,
     Building,
@@ -48,7 +39,7 @@ import {
     ChevronRight,
     Sparkles,
 } from 'lucide-react';
-import axios from 'axios';
+import axios from '@/lib/axios';
 import { toast } from 'sonner';
 
 interface Log {
@@ -217,52 +208,18 @@ export default function Surveillance({ logs, stats, filters }: Props) {
         { value: 'Other', label: 'Other', desc: 'อื่นๆ', icon: '📋' },
     ];
 
-    const breadcrumbs = [
-        { title: 'IC', href: '/ic' },
-        { title: 'Surveillance', href: '#' },
-    ];
-
-    return (
-        <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="IC Surveillance" />
-
-            <div className="flex flex-col min-h-screen">
-                {/* Hero Header */}
-                <div className="relative overflow-hidden bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-600 text-white">
-                    <div className="absolute inset-0 bg-grid-white/10"></div>
-                    <div className="absolute -top-24 -right-24 w-96 h-96 bg-white/10 rounded-full blur-3xl"></div>
-                    <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-white/10 rounded-full blur-3xl"></div>
-
-                    <div className="relative px-6 py-8">
-                        <div className="flex items-center justify-between mb-6">
-                            <div className="flex items-center gap-4">
-                                <div className="p-3 bg-white/20 backdrop-blur-sm rounded-2xl">
-                                    <Activity className="h-10 w-10" />
-                                </div>
-                                <div>
-                                    <h1 className="text-3xl font-bold tracking-tight">
-                                        ระบบเฝ้าระวังการติดเชื้อ
-                                    </h1>
-                                    <p className="text-white/80 text-lg">
-                                        Infection Surveillance System
-                                    </p>
-                                </div>
-                            </div>
-
-                            <Dialog open={isOpen} onOpenChange={(open) => {
-                                setIsOpen(open);
-                                if (!open) resetForm();
-                            }}>
-                                <DialogTrigger asChild>
-                                    <Button
-                                        size="lg"
-                                        className="gap-2 bg-white text-emerald-600 hover:bg-white/90 shadow-lg"
-                                    >
-                                        <Plus className="h-5 w-5" />
-                                        <span className="hidden sm:inline">บันทึกเคสใหม่</span>
-                                        <span className="sm:hidden">เพิ่ม</span>
-                                    </Button>
-                                </DialogTrigger>
+    const addCaseDialog = (
+        <Dialog open={isOpen} onOpenChange={(open) => {
+            setIsOpen(open);
+            if (!open) resetForm();
+        }}>
+            <DialogTrigger asChild>
+                <Button className="gap-2 rounded-xl bg-rose-600 hover:bg-rose-700">
+                    <Plus className="h-4 w-4" />
+                    <span className="hidden sm:inline">บันทึกเคสใหม่</span>
+                    <span className="sm:hidden">เพิ่ม</span>
+                </Button>
+            </DialogTrigger>
                                 <DialogContent className="max-w-3xl max-h-[95vh] overflow-y-auto">
                                     <DialogHeader className="pb-4 border-b">
                                         <DialogTitle className="flex items-center gap-2 text-xl">
@@ -537,81 +494,43 @@ export default function Surveillance({ logs, stats, filters }: Props) {
                                         </div>
                                     </div>
                                 </DialogContent>
-                            </Dialog>
-                        </div>
+        </Dialog>
+    );
 
-                        {/* Stats Cards */}
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 hover:bg-white/20 transition-colors">
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-white/20 rounded-lg">
-                                        <FileText className="h-5 w-5" />
-                                    </div>
-                                    <div>
-                                        <div className="text-white/70 text-sm">บันทึกทั้งหมด</div>
-                                        <div className="text-2xl font-bold">{stats?.total || 0}</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 hover:bg-white/20 transition-colors">
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-red-500/30 rounded-lg">
-                                        <AlertTriangle className="h-5 w-5" />
-                                    </div>
-                                    <div>
-                                        <div className="text-white/70 text-sm">ยืนยันการติดเชื้อ</div>
-                                        <div className="text-2xl font-bold text-red-200">{stats?.confirmed || 0}</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 hover:bg-white/20 transition-colors">
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-yellow-500/30 rounded-lg">
-                                        <Clock className="h-5 w-5" />
-                                    </div>
-                                    <div>
-                                        <div className="text-white/70 text-sm">กำลังสงสัย</div>
-                                        <div className="text-2xl font-bold text-yellow-200">{stats?.suspected || 0}</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 hover:bg-white/20 transition-colors">
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-white/20 rounded-lg">
-                                        <TrendingUp className="h-5 w-5" />
-                                    </div>
-                                    <div>
-                                        <div className="text-white/70 text-sm">เดือนนี้</div>
-                                        <div className="text-2xl font-bold">{stats?.this_month || 0}</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+    return (
+        <QualityPage
+            tone="rose"
+            icon={Activity}
+            badge="ศูนย์พัฒนาคุณภาพ · IC"
+            title="ระบบเฝ้าระวังการติดเชื้อ"
+            subtitle="Infection Surveillance System"
+            headTitle="IC Surveillance"
+            breadcrumbs={[
+                { title: 'ศูนย์พัฒนาคุณภาพ', href: '/quality' },
+                { title: 'Infection Control (IC)', href: '/ic' },
+                { title: 'เฝ้าระวัง', href: '/ic/surveillance' },
+            ]}
+            subNav={<IcSubNav active="ic.surveillance" />}
+            actions={addCaseDialog}
+        >
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                <StatCard label="บันทึกทั้งหมด" value={stats?.total || 0} icon={FileText} tone="slate" />
+                <StatCard label="ยืนยันการติดเชื้อ" value={stats?.confirmed || 0} icon={AlertTriangle} tone="rose" />
+                <StatCard label="กำลังสงสัย" value={stats?.suspected || 0} icon={Clock} tone="amber" />
+                <StatCard label="เดือนนี้" value={stats?.this_month || 0} icon={TrendingUp} tone="sky" />
+            </div>
 
-                {/* Main Content */}
-                <div className="flex-1 p-6 space-y-6 bg-gray-50 dark:bg-gray-900">
                     {/* Filters */}
-                    <Card>
-                        <CardHeader className="pb-3">
-                            <div className="flex items-center justify-between">
-                                <CardTitle className="text-lg flex items-center gap-2">
-                                    <Filter className="h-5 w-5" />
-                                    ตัวกรองข้อมูล
-                                </CardTitle>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => setShowFilters(!showFilters)}
-                                >
-                                    {showFilters ? 'ซ่อน' : 'แสดง'}
-                                </Button>
-                            </div>
-                        </CardHeader>
+                    <Panel
+                        title="ตัวกรองข้อมูล"
+                        action={
+                            <Button variant="ghost" size="sm" className="rounded-xl" onClick={() => setShowFilters(!showFilters)}>
+                                {showFilters ? 'ซ่อน' : 'แสดง'}
+                            </Button>
+                        }
+                    >
                         {showFilters && (
-                            <CardContent>
-                                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                                <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
                                     <Select
                                         value={filters?.status || ''}
                                         onValueChange={(v) =>
@@ -670,110 +589,88 @@ export default function Surveillance({ logs, stats, filters }: Props) {
                                         }
                                         placeholder="ถึงวันที่"
                                     />
-                                    <Button
-                                        variant="outline"
-                                        onClick={() => router.get('/ic/surveillance')}
-                                    >
+                                    <Button variant="outline" className="rounded-xl" onClick={() => router.get('/ic/surveillance')}>
                                         ล้างตัวกรอง
                                     </Button>
                                 </div>
-                            </CardContent>
                         )}
-                    </Card>
+                    </Panel>
 
-                    {/* Data Table */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <Activity className="h-5 w-5 text-emerald-600" />
-                                รายการเฝ้าระวังการติดเชื้อ
-                            </CardTitle>
-                            <CardDescription>
-                                แสดง {logs?.data?.length || 0} รายการ
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="rounded-xl border overflow-hidden">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow className="bg-muted/50">
-                                            <TableHead>วันที่วินิจฉัย</TableHead>
-                                            <TableHead>ผู้ป่วย</TableHead>
-                                            <TableHead>หอผู้ป่วย</TableHead>
-                                            <TableHead>ประเภท</TableHead>
-                                            <TableHead>เชื้อก่อโรค</TableHead>
-                                            <TableHead>สถานะ</TableHead>
-                                            <TableHead>ผู้รายงาน</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
+                    <Panel title="รายการเฝ้าระวังการติดเชื้อ" description={`แสดง ${logs?.data?.length || 0} รายการ`}>
+                            <div className="overflow-hidden rounded-xl border border-slate-200">
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="border-b border-slate-100 text-left text-xs uppercase text-slate-400">
+                                            <th className="p-3">วันที่วินิจฉัย</th>
+                                            <th className="p-3">ผู้ป่วย</th>
+                                            <th className="p-3">หอผู้ป่วย</th>
+                                            <th className="p-3">ประเภท</th>
+                                            <th className="p-3">เชื้อก่อโรค</th>
+                                            <th className="p-3">สถานะ</th>
+                                            <th className="p-3">ผู้รายงาน</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
                                         {!logs?.data || logs.data.length === 0 ? (
-                                            <TableRow>
-                                                <TableCell colSpan={7} className="text-center py-12">
-                                                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                                                        <Activity className="h-12 w-12 opacity-20" />
-                                                        <p>ไม่พบข้อมูลการเฝ้าระวัง</p>
-                                                        <Button
-                                                            variant="link"
-                                                            onClick={() => setIsOpen(true)}
-                                                        >
+                                            <tr>
+                                                <td colSpan={7}>
+                                                    <EmptyState text="ไม่พบข้อมูลการเฝ้าระวัง" />
+                                                    <div className="pb-4 text-center">
+                                                        <Button variant="link" className="text-rose-600" onClick={() => setIsOpen(true)}>
                                                             + บันทึกเคสแรก
                                                         </Button>
                                                     </div>
-                                                </TableCell>
-                                            </TableRow>
+                                                </td>
+                                            </tr>
                                         ) : (
                                             logs.data.map((log) => (
-                                                <TableRow key={log.id} className="hover:bg-muted/50 transition-colors">
-                                                    <TableCell>
+                                                <tr key={log.id} className="border-t border-slate-100 hover:bg-slate-50/60">
+                                                    <td className="p-3">
                                                         <div className="flex items-center gap-2">
-                                                            <Calendar className="h-4 w-4 text-muted-foreground" />
+                                                            <Calendar className="h-4 w-4 text-slate-400" />
                                                             {new Date(log.infection_date).toLocaleDateString('th-TH')}
                                                         </div>
-                                                    </TableCell>
-                                                    <TableCell>
+                                                    </td>
+                                                    <td className="p-3">
                                                         <div className="flex items-center gap-3">
-                                                            <div className="w-9 h-9 bg-emerald-100 rounded-full flex items-center justify-center">
-                                                                <User className="h-4 w-4 text-emerald-600" />
+                                                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-rose-50">
+                                                                <User className="h-4 w-4 text-rose-600" />
                                                             </div>
                                                             <div>
                                                                 <div className="font-medium">{log.patient_name}</div>
-                                                                <div className="text-xs text-muted-foreground">
+                                                                <div className="text-xs text-slate-500">
                                                                     HN: {log.hn}
                                                                 </div>
                                                             </div>
                                                         </div>
-                                                    </TableCell>
-                                                    <TableCell>
+                                                    </td>
+                                                    <td className="p-3">
                                                         <div className="flex items-center gap-1">
-                                                            <Building className="h-4 w-4 text-muted-foreground" />
+                                                            <Building className="h-4 w-4 text-slate-400" />
                                                             {log.ward_name || '-'}
                                                         </div>
-                                                    </TableCell>
-                                                    <TableCell>{getInfectionTypeBadge(log.infection_type)}</TableCell>
-                                                    <TableCell>
+                                                    </td>
+                                                    <td className="p-3">{getInfectionTypeBadge(log.infection_type)}</td>
+                                                    <td className="p-3">
                                                         {log.organism ? (
-                                                            <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+                                                            <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
                                                                 {log.organism}
                                                             </Badge>
                                                         ) : (
-                                                            <span className="text-muted-foreground">-</span>
+                                                            <span className="text-slate-400">-</span>
                                                         )}
-                                                    </TableCell>
-                                                    <TableCell>{getStatusBadge(log.status)}</TableCell>
-                                                    <TableCell>
+                                                    </td>
+                                                    <td className="p-3">{getStatusBadge(log.status)}</td>
+                                                    <td className="p-3">
                                                         <div className="text-sm">{log.reporter?.name || '-'}</div>
-                                                    </TableCell>
-                                                </TableRow>
+                                                    </td>
+                                                </tr>
                                             ))
                                         )}
-                                    </TableBody>
-                                </Table>
+                                    </tbody>
+                                </table>
                             </div>
-                        </CardContent>
-                    </Card>
-                </div>
-            </div>
-        </AppLayout>
+                    </Panel>
+        </QualityPage>
     );
 }

@@ -1,7 +1,9 @@
 .DS_Store
 .env
+.env.*.bak*
 .env.backup
 .env.production
+organization-chat/.chat-sync-secret
 .phpactor.json
 .phpunit.result.cache
 /.fleet
@@ -16,10 +18,17 @@
 /public/hot
 /public/storage
 /storage/*.key
+/storage/app/google/*.json
+/storage/fonts
 /storage/pail
 /vendor
+/.php82
+/cloudflared.exe
+/cloudflared.exe.download
+/deploy/cloudflare/config.yml
 auth.json
 Homestead.json
 Homestead.yaml
 npm-debug.log
 yarn-error.log
+tmp_*.php

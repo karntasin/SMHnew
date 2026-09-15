@@ -1,18 +1,22 @@
 import { Link } from '@inertiajs/react';
-import { FileCheck2, Upload } from 'lucide-react';
+import { FileCheck2, FileSpreadsheet, ShieldAlert, Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Props {
     dashboardUrl: string;
     importUrl: string;
+    stmUrl?: string;
+    precheckUrl?: string;
     importLabel?: string;
-    active: 'dashboard' | 'import';
+    active: 'dashboard' | 'import' | 'stm' | 'precheck';
     disabledImport?: boolean;
 }
 
 export default function ClaimModuleSubNav({
     dashboardUrl,
     importUrl,
+    stmUrl,
+    precheckUrl,
     importLabel = 'นำเข้าไฟล์',
     active,
     disabledImport = false,
@@ -26,14 +30,38 @@ export default function ClaimModuleSubNav({
             icon: FileCheck2,
             disabled: false,
         },
+        ...(precheckUrl
+            ? [
+                  {
+                      key: 'precheck' as const,
+                      label: 'ตรวจก่อนเบิก',
+                      hint: 'C Deny / ครบถ้วน',
+                      href: precheckUrl,
+                      icon: ShieldAlert,
+                      disabled: false,
+                  },
+              ]
+            : []),
         {
             key: 'import' as const,
             label: importLabel,
-            hint: 'อัปโหลดเฉพาะสิทธิ์นี้',
+            hint: 'e-Claim / REP',
             href: importUrl,
             icon: Upload,
             disabled: disabledImport,
         },
+        ...(stmUrl
+            ? [
+                  {
+                      key: 'stm' as const,
+                      label: 'นำเข้า STM',
+                      hint: 'เลขที่นำเบิก',
+                      href: stmUrl,
+                      icon: FileSpreadsheet,
+                      disabled: false,
+                  },
+              ]
+            : []),
     ];
 
     return (

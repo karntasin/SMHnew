@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Head, useForm, router } from '@inertiajs/react';
-import AppLayout from '@/layouts/app-layout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useForm, router } from '@inertiajs/react';
+import { QualityPage, StatCard, Panel, EmptyState } from '@/components/quality/quality-ui';
+import IcSubNav from '@/pages/IC/IcSubNav';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,14 +21,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
 import {
     Microscope,
     Plus,
@@ -125,42 +117,13 @@ export default function Environment({ checks, stats, filters }: Props) {
         }
     };
 
-    const breadcrumbs = [
-        { title: 'IC', href: '/ic' },
-        { title: 'Environment Check', href: '#' },
-    ];
-
-    return (
-        <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="Environment Check - IC" />
-
-            <div className="flex flex-col min-h-screen">
-                {/* Hero Header */}
-                <div className="relative overflow-hidden bg-gradient-to-br from-purple-600 via-violet-600 to-indigo-700 text-white">
-                    <div className="absolute inset-0 bg-grid-white/10"></div>
-                    <div className="absolute -top-24 -right-24 w-96 h-96 bg-white/10 rounded-full blur-3xl"></div>
-
-                    <div className="relative px-6 py-8">
-                        <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-4">
-                                <div className="p-3 bg-white/20 backdrop-blur-sm rounded-2xl">
-                                    <Microscope className="h-10 w-10" />
-                                </div>
-                                <div>
-                                    <h1 className="text-3xl font-bold tracking-tight">
-                                        Environment Surveillance
-                                    </h1>
-                                    <p className="text-white/80 text-lg">
-                                        การตรวจสอบสิ่งแวดล้อมและอุปกรณ์
-                                    </p>
-                                </div>
-                            </div>
-                            <Dialog open={isOpen} onOpenChange={setIsOpen}>
-                                <DialogTrigger asChild>
-                                    <Button className="gap-2 bg-white text-purple-600 hover:bg-white/90">
-                                        <Plus className="h-4 w-4" /> บันทึกการตรวจ
-                                    </Button>
-                                </DialogTrigger>
+    const checkDialog = (
+        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+            <DialogTrigger asChild>
+                <Button className="gap-2 rounded-xl bg-rose-600 hover:bg-rose-700">
+                    <Plus className="h-4 w-4" /> บันทึกการตรวจ
+                </Button>
+            </DialogTrigger>
                                 <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                                     <DialogHeader>
                                         <DialogTitle>บันทึกการตรวจสอบสิ่งแวดล้อม</DialogTitle>
@@ -303,55 +266,53 @@ export default function Environment({ checks, stats, filters }: Props) {
                                             />
                                         </div>
 
-                                        <Button type="submit" className="w-full" disabled={processing}>
+                                        <Button type="submit" className="w-full rounded-xl bg-rose-600 hover:bg-rose-700" disabled={processing}>
                                             บันทึกข้อมูล
                                         </Button>
                                     </form>
                                 </DialogContent>
-                            </Dialog>
-                        </div>
+        </Dialog>
+    );
 
-                        {/* Stats */}
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
-                            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                                <div className="text-white/70 text-sm mb-1">ตรวจทั้งหมด</div>
-                                <div className="text-3xl font-bold">{stats.total_checks}</div>
-                            </div>
-                            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                                <div className="text-white/70 text-sm mb-1">เดือนนี้</div>
-                                <div className="text-3xl font-bold">{stats.this_month}</div>
-                            </div>
-                            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                                <div className="text-white/70 text-sm mb-1">อัตราผ่าน</div>
-                                <div className="text-3xl font-bold flex items-center gap-2">
-                                    {stats.pass_rate}%
-                                    {stats.pass_rate >= 90 ? (
-                                        <CheckCircle2 className="h-6 w-6 text-green-300" />
-                                    ) : (
-                                        <AlertTriangle className="h-6 w-6 text-yellow-300" />
-                                    )}
-                                </div>
-                            </div>
-                            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                                <div className="text-white/70 text-sm mb-1">พื้นที่ไม่ผ่าน</div>
-                                <div className="text-3xl font-bold text-red-300">{stats.failed_areas.length}</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+    return (
+        <QualityPage
+            tone="rose"
+            icon={Microscope}
+            badge="ศูนย์พัฒนาคุณภาพ · IC"
+            title="Environment Surveillance"
+            subtitle="การตรวจสอบสิ่งแวดล้อมและอุปกรณ์"
+            headTitle="Environment Check - IC"
+            breadcrumbs={[
+                { title: 'ศูนย์พัฒนาคุณภาพ', href: '/quality' },
+                { title: 'Infection Control (IC)', href: '/ic' },
+                { title: 'สิ่งแวดล้อม', href: '/ic/environment' },
+            ]}
+            subNav={<IcSubNav active="ic.environment" />}
+            actions={checkDialog}
+        >
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                <StatCard label="ตรวจทั้งหมด" value={stats.total_checks} icon={Microscope} tone="slate" />
+                <StatCard label="เดือนนี้" value={stats.this_month} icon={Clock} tone="sky" />
+                <StatCard
+                    label="อัตราผ่าน"
+                    value={
+                        <span className="flex items-center gap-2">
+                            {stats.pass_rate}%
+                            {stats.pass_rate >= 90 ? (
+                                <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                            ) : (
+                                <AlertTriangle className="h-5 w-5 text-amber-500" />
+                            )}
+                        </span>
+                    }
+                    icon={CheckCircle2}
+                    tone="emerald"
+                />
+                <StatCard label="พื้นที่ไม่ผ่าน" value={stats.failed_areas.length} icon={XCircle} tone="rose" />
+            </div>
 
-                {/* Main Content */}
-                <div className="flex-1 p-6 space-y-6 bg-gray-50 dark:bg-gray-900">
-                    {/* Failed Areas Alert */}
                     {stats.failed_areas.length > 0 && (
-                        <Card className="border-red-200 bg-red-50">
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2 text-red-600">
-                                    <AlertTriangle className="h-5 w-5" />
-                                    พื้นที่ที่ต้องแก้ไข (เดือนนี้)
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
+                        <Panel title="พื้นที่ที่ต้องแก้ไข (เดือนนี้)" className="border-rose-200 bg-rose-50/50">
                                 <div className="flex flex-wrap gap-2">
                                     {stats.failed_areas.map((area, index) => (
                                         <Badge key={index} variant="destructive">
@@ -359,38 +320,34 @@ export default function Environment({ checks, stats, filters }: Props) {
                                         </Badge>
                                     ))}
                                 </div>
-                            </CardContent>
-                        </Card>
+                        </Panel>
                     )}
 
-                    {/* Stats by Type */}
                     <div className="grid gap-4 md:grid-cols-4">
                         {checkTypes.map((type) => {
                             const count = stats.by_type.find(t => t.check_type === type.value)?.total || 0;
                             return (
-                                <Card key={type.value}>
-                                    <CardContent className="pt-6">
-                                        <div className="text-center">
-                                            <div className="text-3xl font-bold">{count}</div>
-                                            <p className="text-sm text-muted-foreground">{type.label.split('(')[0]}</p>
-                                        </div>
-                                    </CardContent>
-                                </Card>
+                                <StatCard
+                                    key={type.value}
+                                    label={type.label.split('(')[0].trim()}
+                                    value={count}
+                                    icon={Microscope}
+                                    tone="violet"
+                                />
                             );
                         })}
                     </div>
 
-                    {/* Table */}
-                    <Card>
-                        <CardHeader>
-                            <div className="flex items-center justify-between">
-                                <CardTitle>ประวัติการตรวจ</CardTitle>
-                                <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)}>
-                                    <Filter className="h-4 w-4 mr-1" /> กรอง
-                                </Button>
-                            </div>
+                    <Panel
+                        title="ประวัติการตรวจ"
+                        action={
+                            <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setShowFilters(!showFilters)}>
+                                <Filter className="mr-1 h-4 w-4" /> กรอง
+                            </Button>
+                        }
+                    >
                             {showFilters && (
-                                <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t">
+                                <div className="mb-4 grid grid-cols-3 gap-4 border-b border-slate-100 pb-4">
                                     <Input
                                         placeholder="พื้นที่"
                                         value={filters.area || ''}
@@ -420,48 +377,39 @@ export default function Environment({ checks, stats, filters }: Props) {
                                     </Select>
                                 </div>
                             )}
-                        </CardHeader>
-                        <CardContent>
-                            <div className="rounded-md border">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>วันที่</TableHead>
-                                            <TableHead>พื้นที่</TableHead>
-                                            <TableHead>ประเภท</TableHead>
-                                            <TableHead>จุดเก็บ/อุปกรณ์</TableHead>
-                                            <TableHead>ผล</TableHead>
-                                            <TableHead>เชื้อที่พบ</TableHead>
-                                            <TableHead>ผู้บันทึก</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
+                            <div className="overflow-hidden rounded-xl border border-slate-200">
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="border-b border-slate-100 text-left text-xs uppercase text-slate-400">
+                                            <th className="p-3">วันที่</th>
+                                            <th className="p-3">พื้นที่</th>
+                                            <th className="p-3">ประเภท</th>
+                                            <th className="p-3">จุดเก็บ/อุปกรณ์</th>
+                                            <th className="p-3">ผล</th>
+                                            <th className="p-3">เชื้อที่พบ</th>
+                                            <th className="p-3">ผู้บันทึก</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
                                         {checks.data.length === 0 ? (
-                                            <TableRow>
-                                                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                                                    ไม่พบข้อมูล
-                                                </TableCell>
-                                            </TableRow>
+                                            <tr><td colSpan={7}><EmptyState text="ไม่พบข้อมูล" /></td></tr>
                                         ) : (
                                             checks.data.map((check) => (
-                                                <TableRow key={check.id}>
-                                                    <TableCell>{new Date(check.check_date).toLocaleDateString('th-TH')}</TableCell>
-                                                    <TableCell>{check.area_name}</TableCell>
-                                                    <TableCell>{checkTypes.find(t => t.value === check.check_type)?.label.split('(')[0] || check.check_type}</TableCell>
-                                                    <TableCell>{check.sampling_site || check.equipment_name || '-'}</TableCell>
-                                                    <TableCell>{getResultBadge(check.result)}</TableCell>
-                                                    <TableCell>{check.organism_found || '-'}</TableCell>
-                                                    <TableCell>{check.reporter?.name || '-'}</TableCell>
-                                                </TableRow>
+                                                <tr key={check.id} className="border-t border-slate-100 hover:bg-slate-50/60">
+                                                    <td className="p-3">{new Date(check.check_date).toLocaleDateString('th-TH')}</td>
+                                                    <td className="p-3">{check.area_name}</td>
+                                                    <td className="p-3">{checkTypes.find(t => t.value === check.check_type)?.label.split('(')[0] || check.check_type}</td>
+                                                    <td className="p-3">{check.sampling_site || check.equipment_name || '-'}</td>
+                                                    <td className="p-3">{getResultBadge(check.result)}</td>
+                                                    <td className="p-3">{check.organism_found || '-'}</td>
+                                                    <td className="p-3">{check.reporter?.name || '-'}</td>
+                                                </tr>
                                             ))
                                         )}
-                                    </TableBody>
-                                </Table>
+                                    </tbody>
+                                </table>
                             </div>
-                        </CardContent>
-                    </Card>
-                </div>
-            </div>
-        </AppLayout>
+                    </Panel>
+        </QualityPage>
     );
 }

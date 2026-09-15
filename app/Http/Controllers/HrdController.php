@@ -96,30 +96,41 @@ class HrdController extends Controller
 
         // Upcoming Courses (Available for enrollment or enrolled future courses)
         // For now, let's just show courses starting in the future
-        $upcoming_courses = HrdCourse::where('start_date', '>', now())
+        $upcoming_courses = HrdCourse::query()
+            ->where('status', 'published')
+            ->where(function ($q) {
+                $q->whereNull('start_date')->orWhere('start_date', '>', now());
+            })
             ->orderBy('start_date', 'asc')
             ->take(5)
             ->get();
+
+        $canEdit = $user->hasRole(['admin', 'header', 'Admin', 'Header']);
 
         return Inertia::render('HRD/Dashboard', [
             'stats' => $stats,
             'recent_activity' => $recent_activity,
             'upcoming_courses' => $upcoming_courses,
+            'canEdit' => $canEdit,
         ]);
     }
 
     public function index(Request $request)
     {
-        $query = HrdCourse::query();
-
-        if ($request->has('search')) {
-            $query->where('title', 'like', '%' . $request->search . '%');
-        }
-
-        $courses = $query->orderBy('start_date', 'desc')->paginate(10);
-
         $user = Auth::user();
         $canEdit = $user->hasRole(['admin', 'header', 'Admin', 'Header']);
+
+        $query = HrdCourse::query();
+
+        if (! $canEdit) {
+            $query->where('status', 'published');
+        }
+
+        if ($request->filled('search')) {
+            $query->where('title', 'like', '%'.$request->search.'%');
+        }
+
+        $courses = $query->orderByDesc('updated_at')->paginate(10);
 
         return Inertia::render('HRD/Courses/Index', [
             'courses' => $courses,
@@ -130,16 +141,20 @@ class HrdController extends Controller
 
     public function show(HrdCourse $course)
     {
-        $course->load(['modules.lessons', 'modules.lessons.progress' => function($query) {
+        $user = Auth::user();
+        $canEdit = $user->hasRole(['admin', 'header', 'Admin', 'Header']);
+
+        if (! $canEdit && $course->status !== 'published') {
+            abort(404);
+        }
+
+        $course->load(['modules.lessons', 'modules.lessons.progress' => function ($query) {
             $query->where('user_id', Auth::id());
         }]);
 
         $isEnrolled = HrdEnrollment::where('user_id', Auth::id())
             ->where('course_id', $course->id)
             ->exists();
-
-        $user = Auth::user();
-        $canEdit = $user->hasRole(['admin', 'header', 'Admin', 'Header']);
 
         return Inertia::render('HRD/Courses/Show', [
             'course' => $course,
@@ -262,10 +277,40 @@ class HrdController extends Controller
 
     public function showQuiz(HrdCourse $course, HrdQuiz $quiz)
     {
-        $quiz->load(['questions.answers' => function($q) {
-            $q->select('id', 'question_id', 'answer_text', 'order'); // Exclude is_correct
+        $quiz->load(['questions.answers' => function ($q) {
+            $q->select('id', 'question_id', 'answer_text', 'matching_pair', 'order'); // Exclude is_correct
         }]);
-        
+
+        $questions = $quiz->questions;
+
+        // สุ่มลำดับคำถามและตัวเลือกทุกครั้งที่เข้าสอบ (คนละชุด / ครั้งที่ 2 ไม่ซ้ำลำดับเดิม)
+        if ($quiz->randomize_questions) {
+            $questions = $questions->shuffle()->values();
+        }
+
+        $questions = $questions->map(function ($question) use ($quiz) {
+            $answers = $question->answers;
+
+            if ($quiz->randomize_questions && in_array($question->type, ['multiple_choice', 'true_false', 'matching'], true)) {
+                $answers = $answers->shuffle()->values();
+            }
+
+            // ตัวเลือกฝั่งขวาของจับคู่ ต้องสุ่มแยกจากลำดับซ้าย ไม่งั้นคู่จะเรียงตรงกัน
+            if ($question->type === 'matching') {
+                $matchingOptions = $answers->pluck('matching_pair')->filter()->values();
+                if ($quiz->randomize_questions) {
+                    $matchingOptions = $matchingOptions->shuffle()->values();
+                }
+                $question->setAttribute('matching_options', $matchingOptions->all());
+            }
+
+            $question->setRelation('answers', $answers);
+
+            return $question;
+        });
+
+        $quiz->setRelation('questions', $questions);
+
         return Inertia::render('HRD/Courses/Quiz', [
             'course' => $course,
             'quiz' => $quiz,
@@ -371,7 +416,23 @@ class HrdController extends Controller
 
         $course = HrdCourse::create($validated);
 
-        return redirect()->route('km.learn.courses.builder', $course->id)->with('success', 'Course created! Now add content.');
+        $module = HrdModule::create([
+            'course_id' => $course->id,
+            'title' => 'บทที่ 1',
+            'order' => 0,
+        ]);
+
+        HrdLesson::create([
+            'module_id' => $module->id,
+            'title' => 'หัวข้อแรก',
+            'type' => 'text',
+            'content' => '',
+            'order' => 0,
+        ]);
+
+        return redirect()
+            ->route('km.learn.courses.builder', $course->id)
+            ->with('success', 'สร้างหลักสูตรแล้ว — เริ่มเพิ่มเนื้อหาได้เลย');
     }
 
     public function enroll(HrdCourse $course)
@@ -405,11 +466,12 @@ class HrdController extends Controller
             'end_date' => 'nullable|date|after_or_equal:start_date',
             'hours' => 'required|numeric|min:0',
             'location' => 'nullable|string|max:255',
+            'status' => 'nullable|in:draft,published,archived',
         ]);
 
         $course->update($validated);
 
-        return back()->with('success', 'Course updated successfully!');
+        return back()->with('success', 'บันทึกข้อมูลหลักสูตรเรียบร้อย');
     }
 
     public function destroy(HrdCourse $course)

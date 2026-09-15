@@ -12,6 +12,7 @@ class CgdStmRow extends Model
     protected $fillable = [
         'batch_id',
         'rep_no',
+        'tran_id',
         'row_no',
         'hn',
         'an',
@@ -23,6 +24,9 @@ class CgdStmRow extends Model
         'projcode',
         'adj_rw',
         'amount_claim',
+        'amount_billable',
+        'amount_not_billable',
+        'amount_self_pay',
         'amount_act',
         'amount_room',
         'amount_organ',
@@ -33,7 +37,10 @@ class CgdStmRow extends Model
         'amount_other',
         'amount_approved',
         'seq_no',
+        'error_code',
+        'fund_codes',
         'match_key',
+        'remark',
     ];
 
     protected $casts = [
@@ -42,6 +49,9 @@ class CgdStmRow extends Model
         'discharge_at' => 'datetime',
         'adj_rw' => 'float',
         'amount_claim' => 'float',
+        'amount_billable' => 'float',
+        'amount_not_billable' => 'float',
+        'amount_self_pay' => 'float',
         'amount_act' => 'float',
         'amount_room' => 'float',
         'amount_organ' => 'float',

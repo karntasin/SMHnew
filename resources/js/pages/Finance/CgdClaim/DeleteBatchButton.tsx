@@ -14,9 +14,12 @@ import {
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
+import { claimRoute, type ClaimModuleMeta } from './claimModule';
 
 interface Props {
     batchId: number;
+    module?: ClaimModuleMeta;
+    destroyRouteName?: string;
     label?: string;
     documentNo?: string | null;
     filename?: string | null;
@@ -29,6 +32,8 @@ interface Props {
 
 export default function DeleteBatchButton({
     batchId,
+    module,
+    destroyRouteName,
     label = 'ลบข้อมูลนำเข้า',
     documentNo,
     filename,
@@ -43,7 +48,10 @@ export default function DeleteBatchButton({
 
     const handleDelete = () => {
         setProcessing(true);
-        router.delete(route('finance.cgd.destroy', batchId), {
+        const destroyUrl = destroyRouteName
+            ? route(destroyRouteName, { batch: batchId })
+            : claimRoute(module, 'destroy', batchId);
+        router.delete(destroyUrl, {
             onFinish: () => setProcessing(false),
         });
     };
@@ -64,7 +72,7 @@ export default function DeleteBatchButton({
             </AlertDialogTrigger>
             <AlertDialogContent className="rounded-3xl">
                 <AlertDialogHeader>
-                    <AlertDialogTitle>ลบข้อมูลนำเข้า STM?</AlertDialogTitle>
+                    <AlertDialogTitle>ลบข้อมูลนำเข้า REP?</AlertDialogTitle>
                     <AlertDialogDescription asChild>
                         <div className="space-y-2 text-sm text-slate-600">
                             <p>
@@ -72,7 +80,7 @@ export default function DeleteBatchButton({
                                 {typeof rowCount === 'number' ? ` (${rowCount.toLocaleString()} รายการ)` : ''} ออกจากระบบ
                             </p>
                             <ul className="list-disc space-y-1 pl-5 text-slate-500">
-                                <li>รายการ STM ที่นำเข้า</li>
+                                <li>รายการ REP ที่นำเข้า</li>
                                 <li>ผลการเปรียบเทียบกับ HOSxP</li>
                                 <li>ไฟล์ต้นฉบับที่เก็บในระบบ</li>
                             </ul>

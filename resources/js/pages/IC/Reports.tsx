@@ -1,41 +1,22 @@
 import React, { useState } from 'react';
-import { Head, useForm, router } from '@inertiajs/react';
-import AppLayout from '@/layouts/app-layout';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { router } from '@inertiajs/react';
+import { QualityPage, StatCard, Panel, EmptyState } from '@/components/quality/quality-ui';
+import IcSubNav from '@/pages/IC/IcSubNav';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
 import {
     FileBarChart,
     Download,
     Calendar,
     TrendingUp,
     TrendingDown,
-    Target,
-    AlertTriangle,
-    CheckCircle2,
     Activity,
     Users,
     Pill,
     HandMetal,
-    Thermometer,
 } from 'lucide-react';
+import { appPath } from '@/lib/asset';
 
 interface MonthlyData {
     month: string;
@@ -97,15 +78,7 @@ export default function Reports({ period, monthly_hai, hygiene_compliance, antib
     };
 
     const handleExport = (format: 'pdf' | 'excel') => {
-        window.open(`/ic/reports/export?format=${format}&start_date=${reportPeriod.start_date}&end_date=${reportPeriod.end_date}`, '_blank');
-    };
-
-    const getStatusIcon = (value: number, target: number, inverse = false) => {
-        const isGood = inverse ? value <= target : value >= target;
-        if (isGood) {
-            return <CheckCircle2 className="h-5 w-5 text-green-500" />;
-        }
-        return <AlertTriangle className="h-5 w-5 text-yellow-500" />;
+        window.open(appPath(`/ic/reports/export?format=${format}&start_date=${reportPeriod.start_date}&end_date=${reportPeriod.end_date}`), '_blank');
     };
 
     const getTrend = (current: number, previous: number) => {
@@ -117,222 +90,143 @@ export default function Reports({ period, monthly_hai, hygiene_compliance, antib
         return null;
     };
 
-    const breadcrumbs = [
-        { title: 'IC', href: '/ic' },
-        { title: 'Reports', href: '#' },
-    ];
-
     return (
-        <AppLayout breadcrumbs={breadcrumbs}>
-            <Head title="IC Reports" />
-
-            <div className="flex flex-col min-h-screen">
-                {/* Hero Header */}
-                <div className="relative overflow-hidden bg-gradient-to-br from-slate-700 via-slate-600 to-gray-700 text-white">
-                    <div className="absolute inset-0 bg-grid-white/10"></div>
-                    <div className="absolute -top-24 -right-24 w-96 h-96 bg-white/10 rounded-full blur-3xl"></div>
-
-                    <div className="relative px-6 py-8">
-                        <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-4">
-                                <div className="p-3 bg-white/20 backdrop-blur-sm rounded-2xl">
-                                    <FileBarChart className="h-10 w-10" />
-                                </div>
-                                <div>
-                                    <h1 className="text-3xl font-bold tracking-tight">
-                                        IC Reports & Analytics
-                                    </h1>
-                                    <p className="text-white/80 text-lg">
-                                        รายงานและวิเคราะห์ข้อมูลการควบคุมการติดเชื้อ
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="flex gap-2">
-                                <Button variant="outline" className="gap-2 border-white/30 text-white hover:bg-white/10" onClick={() => handleExport('excel')}>
-                                    <Download className="h-4 w-4" /> Excel
-                                </Button>
-                                <Button className="gap-2 bg-white text-slate-700 hover:bg-white/90" onClick={() => handleExport('pdf')}>
-                                    <Download className="h-4 w-4" /> PDF
-                                </Button>
-                            </div>
-                        </div>
-
-                        {/* Period Selector */}
-                        <div className="flex items-end gap-4 mt-6 bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                            <div className="space-y-1">
-                                <Label className="text-white/80">วันที่เริ่มต้น</Label>
-                                <Input
-                                    type="date"
-                                    value={reportPeriod.start_date}
-                                    onChange={(e) => setReportPeriod(prev => ({ ...prev, start_date: e.target.value }))}
-                                    className="bg-white/20 border-white/30 text-white"
-                                />
-                            </div>
-                            <div className="space-y-1">
-                                <Label className="text-white/80">วันที่สิ้นสุด</Label>
-                                <Input
-                                    type="date"
-                                    value={reportPeriod.end_date}
-                                    onChange={(e) => setReportPeriod(prev => ({ ...prev, end_date: e.target.value }))}
-                                    className="bg-white/20 border-white/30 text-white"
-                                />
-                            </div>
-                            <Button onClick={handleGenerateReport} className="bg-white text-slate-700 hover:bg-white/90">
-                                <Calendar className="h-4 w-4 mr-2" /> สร้างรายงาน
-                            </Button>
-                        </div>
-                    </div>
+        <QualityPage
+            tone="rose"
+            icon={FileBarChart}
+            badge="ศูนย์พัฒนาคุณภาพ · IC"
+            title="IC Reports & Analytics"
+            subtitle="รายงานและวิเคราะห์ข้อมูลการควบคุมการติดเชื้อ"
+            headTitle="IC Reports"
+            breadcrumbs={[
+                { title: 'ศูนย์พัฒนาคุณภาพ', href: '/quality' },
+                { title: 'Infection Control (IC)', href: '/ic' },
+                { title: 'รายงาน', href: '/ic/reports' },
+            ]}
+            subNav={<IcSubNav active="ic.reports" />}
+            actions={
+                <div className="flex gap-2">
+                    <Button variant="outline" className="gap-2 rounded-xl" onClick={() => handleExport('excel')}>
+                        <Download className="h-4 w-4" /> Excel
+                    </Button>
+                    <Button className="gap-2 rounded-xl bg-rose-600 hover:bg-rose-700" onClick={() => handleExport('pdf')}>
+                        <Download className="h-4 w-4" /> PDF
+                    </Button>
                 </div>
-
-                {/* Main Content */}
-                <div className="flex-1 p-6 space-y-6 bg-gray-50 dark:bg-gray-900">
-                    {/* KPI Summary Cards */}
-                    <div className="grid gap-4 md:grid-cols-4">
-                        <Card className="border-l-4 border-l-red-500">
-                            <CardContent className="pt-4">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <div className="text-sm text-muted-foreground">HAI Rate เฉลี่ย</div>
-                                        <div className="text-3xl font-bold">{summary.avg_hai_rate.toFixed(2)}</div>
-                                        <div className="text-xs text-muted-foreground">ต่อ 1,000 patient days</div>
-                                    </div>
-                                    <div className="flex flex-col items-end gap-1">
-                                        {getStatusIcon(summary.avg_hai_rate, targets.hai_rate, true)}
-                                        <span className="text-xs">เป้า ≤{targets.hai_rate}</span>
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        <Card className="border-l-4 border-l-blue-500">
-                            <CardContent className="pt-4">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <div className="text-sm text-muted-foreground">Hand Hygiene Compliance</div>
-                                        <div className="text-3xl font-bold">{summary.avg_compliance.toFixed(1)}%</div>
-                                        <div className="text-xs text-muted-foreground">อัตราการปฏิบัติถูกต้อง</div>
-                                    </div>
-                                    <div className="flex flex-col items-end gap-1">
-                                        {getStatusIcon(summary.avg_compliance, targets.hand_hygiene)}
-                                        <span className="text-xs">เป้า ≥{targets.hand_hygiene}%</span>
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        <Card className="border-l-4 border-l-pink-500">
-                            <CardContent className="pt-4">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <div className="text-sm text-muted-foreground">Antibiotic Appropriate</div>
-                                        <div className="text-3xl font-bold">{antibiotic_stats.appropriate_rate.toFixed(1)}%</div>
-                                        <div className="text-xs text-muted-foreground">การใช้ยาที่เหมาะสม</div>
-                                    </div>
-                                    <div className="flex flex-col items-end gap-1">
-                                        {getStatusIcon(antibiotic_stats.appropriate_rate, targets.antibiotic_appropriate)}
-                                        <span className="text-xs">เป้า ≥{targets.antibiotic_appropriate}%</span>
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        <Card className="border-l-4 border-l-indigo-500">
-                            <CardContent className="pt-4">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <div className="text-sm text-muted-foreground">IC Training</div>
-                                        <div className="text-3xl font-bold">{summary.total_trained}</div>
-                                        <div className="text-xs text-muted-foreground">คนอบรมแล้ว ({summary.total_trainings} ครั้ง)</div>
-                                    </div>
-                                    <Users className="h-8 w-8 text-indigo-500" />
-                                </div>
-                            </CardContent>
-                        </Card>
+            }
+        >
+            <Panel title="ช่วงเวลารายงาน" description="เลือกช่วงวันที่แล้วกดสร้างรายงาน">
+                <div className="flex flex-wrap items-end gap-4">
+                    <div className="space-y-1">
+                        <Label>วันที่เริ่มต้น</Label>
+                        <Input
+                            type="date"
+                            value={reportPeriod.start_date}
+                            onChange={(e) => setReportPeriod((prev) => ({ ...prev, start_date: e.target.value }))}
+                        />
                     </div>
+                    <div className="space-y-1">
+                        <Label>วันที่สิ้นสุด</Label>
+                        <Input
+                            type="date"
+                            value={reportPeriod.end_date}
+                            onChange={(e) => setReportPeriod((prev) => ({ ...prev, end_date: e.target.value }))}
+                        />
+                    </div>
+                    <Button onClick={handleGenerateReport} className="rounded-xl bg-rose-600 hover:bg-rose-700">
+                        <Calendar className="mr-2 h-4 w-4" /> สร้างรายงาน
+                    </Button>
+                </div>
+            </Panel>
 
-                    {/* Monthly HAI Data Table */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <Activity className="h-5 w-5" />
-                                อัตราการติดเชื้อในโรงพยาบาลรายเดือน
-                            </CardTitle>
-                            <CardDescription>
-                                HAI Rate ต่อ 1,000 patient days / Device-associated infection rates
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="border rounded-lg overflow-x-auto">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>เดือน</TableHead>
-                                            <TableHead className="text-right">Patient Days</TableHead>
-                                            <TableHead className="text-right">HAI ทั้งหมด</TableHead>
-                                            <TableHead className="text-right">HAI Rate</TableHead>
-                                            <TableHead className="text-right">CAUTI</TableHead>
-                                            <TableHead className="text-right">CLABSI</TableHead>
-                                            <TableHead className="text-right">VAP</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
+            <div className="grid gap-4 md:grid-cols-4">
+                <StatCard
+                    label="HAI Rate เฉลี่ย"
+                    value={summary.avg_hai_rate.toFixed(2)}
+                    sub={`เป้า ≤${targets.hai_rate} ต่อ 1,000 patient days`}
+                    icon={Activity}
+                    tone="rose"
+                />
+                <StatCard
+                    label="Hand Hygiene Compliance"
+                    value={`${summary.avg_compliance.toFixed(1)}%`}
+                    sub={`เป้า ≥${targets.hand_hygiene}%`}
+                    icon={HandMetal}
+                    tone="sky"
+                />
+                <StatCard
+                    label="Antibiotic Appropriate"
+                    value={`${antibiotic_stats.appropriate_rate.toFixed(1)}%`}
+                    sub={`เป้า ≥${targets.antibiotic_appropriate}%`}
+                    icon={Pill}
+                    tone="pink"
+                />
+                <StatCard
+                    label="IC Training"
+                    value={summary.total_trained}
+                    sub={`${summary.total_trainings} ครั้ง`}
+                    icon={Users}
+                    tone="indigo"
+                />
+            </div>
+
+                    <Panel title="อัตราการติดเชื้อในโรงพยาบาลรายเดือน" description="HAI Rate ต่อ 1,000 patient days / Device-associated infection rates">
+                            <div className="overflow-x-auto rounded-xl border border-slate-200">
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="border-b border-slate-100 text-left text-xs uppercase text-slate-400">
+                                            <th className="p-3">เดือน</th>
+                                            <th className="p-3 text-right">Patient Days</th>
+                                            <th className="p-3 text-right">HAI ทั้งหมด</th>
+                                            <th className="p-3 text-right">HAI Rate</th>
+                                            <th className="p-3 text-right">CAUTI</th>
+                                            <th className="p-3 text-right">CLABSI</th>
+                                            <th className="p-3 text-right">VAP</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
                                         {monthly_hai.length === 0 ? (
-                                            <TableRow>
-                                                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                                                    ไม่มีข้อมูลในช่วงเวลาที่เลือก
-                                                </TableCell>
-                                            </TableRow>
+                                            <tr><td colSpan={7}><EmptyState text="ไม่มีข้อมูลในช่วงเวลาที่เลือก" /></td></tr>
                                         ) : (
                                             monthly_hai.map((row, index) => (
-                                                <TableRow key={row.month}>
-                                                    <TableCell className="font-medium">{row.month}</TableCell>
-                                                    <TableCell className="text-right">{row.patient_days.toLocaleString()}</TableCell>
-                                                    <TableCell className="text-right">{row.hai_count}</TableCell>
-                                                    <TableCell className="text-right">
-                                                        <span className={`font-medium ${row.hai_rate > targets.hai_rate ? 'text-red-600' : 'text-green-600'}`}>
+                                                <tr key={row.month} className="border-t border-slate-100 hover:bg-slate-50/60">
+                                                    <td className="p-3 font-medium">{row.month}</td>
+                                                    <td className="p-3 text-right">{row.patient_days.toLocaleString()}</td>
+                                                    <td className="p-3 text-right">{row.hai_count}</td>
+                                                    <td className="p-3 text-right">
+                                                        <span className={`font-medium ${row.hai_rate > targets.hai_rate ? 'text-rose-600' : 'text-emerald-600'}`}>
                                                             {row.hai_rate.toFixed(2)}
                                                         </span>
                                                         {index > 0 && getTrend(row.hai_rate, monthly_hai[index - 1].hai_rate)}
-                                                    </TableCell>
-                                                    <TableCell className="text-right">{row.cauti_count} ({row.cauti_rate.toFixed(2)})</TableCell>
-                                                    <TableCell className="text-right">{row.clabsi_count} ({row.clabsi_rate.toFixed(2)})</TableCell>
-                                                    <TableCell className="text-right">{row.vap_count} ({row.vap_rate.toFixed(2)})</TableCell>
-                                                </TableRow>
+                                                    </td>
+                                                    <td className="p-3 text-right">{row.cauti_count} ({row.cauti_rate.toFixed(2)})</td>
+                                                    <td className="p-3 text-right">{row.clabsi_count} ({row.clabsi_rate.toFixed(2)})</td>
+                                                    <td className="p-3 text-right">{row.vap_count} ({row.vap_rate.toFixed(2)})</td>
+                                                </tr>
                                             ))
                                         )}
-                                    </TableBody>
-                                </Table>
+                                    </tbody>
+                                </table>
                             </div>
-                        </CardContent>
-                    </Card>
+                    </Panel>
 
                     <div className="grid gap-4 md:grid-cols-2">
-                        {/* Hand Hygiene Compliance */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <HandMetal className="h-5 w-5" />
-                                    Hand Hygiene Compliance รายเดือน
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
+                        <Panel title="Hand Hygiene Compliance รายเดือน">
                                 {hygiene_compliance.length === 0 ? (
-                                    <div className="text-center py-8 text-muted-foreground">
-                                        ไม่มีข้อมูล
-                                    </div>
+                                    <EmptyState text="ไม่มีข้อมูล" />
                                 ) : (
                                     <div className="space-y-3">
                                         {hygiene_compliance.map((row) => (
                                             <div key={row.month} className="flex items-center justify-between">
                                                 <span className="text-sm">{row.month}</span>
                                                 <div className="flex items-center gap-2">
-                                                    <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
-                                                        <div 
-                                                            className={`h-full rounded-full ${row.compliance_rate >= targets.hand_hygiene ? 'bg-green-500' : 'bg-yellow-500'}`}
+                                                    <div className="h-2 w-32 overflow-hidden rounded-full bg-slate-200">
+                                                        <div
+                                                            className={`h-full rounded-full ${row.compliance_rate >= targets.hand_hygiene ? 'bg-emerald-500' : 'bg-amber-500'}`}
                                                             style={{ width: `${row.compliance_rate}%` }}
                                                         />
                                                     </div>
-                                                    <span className={`text-sm font-medium w-12 text-right ${row.compliance_rate >= targets.hand_hygiene ? 'text-green-600' : 'text-yellow-600'}`}>
+                                                    <span className={`w-12 text-right text-sm font-medium ${row.compliance_rate >= targets.hand_hygiene ? 'text-emerald-600' : 'text-amber-600'}`}>
                                                         {row.compliance_rate.toFixed(1)}%
                                                     </span>
                                                 </div>
@@ -340,22 +234,11 @@ export default function Reports({ period, monthly_hai, hygiene_compliance, antib
                                         ))}
                                     </div>
                                 )}
-                            </CardContent>
-                        </Card>
+                        </Panel>
 
-                        {/* Antibiotic Usage by Class */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <Pill className="h-5 w-5" />
-                                    การใช้ยาปฏิชีวนะตามกลุ่ม
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
+                        <Panel title="การใช้ยาปฏิชีวนะตามกลุ่ม">
                                 {antibiotic_stats.by_class.length === 0 ? (
-                                    <div className="text-center py-8 text-muted-foreground">
-                                        ไม่มีข้อมูล
-                                    </div>
+                                    <EmptyState text="ไม่มีข้อมูล" />
                                 ) : (
                                     <div className="space-y-3">
                                         {antibiotic_stats.by_class.map((item) => {
@@ -365,13 +248,10 @@ export default function Reports({ period, monthly_hai, hygiene_compliance, antib
                                                 <div key={item.antibiotic_class} className="flex items-center justify-between">
                                                     <span className="text-sm capitalize">{item.antibiotic_class}</span>
                                                     <div className="flex items-center gap-2">
-                                                        <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
-                                                            <div 
-                                                                className="h-full bg-pink-500 rounded-full"
-                                                                style={{ width: `${percentage}%` }}
-                                                            />
+                                                        <div className="h-2 w-32 overflow-hidden rounded-full bg-slate-200">
+                                                            <div className="h-full rounded-full bg-rose-500" style={{ width: `${percentage}%` }} />
                                                         </div>
-                                                        <span className="text-sm font-medium w-16 text-right">
+                                                        <span className="w-16 text-right text-sm font-medium">
                                                             {item.count} ({percentage.toFixed(1)}%)
                                                         </span>
                                                     </div>
@@ -380,25 +260,16 @@ export default function Reports({ period, monthly_hai, hygiene_compliance, antib
                                         })}
                                     </div>
                                 )}
-                            </CardContent>
-                        </Card>
+                        </Panel>
                     </div>
 
-                    {/* Summary Statistics */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <Target className="h-5 w-5" />
-                                สรุปผลการดำเนินงาน IC
-                            </CardTitle>
-                            <CardDescription>
-                                ช่วงเวลา: {new Date(period.start_date).toLocaleDateString('th-TH')} - {new Date(period.end_date).toLocaleDateString('th-TH')}
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
+                    <Panel
+                        title="สรุปผลการดำเนินงาน IC"
+                        description={`ช่วงเวลา: ${new Date(period.start_date).toLocaleDateString('th-TH')} - ${new Date(period.end_date).toLocaleDateString('th-TH')}`}
+                    >
                             <div className="grid gap-4 md:grid-cols-3">
-                                <div className="p-4 bg-muted rounded-lg">
-                                    <div className="text-sm text-muted-foreground mb-2">การเฝ้าระวังการติดเชื้อ</div>
+                                <div className="rounded-xl bg-slate-50 p-4">
+                                    <div className="mb-2 text-sm text-slate-500">การเฝ้าระวังการติดเชื้อ</div>
                                     <div className="space-y-1">
                                         <div className="flex justify-between">
                                             <span>HAI ทั้งหมด:</span>
@@ -410,19 +281,19 @@ export default function Reports({ period, monthly_hai, hygiene_compliance, antib
                                         </div>
                                         <div className="flex justify-between">
                                             <span>HAI Rate เฉลี่ย:</span>
-                                            <span className={`font-medium ${summary.avg_hai_rate > targets.hai_rate ? 'text-red-600' : 'text-green-600'}`}>
+                                            <span className={`font-medium ${summary.avg_hai_rate > targets.hai_rate ? 'text-rose-600' : 'text-emerald-600'}`}>
                                                 {summary.avg_hai_rate.toFixed(2)} ‰
                                             </span>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="p-4 bg-muted rounded-lg">
-                                    <div className="text-sm text-muted-foreground mb-2">Hand Hygiene</div>
+                                <div className="rounded-xl bg-slate-50 p-4">
+                                    <div className="mb-2 text-sm text-slate-500">Hand Hygiene</div>
                                     <div className="space-y-1">
                                         <div className="flex justify-between">
                                             <span>Compliance เฉลี่ย:</span>
-                                            <span className={`font-medium ${summary.avg_compliance >= targets.hand_hygiene ? 'text-green-600' : 'text-yellow-600'}`}>
+                                            <span className={`font-medium ${summary.avg_compliance >= targets.hand_hygiene ? 'text-emerald-600' : 'text-amber-600'}`}>
                                                 {summary.avg_compliance.toFixed(1)}%
                                             </span>
                                         </div>
@@ -433,8 +304,8 @@ export default function Reports({ period, monthly_hai, hygiene_compliance, antib
                                     </div>
                                 </div>
 
-                                <div className="p-4 bg-muted rounded-lg">
-                                    <div className="text-sm text-muted-foreground mb-2">Antibiotic Stewardship</div>
+                                <div className="rounded-xl bg-slate-50 p-4">
+                                    <div className="mb-2 text-sm text-slate-500">Antibiotic Stewardship</div>
                                     <div className="space-y-1">
                                         <div className="flex justify-between">
                                             <span>การใช้ยาทั้งหมด:</span>
@@ -442,17 +313,14 @@ export default function Reports({ period, monthly_hai, hygiene_compliance, antib
                                         </div>
                                         <div className="flex justify-between">
                                             <span>Appropriate Rate:</span>
-                                            <span className={`font-medium ${antibiotic_stats.appropriate_rate >= targets.antibiotic_appropriate ? 'text-green-600' : 'text-yellow-600'}`}>
+                                            <span className={`font-medium ${antibiotic_stats.appropriate_rate >= targets.antibiotic_appropriate ? 'text-emerald-600' : 'text-amber-600'}`}>
                                                 {antibiotic_stats.appropriate_rate.toFixed(1)}%
                                             </span>
                                         </div>
                                     </div>
                                 </div>
                             </div>
-                        </CardContent>
-                    </Card>
-                </div>
-            </div>
-        </AppLayout>
+                    </Panel>
+        </QualityPage>
     );
 }

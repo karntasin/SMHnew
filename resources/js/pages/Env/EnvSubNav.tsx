@@ -1,19 +1,28 @@
 import { QualitySubNav, QualityTab } from '@/components/quality/quality-ui';
-import { LayoutDashboard, Box, Wrench, AlertTriangle, Activity } from 'lucide-react';
+import {
+    LayoutDashboard,
+    Box,
+    FileSpreadsheet,
+    Wrench,
+    AlertTriangle,
+    Droplets,
+} from 'lucide-react';
 
 export type EnvTabKey =
     | 'env.index'
     | 'env.assets.index'
+    | 'env.assets.report'
     | 'env.pm.index'
     | 'env.incidents.index'
-    | 'env.utility.index';
+    | 'env.utilities.index';
 
 const tabs: QualityTab[] = [
-    { key: 'env.index', label: 'ภาพรวม', hint: 'ENV Dashboard', icon: LayoutDashboard },
-    { key: 'env.assets.index', label: 'จัดการทรัพย์สิน', hint: 'ทะเบียนครุภัณฑ์', icon: Box },
+    { key: 'env.index', label: 'Dashboard', hint: 'ภาพรวมครุภัณฑ์', icon: LayoutDashboard },
+    { key: 'env.assets.index', label: 'ทะเบียนครุภัณฑ์', hint: 'บัญชีคุม สป.', icon: Box },
+    { key: 'env.assets.report', label: 'รายงานแยกสาย', hint: 'สรุปตามสายงาน', icon: FileSpreadsheet },
+    { key: 'env.utilities.index', label: 'สาธารณูปโภค', hint: 'ค่าใช้จ่ายรายเดือน', icon: Droplets },
     { key: 'env.pm.index', label: 'แผนบำรุงรักษา (PM)', hint: 'ติดตาม PM', icon: Wrench },
     { key: 'env.incidents.index', label: 'รายงานอุบัติการณ์', hint: 'ความปลอดภัย', icon: AlertTriangle },
-    { key: 'env.utility.index', label: 'ตรวจสอบระบบ', hint: 'สาธารณูปโภค', icon: Activity },
 ];
 
 export default function EnvSubNav({ active }: { active: EnvTabKey }) {

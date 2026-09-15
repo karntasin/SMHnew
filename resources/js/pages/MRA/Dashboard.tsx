@@ -16,6 +16,7 @@ import {
   FileSearch,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { maskPatientName } from '@/lib/pii';
 import { QualityPage, StatCard, Panel, StatusPill, EmptyState } from '@/components/quality/quality-ui';
 import MraSubNav, { mraBreadcrumbs } from './MraSubNav';
 
@@ -244,7 +245,7 @@ export default function MraDashboard({
                             <span className="font-mono text-sm font-bold text-indigo-600">{audit.hn}</span>
                             {getStatusBadge(audit.status)}
                           </div>
-                          <p className="mt-1 truncate text-sm text-slate-500">{audit.patient_name}</p>
+                          <p className="mt-1 truncate text-sm text-slate-500">{maskPatientName(audit.patient_name)}</p>
                           <p className="text-xs text-slate-400">
                             {new Date(audit.visit_date).toLocaleDateString('th-TH')}
                             {audit.auditor_name && ` • ${audit.auditor_name}`}

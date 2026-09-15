@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Position;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -10,7 +11,7 @@ class PositionController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Position::query();
+        $query = Position::query()->withCount('users');
 
         if ($request->has('search') && $request->search) {
             $search = $request->search;
@@ -30,7 +31,9 @@ class PositionController extends Controller
 
     public function create()
     {
-        return Inertia::render('settings/positions/Form');
+        return Inertia::render('settings/positions/Form', [
+            'positionOptions' => $this->positionOptions(),
+        ]);
     }
 
     public function store(Request $request)
@@ -48,8 +51,15 @@ class PositionController extends Controller
 
     public function edit(Position $position)
     {
+        $positionOptions = $this->positionOptions();
+        if (!in_array($position->name, $positionOptions, true)) {
+            $positionOptions[] = $position->name;
+            sort($positionOptions, SORT_NATURAL | SORT_FLAG_CASE);
+        }
+
         return Inertia::render('settings/positions/Form', [
             'position' => $position,
+            'positionOptions' => $positionOptions,
         ]);
     }
 
@@ -78,5 +88,31 @@ class PositionController extends Controller
 
         return redirect()->route('settings.positions.index')
             ->with('success', 'ลบตำแหน่งงานสำเร็จ');
+    }
+
+    /**
+     * Build position dropdown options from current positions and user records.
+     *
+     * @return array<int, string>
+     */
+    private function positionOptions(): array
+    {
+        $fromPositions = Position::query()
+            ->pluck('name')
+            ->map(fn (?string $name) => trim((string) $name))
+            ->filter()
+            ->all();
+
+        $fromUsers = User::query()
+            ->whereNotNull('position')
+            ->pluck('position')
+            ->map(fn (?string $name) => trim((string) $name))
+            ->filter()
+            ->all();
+
+        $options = array_values(array_unique(array_merge($fromPositions, $fromUsers)));
+        sort($options, SORT_NATURAL | SORT_FLAG_CASE);
+
+        return $options;
     }
 }

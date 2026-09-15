@@ -1,256 +1,293 @@
-import React, { useState } from 'react';
+import React, { useMemo } from 'react';
 import { useForm, Link } from '@inertiajs/react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
 import AppLayout from '@/layouts/app-layout';
 import { Head } from '@inertiajs/react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { BreadcrumbItem } from '@/types';
-import { ArrowLeft, Save, CheckSquare, Square, Search, Shield } from 'lucide-react';
+import { ArrowLeft, Save, Shield, Copy, Eye, Layers, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import { isViewPermission } from '@/lib/permission-labels';
+import {
+    AccessMenuNode,
+    RoleAccessMenuPicker,
+    collectNodePermissions,
+} from '@/components/roles/role-access-menu-picker';
 
 interface Permission {
-  id: number;
-  name: string;
-  group: string;
+    id: number;
+    name: string;
+    group: string | null;
 }
 
 interface Role {
-  id?: number;
-  name: string;
-  permissions?: Permission[];
+    id?: number;
+    name: string;
+    permissions?: Permission[];
+}
+
+interface RoleTemplate {
+    id: number;
+    name: string;
+    permissions: string[];
+    permissions_count: number;
 }
 
 interface Props {
-  role?: Role;
-  groupedPermissions: Record<string, Permission[]>;
+    role?: Role;
+    accessMenuTree: AccessMenuNode[];
+    extraPermissions?: Permission[];
+    validPermissionNames?: string[];
+    roleTemplates?: RoleTemplate[];
 }
 
-export default function RoleForm({ role, groupedPermissions }: Props) {
-  const isEdit = !!role;
-  const [searchTerm, setSearchTerm] = useState('');
+export default function RoleForm({
+    role,
+    accessMenuTree,
+    extraPermissions = [],
+    validPermissionNames = [],
+    roleTemplates = [],
+}: Props) {
+    const isEdit = !!role;
 
-  const { data, setData, post, put, processing, errors } = useForm({
-    name: role?.name || '',
-    permissions: role?.permissions?.map((p) => p.name) || [],
-  });
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    isEdit ? put(`/roles/${role?.id}`) : post('/roles');
-  };
-
-  const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Role Management', href: '/roles' },
-    { title: isEdit ? 'Edit Role' : 'Create Role', href: '#' },
-  ];
-
-  const togglePermission = (perm: string) => {
-    setData('permissions', data.permissions.includes(perm)
-      ? data.permissions.filter((p) => p !== perm)
-      : [...data.permissions, perm]
+    const validPermissionSet = useMemo(
+        () => new Set(validPermissionNames),
+        [validPermissionNames],
     );
-  };
 
-  const toggleGroup = (group: string, perms: Permission[]) => {
-    const allChecked = perms.every(perm => data.permissions.includes(perm.name));
-    if (allChecked) {
-      setData('permissions', data.permissions.filter(p => !perms.map(perm => perm.name).includes(p)));
-    } else {
-      const newPermissions = [...data.permissions];
-      perms.forEach(perm => {
-        if (!newPermissions.includes(perm.name)) {
-          newPermissions.push(perm.name);
-        }
-      });
-      setData('permissions', newPermissions);
-    }
-  };
+    const allPermissionNames = useMemo(() => {
+        const fromMenus = accessMenuTree.flatMap((node) => collectNodePermissions(node));
+        const fromExtra = extraPermissions.map((p) => p.name);
+        return [...new Set([...fromMenus, ...fromExtra])].filter((name) => validPermissionSet.has(name));
+    }, [accessMenuTree, extraPermissions, validPermissionSet]);
 
-  const selectAll = () => {
-    const allPerms: string[] = [];
-    Object.values(groupedPermissions).forEach(perms => {
-      perms.forEach(p => allPerms.push(p.name));
+    const { data, setData, post, put, processing, errors, transform } = useForm({
+        name: role?.name || '',
+        permissions: (role?.permissions?.map((p) => p.name) || []).filter((name) => validPermissionSet.has(name)),
     });
-    setData('permissions', allPerms);
-  };
 
-  const deselectAll = () => {
-    setData('permissions', []);
-  };
+    transform((formData) => ({
+        ...formData,
+        permissions: formData.permissions.filter((name) => validPermissionSet.has(name)),
+    }));
 
-  // Filter permissions based on search
-  const filteredGroups = Object.entries(groupedPermissions).reduce((acc, [group, perms]) => {
-    const filteredPerms = perms.filter(p => 
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      group.toLowerCase().includes(searchTerm.toLowerCase())
+    const submitOptions = {
+        onError: (formErrors: Record<string, string>) => {
+            const firstError = Object.values(formErrors)[0];
+            toast.error(firstError || 'บันทึกไม่สำเร็จ กรุณาตรวจสอบข้อมูล');
+        },
+    };
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!data.name.trim()) {
+            toast.error('กรุณาระบุชื่อบทบาท');
+            return;
+        }
+
+        if (isEdit) {
+            put(route('roles.update', role!.id!), submitOptions);
+            return;
+        }
+
+        post(route('roles.store'), submitOptions);
+    };
+
+    const breadcrumbs: BreadcrumbItem[] = [
+        { title: 'จัดการบทบาท', href: route('roles.index') },
+        { title: isEdit ? 'แก้ไขบทบาท' : 'สร้างบทบาทใหม่', href: '#' },
+    ];
+
+    const selectViewOnly = () => {
+        setData(
+            'permissions',
+            allPermissionNames.filter((name) => isViewPermission(name)),
+        );
+    };
+
+    const applyTemplate = (templateId: string) => {
+        const template = roleTemplates.find((t) => String(t.id) === templateId);
+        if (!template) {
+            return;
+        }
+        setData('permissions', [...template.permissions.filter((name) => validPermissionSet.has(name))]);
+        if (!isEdit && !data.name.trim()) {
+            setData('name', `${template.name}-copy`);
+        }
+    };
+
+    const moduleSummary = useMemo(() => {
+        return accessMenuTree
+            .map((node) => {
+                const perms = collectNodePermissions(node);
+                const selected = perms.filter((p) => data.permissions.includes(p)).length;
+                return { title: node.title, selected, total: perms.length };
+            })
+            .filter((item) => item.selected > 0 && item.total > 0);
+    }, [accessMenuTree, data.permissions]);
+
+    return (
+        <AppLayout breadcrumbs={breadcrumbs}>
+            <Head title={isEdit ? 'แก้ไขบทบาท' : 'สร้างบทบาทใหม่'} />
+            <div className="flex-1 p-6 md:p-8 max-w-6xl mx-auto w-full">
+                <form onSubmit={handleSubmit}>
+                    <div className="flex flex-col gap-4 mb-6 md:flex-row md:items-center md:justify-between">
+                        <div>
+                            <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
+                                {isEdit ? 'แก้ไขบทบาท' : 'สร้างบทบาทใหม่'}
+                            </h1>
+                            <p className="text-muted-foreground mt-1">
+                                เลือกสิทธิ์ตามโครงสร้างเมนู — โมดูลหลักและเมนูย่อยเหมือน Sidebar
+                            </p>
+                        </div>
+                        <div className="flex gap-3">
+                            <Link href={route('roles.index')}>
+                                <Button variant="outline" type="button">
+                                    <ArrowLeft className="mr-2 h-4 w-4" /> ยกเลิก
+                                </Button>
+                            </Link>
+                            <Button type="submit" disabled={processing || !data.name.trim()} className="bg-primary hover:bg-primary/90">
+                                <Save className="mr-2 h-4 w-4" /> {isEdit ? 'บันทึกการแก้ไข' : 'สร้างบทบาท'}
+                            </Button>
+                        </div>
+                    </div>
+
+                    <div className="grid gap-6 md:grid-cols-3">
+                        <div className="md:col-span-1 space-y-6">
+                            <Card className="border-none shadow-md">
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2 text-lg">
+                                        <Shield className="h-5 w-5 text-primary" />
+                                        ข้อมูลบทบาท
+                                    </CardTitle>
+                                    <CardDescription>ชื่อบทบาทที่จะมอบให้ผู้ใช้</CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="name">ชื่อบทบาท <span className="text-red-500">*</span></Label>
+                                        <Input
+                                            id="name"
+                                            placeholder="เช่น หัวหน้าแผนก, เจ้าหน้าที่การเงิน"
+                                            value={data.name}
+                                            onChange={(e) => setData('name', e.target.value)}
+                                            className={errors.name ? 'border-red-500' : ''}
+                                        />
+                                        {errors.name && <p className="text-sm text-red-500">{errors.name}</p>}
+                                        {errors.permissions && <p className="text-sm text-red-500">{errors.permissions}</p>}
+                                    </div>
+
+                                    <div className="rounded-lg bg-muted/50 p-4 space-y-2">
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-muted-foreground">สิทธิ์ที่เลือก</span>
+                                            <Badge variant="secondary">{data.permissions.length}</Badge>
+                                        </div>
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-muted-foreground">จากทั้งหมด</span>
+                                            <span className="font-medium">{allPermissionNames.length}</span>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            <Card className="border-none shadow-md">
+                                <CardHeader className="pb-3">
+                                    <CardTitle className="text-base flex items-center gap-2">
+                                        <Copy className="h-4 w-4" />
+                                        เริ่มจากแม่แบบ
+                                    </CardTitle>
+                                    <CardDescription>คัดลอกสิทธิ์จากบทบาทที่มีอยู่แล้ว</CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-3">
+                                    <Select onValueChange={applyTemplate}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="เลือกบทบาทต้นแบบ..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {roleTemplates.map((template) => (
+                                                <SelectItem key={template.id} value={String(template.id)}>
+                                                    {template.name} ({template.permissions_count} สิทธิ์)
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+
+                                    <div className="grid gap-2">
+                                        <Button type="button" variant="outline" size="sm" className="justify-start" onClick={selectViewOnly}>
+                                            <Eye className="mr-2 h-4 w-4" />
+                                            เลือกเฉพาะสิทธิ์ดู/แดชบอร์ด
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            className="justify-start"
+                                            onClick={() => {
+                                                const userTemplate = roleTemplates.find((t) => t.name === 'user');
+                                                if (userTemplate) {
+                                                    setData('permissions', [...userTemplate.permissions.filter((name) => validPermissionSet.has(name))]);
+                                                }
+                                            }}
+                                        >
+                                            <Layers className="mr-2 h-4 w-4" />
+                                            ชุดสิทธิ์ผู้ใช้ทั่วไป
+                                        </Button>
+                                        <Button type="button" variant="ghost" size="sm" className="justify-start text-muted-foreground" onClick={() => setData('permissions', [])}>
+                                            <X className="mr-2 h-4 w-4" />
+                                            ล้างสิทธิ์ทั้งหมด
+                                        </Button>
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            {moduleSummary.length > 0 && (
+                                <Card className="border-none shadow-md">
+                                    <CardHeader className="pb-2">
+                                        <CardTitle className="text-sm">สรุปตามโมดูล</CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="space-y-2">
+                                        {moduleSummary.map(({ title, selected, total }) => (
+                                            <div key={title} className="flex items-center justify-between text-xs">
+                                                <span className="truncate pr-2">{title}</span>
+                                                <Badge variant="outline">{selected}/{total}</Badge>
+                                            </div>
+                                        ))}
+                                    </CardContent>
+                                </Card>
+                            )}
+                        </div>
+
+                        <div className="md:col-span-2">
+                            <Card className="border-none shadow-md">
+                                <CardHeader className="pb-4">
+                                    <CardTitle>เลือกการเข้าถึงเมนู</CardTitle>
+                                    <CardDescription>
+                                        ติ๊กที่โมดูลหลักเพื่อเลือกทั้งกลุ่ม — ขยายเมนูย่อยเพื่อเลือกรายการเฉพาะ
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <RoleAccessMenuPicker
+                                        menuTree={accessMenuTree}
+                                        extraPermissions={extraPermissions}
+                                        selected={data.permissions}
+                                        onChange={(permissions) => setData('permissions', permissions)}
+                                    />
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </AppLayout>
     );
-    if (filteredPerms.length > 0) {
-      acc[group] = filteredPerms;
-    }
-    return acc;
-  }, {} as Record<string, Permission[]>);
-
-  return (
-    <AppLayout breadcrumbs={breadcrumbs}>
-      <Head title={isEdit ? 'Edit Role' : 'Create Role'} />
-      <div className="flex-1 p-6 md:p-8 max-w-6xl mx-auto w-full">
-        <form onSubmit={handleSubmit}>
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
-                {isEdit ? 'Edit Role' : 'Create New Role'}
-              </h1>
-              <p className="text-muted-foreground mt-1">
-                {isEdit ? 'Update role details and permissions.' : 'Define a new role and assign permissions.'}
-              </p>
-            </div>
-            <div className="flex gap-3">
-              <Link href="/roles">
-                <Button variant="outline" type="button">
-                  <ArrowLeft className="mr-2 h-4 w-4" /> Cancel
-                </Button>
-              </Link>
-              <Button type="submit" disabled={processing} className="bg-primary hover:bg-primary/90">
-                <Save className="mr-2 h-4 w-4" /> {isEdit ? 'Update Role' : 'Save Role'}
-              </Button>
-            </div>
-          </div>
-
-          <div className="grid gap-6 md:grid-cols-3">
-            {/* Left Column: Role Details */}
-            <div className="md:col-span-1 space-y-6">
-              <Card className="border-none shadow-md">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Shield className="h-5 w-5 text-primary" />
-                    Role Details
-                  </CardTitle>
-                  <CardDescription>
-                    Basic information about the role.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Role Name <span className="text-red-500">*</span></Label>
-                    <Input
-                      id="name"
-                      placeholder="e.g. Manager, Editor"
-                      value={data.name}
-                      onChange={(e) => setData('name', e.target.value)}
-                      className={errors.name ? 'border-red-500' : ''}
-                    />
-                    {errors.name && (
-                      <p className="text-sm text-red-500">{errors.name}</p>
-                    )}
-                  </div>
-                  
-                  <div className="pt-4">
-                    <div className="text-sm font-medium mb-2">Summary</div>
-                    <div className="bg-muted/50 p-4 rounded-lg space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Selected Permissions:</span>
-                        <Badge variant="secondary">{data.permissions.length}</Badge>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Right Column: Permissions */}
-            <div className="md:col-span-2 space-y-6">
-              <Card className="border-none shadow-md">
-                <CardHeader className="pb-4">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                      <CardTitle>Permissions</CardTitle>
-                      <CardDescription>Assign capabilities to this role.</CardDescription>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button type="button" variant="outline" size="sm" onClick={selectAll}>
-                        <CheckSquare className="mr-2 h-3.5 w-3.5" /> Select All
-                      </Button>
-                      <Button type="button" variant="outline" size="sm" onClick={deselectAll}>
-                        <Square className="mr-2 h-3.5 w-3.5" /> Deselect All
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="mt-4 relative">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input 
-                      placeholder="Search permissions..." 
-                      className="pl-9"
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                  </div>
-                </CardHeader>
-                <Separator />
-                <CardContent className="pt-6">
-                  {Object.keys(filteredGroups).length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      No permissions found matching "{searchTerm}"
-                    </div>
-                  ) : (
-                    <div className="space-y-8">
-                      {Object.entries(filteredGroups).map(([group, perms]) => {
-                        const allChecked = perms.every(perm => data.permissions.includes(perm.name));
-                        const someChecked = perms.some(perm => data.permissions.includes(perm.name));
-                        
-                        return (
-                          <div key={group} className="space-y-3">
-                            <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-900 p-3 rounded-lg border">
-                              <div className="flex items-center space-x-2">
-                                <Checkbox 
-                                  id={`group-${group}`}
-                                  checked={allChecked}
-                                  onCheckedChange={() => toggleGroup(group, perms)}
-                                  className={someChecked && !allChecked ? "opacity-50" : ""}
-                                />
-                                <Label htmlFor={`group-${group}`} className="font-semibold text-base capitalize cursor-pointer">
-                                  {group} Module
-                                </Label>
-                              </div>
-                              <Badge variant="outline" className="bg-white dark:bg-gray-800">
-                                {perms.filter(p => data.permissions.includes(p.name)).length} / {perms.length}
-                              </Badge>
-                            </div>
-                            
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pl-4">
-                              {perms.map((perm) => (
-                                <div key={perm.id} className="flex items-start space-x-2 p-2 rounded hover:bg-accent/50 transition-colors">
-                                  <Checkbox
-                                    id={`perm-${perm.id}`}
-                                    checked={data.permissions.includes(perm.name)}
-                                    onCheckedChange={() => togglePermission(perm.name)}
-                                    className="mt-0.5"
-                                  />
-                                  <div className="grid gap-1.5 leading-none">
-                                    <Label
-                                      htmlFor={`perm-${perm.id}`}
-                                      className="text-sm font-normal cursor-pointer leading-snug"
-                                    >
-                                      {perm.name}
-                                    </Label>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </form>
-      </div>
-    </AppLayout>
-  );
 }

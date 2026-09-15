@@ -12,6 +12,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class MaintenanceRequestController extends Controller
@@ -27,7 +28,7 @@ class MaintenanceRequestController extends Controller
     {
         \Illuminate\Support\Facades\Log::info('MaintenanceRequestController::index called', ['user' => Auth::id()]);
 
-        $query = MaintenanceRequest::with(['category', 'priority', 'requester', 'technician'])
+        $query = MaintenanceRequest::with(['category', 'priority', 'requester', 'technician', 'images'])
             ->latest();
 
         if ($request->has('status')) {
@@ -47,7 +48,7 @@ class MaintenanceRequestController extends Controller
         $user = Auth::user();
         $query = MaintenanceRequest::with(['category', 'priority', 'technician', 'requester'])
             ->where(function($q) use ($user) {
-                $q->where('requester_id', $user->id);
+                $q->where('user_id', $user->id);
                 // If user has a department, include requests from that department
                 if ($user->department_id) {
                     $q->orWhereHas('requester', function($sq) use ($user) {
@@ -94,39 +95,39 @@ class MaintenanceRequestController extends Controller
         $sequence = $lastTicket ? intval(substr($lastTicket->ticket_number, -4)) + 1 : 1;
         $ticketNumber = "MR-$date-" . str_pad($sequence, 4, '0', STR_PAD_LEFT);
 
-        $maintenanceRequest = MaintenanceRequest::create([
-            'ticket_number' => $ticketNumber,
-            'requester_id' => Auth::id(),
-            'title' => $validated['title'],
-            'description' => $validated['description'],
-            'location' => $validated['location'],
-            'category_id' => $validated['category_id'],
-            'priority_id' => $validated['priority_id'],
-            'status' => 'pending',
-        ]);
+        $maintenanceRequest = DB::transaction(function () use ($validated, $request, $ticketNumber) {
+            $maintenanceRequest = MaintenanceRequest::create([
+                'ticket_number' => $ticketNumber,
+                'user_id' => Auth::id(),
+                'title' => $validated['title'],
+                'description' => $validated['description'],
+                'location' => $validated['location'],
+                'category_id' => $validated['category_id'],
+                'priority_id' => $validated['priority_id'],
+                'status' => 'pending',
+            ]);
 
-        // Handle Images
-        if ($request->hasFile('images')) {
-            foreach ($request->file('images') as $image) {
-                $path = $image->store('maintenance-images', 'public');
-                MaintenanceRequestImage::create([
-                    'maintenance_request_id' => $maintenanceRequest->id,
-                    'image_path' => $path,
-                    // 'uploaded_by' => Auth::id(), // Column does not exist
-                ]);
+            if ($request->hasFile('images')) {
+                foreach ($request->file('images') as $image) {
+                    $path = $image->store('maintenance-images', 'public');
+                    MaintenanceRequestImage::create([
+                        'maintenance_request_id' => $maintenanceRequest->id,
+                        'image_path' => $path,
+                    ]);
+                }
             }
-        }
 
-        // Create Timeline Entry
-        MaintenanceRequestTimeline::create([
-            'maintenance_request_id' => $maintenanceRequest->id,
-            'user_id' => Auth::id(),
-            'action' => 'created',
-            'description' => 'สร้างใบแจ้งซ่อม',
-            'new_values' => $maintenanceRequest->toArray(),
-        ]);
+            MaintenanceRequestTimeline::create([
+                'maintenance_request_id' => $maintenanceRequest->id,
+                'user_id' => Auth::id(),
+                'action' => 'created',
+                'description' => 'สร้างใบแจ้งซ่อม',
+                'new_values' => $maintenanceRequest->toArray(),
+            ]);
 
-        // ส่งแจ้งเตือนไปยังช่างที่รับผิดชอบ
+            return $maintenanceRequest;
+        });
+
         $this->notificationService->notifyTechnicians($maintenanceRequest, 'created');
 
         return redirect()->route('maintenance.requests.index')
@@ -154,14 +155,14 @@ class MaintenanceRequestController extends Controller
             $canManage = true;
         } elseif ($user->hasRole('technician')) {
             // Technician can only manage if assigned to them
-            $canManage = $maintenanceRequest->assigned_to === $user->id;
+            $canManage = $maintenanceRequest->technician_id === $user->id;
         }
 
         return Inertia::render('maintenance/requests/Show', [
             'maintenanceRequest' => $maintenanceRequest,
             'technicians' => $technicians,
             'canAssign' => $user->hasRole(['admin', 'headtec']),
-            'canClose' => $user->id === $maintenanceRequest->requester_id,
+            'canClose' => $user->id === $maintenanceRequest->user_id,
             'canManage' => $canManage,
         ]);
     }
@@ -172,7 +173,7 @@ class MaintenanceRequestController extends Controller
 
         // Restriction for technicians
         if ($user->hasRole('technician') && !$user->hasRole(['admin', 'headtec'])) {
-             if ($maintenanceRequest->assigned_to !== $user->id) {
+             if ($maintenanceRequest->technician_id !== $user->id) {
                 return back()->with('error', 'คุณไม่มีสิทธิ์จัดการใบงานนี้ (ต้องได้รับมอบหมายก่อน)');
              }
         }
@@ -214,7 +215,7 @@ class MaintenanceRequestController extends Controller
         $oldValues = $maintenanceRequest->toArray();
 
         $maintenanceRequest->update([
-            'assigned_to' => $validated['technician_id'],
+            'technician_id' => $validated['technician_id'],
             'status' => 'assigned',
             'assigned_at' => now(),
         ]);
@@ -236,7 +237,7 @@ class MaintenanceRequestController extends Controller
     public function close(Request $request, MaintenanceRequest $maintenanceRequest)
     {
         $user = Auth::user();
-        if ($user->id !== $maintenanceRequest->requester_id && !$user->hasRole('admin')) {
+        if ($user->id !== $maintenanceRequest->user_id && ! $user->hasRole('admin')) {
             abort(403, 'Unauthorized');
         }
 
@@ -248,8 +249,6 @@ class MaintenanceRequestController extends Controller
 
         $maintenanceRequest->update([
             'status' => 'completed',
-            'rating' => $request->rating,
-            'feedback' => $request->feedback,
         ]);
 
         MaintenanceRequestTimeline::create([
@@ -273,7 +272,7 @@ class MaintenanceRequestController extends Controller
     public function edit(MaintenanceRequest $maintenanceRequest)
     {
         // Check permission: only requester or admin can edit
-        if (Auth::id() !== $maintenanceRequest->requester_id && !Auth::user()->hasRole('admin')) {
+        if (Auth::id() !== $maintenanceRequest->user_id && ! Auth::user()->hasRole('admin')) {
             abort(403);
         }
 
@@ -286,7 +285,7 @@ class MaintenanceRequestController extends Controller
 
     public function cancel(MaintenanceRequest $maintenanceRequest)
     {
-        if (Auth::id() !== $maintenanceRequest->requester_id && !Auth::user()->hasRole('admin')) {
+        if (Auth::id() !== $maintenanceRequest->user_id && ! Auth::user()->hasRole('admin')) {
             abort(403);
         }
 

@@ -1,7 +1,5 @@
 import React, { useState } from 'react';
-import { Head, Link, useForm, router } from '@inertiajs/react';
-import AppLayout from '@/layouts/app-layout';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Link, useForm, router } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,15 +7,17 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { ThaiDatePicker } from '@/components/ui/thai-date-picker';
-import { 
-  ArrowLeft, Save, Search, FileText, Activity, Calendar, User, Building2, Loader2,
+import {
+  Save, Search, FileText, Activity, User, Building2, Loader2,
   Heart, Thermometer, Wind, Stethoscope, ClipboardList, CheckCircle2, ChevronRight,
-  UserSearch, CalendarDays, FileCheck, Sparkles
+  UserSearch, CalendarDays, FileCheck, FileSearch,
 } from 'lucide-react';
-import axios from 'axios';
+import axios from '@/lib/axios';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-
+import { maskCid, maskPatientName } from '@/lib/pii';
+import { QualityPage, Panel, Field, qualityInput } from '@/components/quality/quality-ui';
+import MraSubNav, { mraBreadcrumbs } from './MraSubNav';
 // Helper function แปลงวันที่เป็นภาษาไทย
 const formatThaiDate = (dateStr: string | null | undefined): string => {
   if (!dateStr) return '-';
@@ -126,6 +126,7 @@ export default function MraCreate() {
       
       setData((prev) => ({
         ...prev,
+        hn: String(result.patient.hn ?? prev.hn),
         patient_name: result.patient.patient_name,
         cid: result.patient.cid || '',
         birthdate: result.patient.birthdate || '',
@@ -161,9 +162,10 @@ export default function MraCreate() {
       
       setData((prev) => ({
         ...prev,
-        vn: visitData.vn,
-        an: visitData.an || '', // เพิ่ม AN
-        audit_type: visitData.an ? 'ipd' : 'opd', // ตั้งค่า audit_type อัตโนมัติตาม AN
+        hn: String(visitData.hn || visitData.patient?.hn || prev.hn),
+        vn: visitData.vn != null ? String(visitData.vn) : prev.vn,
+        an: visitData.an ? String(visitData.an) : '', // เพิ่ม AN
+        audit_type: visitData.is_ipd ? 'ipd' : 'opd', // ตั้งค่า audit_type อัตโนมัติตามประเภท visit
         visit_date: visitData.visit_date || prev.visit_date,
         visit_time: visitData.visit_time || '',
         pttype: visitData.pttype || '',
@@ -190,13 +192,11 @@ export default function MraCreate() {
     }
   };
 
-  const breadcrumbs = [
-    { title: 'งานคุณภาพ', href: '/quality' },
-    { title: 'MRA', href: '/mra' },
-    { title: 'สร้างการตรวจสอบใหม่', href: '#' },
-  ];
+  const ipdVisitCount = recentVisits.filter((visit) => visit.is_ipd).length;
+  const opdVisitCount = recentVisits.length - ipdVisitCount;
 
-  // Steps tracker
+  const breadcrumbs = mraBreadcrumbs({ title: 'สร้างการตรวจสอบใหม่', href: route('mra.create') });
+
   const steps = [
     { id: 1, name: 'ค้นหาผู้ป่วย', icon: UserSearch, completed: !!patient },
     { id: 2, name: 'เลือก Visit', icon: CalendarDays, completed: !!selectedVn },
@@ -205,77 +205,35 @@ export default function MraCreate() {
   ];
 
   return (
-    <AppLayout breadcrumbs={breadcrumbs}>
-      <Head title="สร้างการตรวจสอบใหม่ - MRA" />
-
-      <div className="p-6 max-w-6xl mx-auto space-y-6">
-        {/* Hero Header */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 p-8 text-white shadow-xl">
-          <div className="absolute inset-0 bg-grid-white/10 [mask-image:linear-gradient(0deg,transparent,white)]" />
-          <div className="relative flex items-center gap-4">
-            <Link href="/mra">
-              <Button variant="ghost" size="icon" className="text-white hover:bg-white/20">
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
-            </Link>
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-2">
-                <Sparkles className="h-6 w-6 text-yellow-300" />
-                <Badge className="bg-white/20 text-white border-white/30">MRA System</Badge>
-              </div>
-              <h1 className="text-3xl font-bold tracking-tight">สร้างการตรวจสอบใหม่</h1>
-              <p className="text-blue-100 mt-1">ตรวจสอบคุณภาพการบันทึกเวชระเบียน (Medical Record Audit) ตามมาตรฐาน สรพ. 2563</p>
-            </div>
-          </div>
-          
-          {/* Progress Steps */}
-          <div className="relative mt-8">
-            <div className="flex items-center justify-between">
-              {steps.map((step, index) => (
-                <div key={step.id} className="flex items-center">
-                  <div className={cn(
-                    "flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all duration-300",
-                    step.completed 
-                      ? "bg-green-500 border-green-400 text-white" 
-                      : "border-white/50 text-white/70"
-                  )}>
-                    {step.completed ? (
-                      <CheckCircle2 className="h-5 w-5" />
-                    ) : (
-                      <step.icon className="h-5 w-5" />
-                    )}
-                  </div>
-                  <span className={cn(
-                    "ml-2 text-sm font-medium hidden md:block",
-                    step.completed ? "text-green-300" : "text-white/70"
-                  )}>
-                    {step.name}
-                  </span>
-                  {index < steps.length - 1 && (
-                    <ChevronRight className="h-5 w-5 mx-4 text-white/30" />
-                  )}
+    <QualityPage
+      tone="indigo"
+      icon={FileSearch}
+      badge="ศูนย์พัฒนาคุณภาพ · MRA"
+      title="สร้างการตรวจสอบใหม่"
+      subtitle="ตรวจสอบคุณภาพการบันทึกเวชระเบียน (Medical Record Audit) ตามมาตรฐาน สรพ. 2563"
+      breadcrumbs={breadcrumbs}
+      headTitle="สร้างการตรวจสอบใหม่ - MRA"
+      subNav={<MraSubNav active="mra.create" />}
+    >
+        <div className="rounded-2xl border border-slate-200/70 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            {steps.map((step, index) => (
+              <div key={step.id} className="flex items-center">
+                <div className={cn(
+                  'flex h-10 w-10 items-center justify-center rounded-full border-2 transition-all',
+                  step.completed ? 'border-emerald-400 bg-emerald-500 text-white' : 'border-slate-200 text-slate-400',
+                )}>
+                  {step.completed ? <CheckCircle2 className="h-5 w-5" /> : <step.icon className="h-5 w-5" />}
                 </div>
-              ))}
-            </div>
+                <span className={cn('ml-2 hidden text-sm font-medium md:block', step.completed ? 'text-emerald-600' : 'text-slate-500')}>{step.name}</span>
+                {index < steps.length - 1 && <ChevronRight className="mx-4 h-5 w-5 text-slate-300" />}
+              </div>
+            ))}
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Step 1: ค้นหาผู้ป่วย */}
-          <Card className="border-2 border-blue-100 dark:border-blue-900 shadow-lg hover:shadow-xl transition-shadow duration-300">
-            <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/50 dark:to-indigo-950/50 rounded-t-lg">
-              <CardTitle className="flex items-center gap-3">
-                <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg">
-                  <UserSearch className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                </div>
-                <div>
-                  <span className="text-blue-700 dark:text-blue-300">ขั้นตอนที่ 1</span>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">ค้นหาผู้ป่วย</h3>
-                </div>
-              </CardTitle>
-              <CardDescription>ระบุ HN เพื่อค้นหาข้อมูลผู้ป่วยจากระบบ HOSxP</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <Panel title="ขั้นตอนที่ 1 — ค้นหาผู้ป่วย" description="ระบุ HN เพื่อค้นหาข้อมูลผู้ป่วยจากระบบ HOSxP">
               <div className="flex gap-4 items-end">
                 <div className="flex-1 max-w-xs">
                   <Label htmlFor="hn">HN (Hospital Number)</Label>
@@ -315,7 +273,7 @@ export default function MraCreate() {
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-3">
-                        <h4 className="text-lg font-semibold text-gray-900 dark:text-white">{patient.patient_name}</h4>
+                        <h4 className="text-lg font-semibold text-gray-900 dark:text-white">{maskPatientName(patient.patient_name)}</h4>
                         <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
                           <CheckCircle2 className="h-3 w-3 mr-1" />
                           พบข้อมูล
@@ -328,7 +286,7 @@ export default function MraCreate() {
                         </div>
                         <div className="bg-white/60 dark:bg-gray-800/60 p-3 rounded-lg">
                           <span className="text-xs text-muted-foreground block mb-1">เลขบัตรประชาชน</span>
-                          <p className="font-mono text-sm">{patient.cid || '-'}</p>
+                          <p className="font-mono text-sm">{maskCid(patient.cid)}</p>
                         </div>
                         <div className="bg-white/60 dark:bg-gray-800/60 p-3 rounded-lg">
                           <span className="text-xs text-muted-foreground block mb-1">วันเกิด</span>
@@ -343,25 +301,11 @@ export default function MraCreate() {
                   </div>
                 </div>
               )}
-            </CardContent>
-          </Card>
 
-          {/* Step 2: เลือก Visit */}
+          </Panel>
+
           {recentVisits.length > 0 && (
-            <Card className="border-2 border-green-100 dark:border-green-900 shadow-lg hover:shadow-xl transition-shadow duration-300">
-              <CardHeader className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/50 dark:to-emerald-950/50 rounded-t-lg">
-                <CardTitle className="flex items-center gap-3">
-                  <div className="p-2 bg-green-100 dark:bg-green-900 rounded-lg">
-                    <CalendarDays className="h-5 w-5 text-green-600 dark:text-green-400" />
-                  </div>
-                  <div>
-                    <span className="text-green-700 dark:text-green-300">ขั้นตอนที่ 2</span>
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">เลือก Visit ที่ต้องการตรวจสอบ</h3>
-                  </div>
-                </CardTitle>
-                <CardDescription>รายการ Visit ล่าสุดของผู้ป่วย ({recentVisits.length} รายการ)</CardDescription>
-              </CardHeader>
-              <CardContent>
+            <Panel title="ขั้นตอนที่ 2 — เลือก Visit" description={`รายการ Visit (${recentVisits.length} รายการ — OPD ${opdVisitCount}, IPD ${ipdVisitCount})`}>
                 {/* ตัวกรองช่วงวันที่และประเภท */}
                 <div className="mb-4 space-y-3">
                   {/* ตัวกรองประเภท Visit (OPD/IPD) */}
@@ -524,24 +468,11 @@ export default function MraCreate() {
                   ))
                     )}
                 </div>
-              </CardContent>
-            </Card>
+
+            </Panel>
           )}
 
-          {/* Step 3: ประเภทการตรวจสอบ */}
-          <Card className="border-2 border-purple-100 dark:border-purple-900 shadow-lg hover:shadow-xl transition-shadow duration-300">
-            <CardHeader className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-950/50 dark:to-pink-950/50 rounded-t-lg">
-              <CardTitle className="flex items-center gap-3">
-                <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
-                  <FileText className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                </div>
-                <div>
-                  <span className="text-purple-700 dark:text-purple-300">ขั้นตอนที่ 3</span>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">ประเภทการตรวจสอบ</h3>
-                </div>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-6">
+          <Panel title="ขั้นตอนที่ 3 — ประเภทการตรวจสอบ">
               <RadioGroup
                 value={data.audit_type}
                 onValueChange={(value) => setData('audit_type', value as 'opd' | 'ipd')}
@@ -596,24 +527,10 @@ export default function MraCreate() {
                   )}
                 </Label>
               </RadioGroup>
-            </CardContent>
-          </Card>
 
-          {/* Step 4: ข้อมูล Visit (จาก HOSxP หรือกรอกเอง) */}
-          <Card className="border-2 border-orange-100 dark:border-orange-900 shadow-lg hover:shadow-xl transition-shadow duration-300">
-            <CardHeader className="bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/50 dark:to-amber-950/50 rounded-t-lg">
-              <CardTitle className="flex items-center gap-3">
-                <div className="p-2 bg-orange-100 dark:bg-orange-900 rounded-lg">
-                  <Activity className="h-5 w-5 text-orange-600 dark:text-orange-400" />
-                </div>
-                <div>
-                  <span className="text-orange-700 dark:text-orange-300">ขั้นตอนที่ 4</span>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">ข้อมูล Visit</h3>
-                </div>
-              </CardTitle>
-              <CardDescription>ข้อมูลจะถูกดึงจาก HOSxP โดยอัตโนมัติ หรือสามารถกรอกเองได้</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
+          </Panel>
+
+          <Panel title="ขั้นตอนที่ 4 — ข้อมูล Visit" description="ข้อมูลจะถูกดึงจาก HOSxP โดยอัตโนมัติ หรือสามารถกรอกเองได้">
               {/* Row 1 */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
@@ -660,9 +577,9 @@ export default function MraCreate() {
                   <Label htmlFor="patient_name">ชื่อ-นามสกุล ผู้ป่วย</Label>
                   <Input
                     id="patient_name"
-                    value={data.patient_name}
-                    onChange={(e) => setData('patient_name', e.target.value)}
-                    className={errors.patient_name ? 'border-red-500' : ''}
+                    value={maskPatientName(data.patient_name)}
+                    readOnly
+                    className={errors.patient_name ? 'border-red-500' : 'bg-muted/40'}
                   />
                   {errors.patient_name && <p className="text-sm text-red-500">{errors.patient_name}</p>}
                 </div>
@@ -831,37 +748,35 @@ export default function MraCreate() {
                   </div>
                 </div>
               </div>
-            </CardContent>
-          </Card>
 
-          {/* Submit */}
-          <div className="flex justify-end gap-4 pb-8">
+          </Panel>
+
+          <div className="flex justify-end gap-4">
             <Link href="/mra">
-              <Button type="button" variant="outline" size="lg" className="px-8">
+              <Button type="button" variant="outline" size="lg" className="rounded-xl px-8">
                 ยกเลิก
               </Button>
             </Link>
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
               disabled={processing}
               size="lg"
-              className="px-8 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg hover:shadow-xl transition-all"
+              className="rounded-xl bg-indigo-600 px-8 hover:bg-indigo-700"
             >
               {processing ? (
                 <>
-                  <div className="animate-spin mr-2 h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+                  <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
                   กำลังบันทึก...
                 </>
               ) : (
                 <>
-                  <Sparkles className="mr-2 h-4 w-4" />
+                  <Save className="mr-2 h-4 w-4" />
                   บันทึกและเริ่มตรวจสอบ
                 </>
               )}
             </Button>
           </div>
         </form>
-      </div>
-    </AppLayout>
+    </QualityPage>
   );
 }

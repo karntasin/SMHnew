@@ -19,7 +19,8 @@ class UserController extends Controller
             $search = $request->input('search');
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%");
+                  ->orWhere('email', 'like', "%{$search}%")
+                  ->orWhere('line_display_name', 'like', "%{$search}%");
             });
         }
 
@@ -118,6 +119,17 @@ class UserController extends Controller
 
     public function destroy(User $user)
     {
+        if ($user->id === auth()->id()) {
+            return back()->with('error', 'ไม่สามารถลบบัญชีของตัวเองได้');
+        }
+
+        $user->syncRoles([]);
+        $user->positions()->detach();
+        $user->departments()->detach();
+        if (method_exists($user, 'clearMediaCollection')) {
+            $user->clearMediaCollection();
+        }
+
         $user->delete();
 
         return redirect()->route('users.index')->with('success', 'ลบผู้ใช้งานสำเร็จ');

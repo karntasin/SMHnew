@@ -2,15 +2,18 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\Tunnel\PublicTunnelService;
+use App\Support\EnvFile;
+use App\Support\LineUrls;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Config;
-use Inertia\Inertia;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Inertia\Inertia;
 
 class DBSettingsController extends Controller
 {
-    public function edit()
+    public function edit(PublicTunnelService $tunnel)
     {
         return Inertia::render('settingapp/Database', [
             'env' => [
@@ -18,18 +21,33 @@ class DBSettingsController extends Controller
                 'DB_PORT' => env('DB_PORT'),
                 'DB_DATABASE' => env('DB_DATABASE'),
                 'DB_USERNAME' => env('DB_USERNAME'),
-                'DB_PASSWORD' => env('DB_PASSWORD'), // Be careful exposing this, maybe mask it?
-                
+                'DB_PASSWORD' => env('DB_PASSWORD'),
+
                 'HOSXP_DB_HOST' => env('HOSXP_DB_HOST'),
                 'HOSXP_DB_PORT' => env('HOSXP_DB_PORT'),
                 'HOSXP_DB_DATABASE' => env('HOSXP_DB_DATABASE'),
                 'HOSXP_DB_USERNAME' => env('HOSXP_DB_USERNAME'),
                 'HOSXP_DB_PASSWORD' => env('HOSXP_DB_PASSWORD'),
 
+                'LINE_INTEGRATION_ENABLED' => (bool) config('services.line.enabled'),
                 'LINE_LOGIN_CHANNEL_ID' => env('LINE_LOGIN_CHANNEL_ID'),
                 'LINE_LOGIN_CHANNEL_SECRET' => env('LINE_LOGIN_CHANNEL_SECRET'),
+                'LINE_OAUTH_REDIRECT' => LineUrls::callback(),
                 'LINE_MESSAGING_CHANNEL_ACCESS_TOKEN' => env('LINE_MESSAGING_CHANNEL_ACCESS_TOKEN'),
-            ]
+                'LINE_MESSAGING_CHANNEL_SECRET' => env('LINE_MESSAGING_CHANNEL_SECRET'),
+                'LINE_WELCOME_MESSAGE' => env('LINE_WELCOME_MESSAGE'),
+                'LINE_OA_ADD_FRIEND_URL' => env('LINE_OA_ADD_FRIEND_URL'),
+
+                'NGROK_AUTHTOKEN' => '',
+                'NGROK_ADDR' => env('NGROK_ADDR', '8081'),
+                'NGROK_BIN' => env('NGROK_BIN', base_path('ngrok.exe')),
+
+                'CLOUDFLARE_TUNNEL_MODE' => env('CLOUDFLARE_TUNNEL_MODE', 'quick'),
+                'CLOUDFLARE_PUBLIC_HOSTNAME' => env('CLOUDFLARE_PUBLIC_HOSTNAME', ''),
+                'CLOUDFLARE_TUNNEL_CONFIG' => env('CLOUDFLARE_TUNNEL_CONFIG', base_path('deploy/cloudflare/config.yml')),
+            ],
+            'ngrok' => $tunnel->status(),
+            'hasNgrokAuthtoken' => filled(config('ngrok.authtoken')),
         ]);
     }
 
@@ -48,14 +66,33 @@ class DBSettingsController extends Controller
             'HOSXP_DB_USERNAME' => 'nullable|string',
             'HOSXP_DB_PASSWORD' => 'nullable|string',
 
+            'LINE_INTEGRATION_ENABLED' => 'nullable',
             'LINE_LOGIN_CHANNEL_ID' => 'nullable|string',
             'LINE_LOGIN_CHANNEL_SECRET' => 'nullable|string',
+            'LINE_OAUTH_REDIRECT' => 'nullable|string',
             'LINE_MESSAGING_CHANNEL_ACCESS_TOKEN' => 'nullable|string',
+            'LINE_MESSAGING_CHANNEL_SECRET' => 'nullable|string',
+            'LINE_WELCOME_MESSAGE' => 'nullable|string',
+            'LINE_OA_ADD_FRIEND_URL' => 'nullable|string',
+
+            'NGROK_AUTHTOKEN' => 'nullable|string',
+            'NGROK_ADDR' => 'nullable|string',
+            'NGROK_BIN' => 'nullable|string',
+
+            'CLOUDFLARE_TUNNEL_MODE' => 'nullable|in:quick,named',
+            'CLOUDFLARE_PUBLIC_HOSTNAME' => 'nullable|string|max:255',
+            'CLOUDFLARE_TUNNEL_CONFIG' => 'nullable|string|max:500',
         ]);
 
-        $this->updateEnv($data);
+        $data['LINE_INTEGRATION_ENABLED'] = filter_var($request->input('LINE_INTEGRATION_ENABLED'), FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false';
 
-        return redirect()->back()->with('success', 'Database settings updated successfully.');
+        if (! filled($data['NGROK_AUTHTOKEN'] ?? null) && filled(config('ngrok.authtoken'))) {
+            unset($data['NGROK_AUTHTOKEN']);
+        }
+
+        EnvFile::set($data);
+
+        return redirect()->back()->with('success', 'บันทึกการตั้งค่าแล้ว');
     }
 
     public function testConnection(Request $request)
@@ -65,7 +102,6 @@ class DBSettingsController extends Controller
 
         if ($type === 'app') {
             try {
-                // Create a temporary connection config
                 Config::set('database.connections.test_app', [
                     'driver' => 'mysql',
                     'host' => $config['DB_HOST'],
@@ -81,11 +117,14 @@ class DBSettingsController extends Controller
                 ]);
 
                 DB::connection('test_app')->getPdo();
-                return response()->json(['success' => true, 'message' => 'Connection successful!']);
+
+                return response()->json(['success' => true, 'message' => 'เชื่อมต่อฐานข้อมูลแอปสำเร็จ']);
             } catch (\Exception $e) {
-                return response()->json(['success' => false, 'message' => 'Connection failed: ' . $e->getMessage()]);
+                return response()->json(['success' => false, 'message' => 'เชื่อมต่อไม่สำเร็จ: '.$e->getMessage()]);
             }
-        } elseif ($type === 'hosxp') {
+        }
+
+        if ($type === 'hosxp') {
             try {
                 Config::set('database.connections.test_hosxp', [
                     'driver' => 'mysql',
@@ -102,60 +141,49 @@ class DBSettingsController extends Controller
                 ]);
 
                 DB::connection('test_hosxp')->getPdo();
-                return response()->json(['success' => true, 'message' => 'Connection successful!']);
+
+                return response()->json(['success' => true, 'message' => 'เชื่อมต่อ HOSxP สำเร็จ']);
             } catch (\Exception $e) {
-                return response()->json(['success' => false, 'message' => 'Connection failed: ' . $e->getMessage()]);
+                return response()->json(['success' => false, 'message' => 'เชื่อมต่อไม่สำเร็จ: '.$e->getMessage()]);
             }
-        } elseif ($type === 'line') {
-             // Test LINE Messaging API
-             $token = $config['LINE_MESSAGING_CHANNEL_ACCESS_TOKEN'];
-             if (!$token) {
-                 return response()->json(['success' => false, 'message' => 'Token is missing.']);
-             }
+        }
 
-             $response = Http::withHeaders([
-                 'Authorization' => 'Bearer ' . $token,
-             ])->get('https://api.line.me/v2/bot/info');
+        if ($type === 'line') {
+            $token = $config['LINE_MESSAGING_CHANNEL_ACCESS_TOKEN'] ?? config('services.line.messaging_token');
+            if (! $token) {
+                return response()->json(['success' => false, 'message' => 'ยังไม่มี Messaging Access Token']);
+            }
 
-             if ($response->successful()) {
-                 return response()->json(['success' => true, 'message' => 'LINE API Connection successful! Bot Name: ' . $response->json('displayName')]);
-             } else {
-                 return response()->json(['success' => false, 'message' => 'LINE API Connection failed: ' . $response->body()]);
-             }
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer '.$token,
+            ])->get('https://api.line.me/v2/bot/info');
+
+            if ($response->successful()) {
+                return response()->json(['success' => true, 'message' => 'LINE Messaging API พร้อมใช้ · Bot: '.$response->json('displayName')]);
+            }
+
+            return response()->json(['success' => false, 'message' => 'LINE API ไม่สำเร็จ: '.$response->body()]);
         }
 
         return response()->json(['success' => false, 'message' => 'Invalid test type.']);
     }
 
-    protected function updateEnv($data)
+    public function ngrokStatus(PublicTunnelService $tunnel)
     {
-        $path = base_path('.env');
+        return response()->json($tunnel->status());
+    }
 
-        if (file_exists($path)) {
-            $env = file_get_contents($path);
+    public function ngrokStart(Request $request, PublicTunnelService $tunnel)
+    {
+        $driver = $request->input('driver', 'cloudflare') === 'ngrok' ? 'ngrok' : 'cloudflare';
+        $result = $tunnel->start($driver);
+        $ok = empty($result['error']) && ! empty($result['public_url']);
 
-            foreach ($data as $key => $value) {
-                // If value contains spaces, quote it
-                if (strpos($value, ' ') !== false && strpos($value, '"') === false) {
-                    $value = '"' . $value . '"';
-                }
-                
-                // If null, set to empty
-                if ($value === null) {
-                    $value = '';
-                }
+        return response()->json($result + ['success' => $ok]);
+    }
 
-                // Check if key exists
-                if (strpos($env, $key . '=') !== false) {
-                    // Update existing key
-                    $env = preg_replace("/^{$key}=.*/m", "{$key}={$value}", $env);
-                } else {
-                    // Add new key
-                    $env .= "\n{$key}={$value}";
-                }
-            }
-
-            file_put_contents($path, $env);
-        }
+    public function ngrokStop(PublicTunnelService $tunnel)
+    {
+        return response()->json($tunnel->stop() + ['success' => true]);
     }
 }

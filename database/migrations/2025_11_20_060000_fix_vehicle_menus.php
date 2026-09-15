@@ -25,15 +25,19 @@ return new class extends Migration
             ]);
         } else {
             // Create if not exists (fallback)
+            $adminParentId = Menu::where('title', 'งานธุรการ')->value('id')
+                ?? Menu::where('title', 'Settings')->value('id');
+
             $parent = Menu::create([
-                'id' => 35,
                 'title' => 'ระบบขอใช้รถ',
                 'icon' => 'Car',
-                'parent_id' => 2, // งานธุรการ
+                'parent_id' => $adminParentId,
                 'order' => 13,
                 'permission_name' => 'vehicle.dashboard',
             ]);
         }
+
+        $parentId = $parent->id ?? 35;
 
         // 2. Update/Create Children
         $children = [
@@ -66,12 +70,12 @@ return new class extends Migration
         // For simplicity, I'll update by title or create.
         
         // Let's delete the old "Dashboard" child (ID 36) if it points to /vehicle/dashboard which doesn't exist
-        Menu::where('parent_id', 35)->where('route', '/vehicle/dashboard')->delete();
+        Menu::where('parent_id', $parentId)->where('route', '/vehicle/dashboard')->delete();
 
         foreach ($children as $child) {
             Menu::updateOrCreate(
                 [
-                    'parent_id' => 35,
+                    'parent_id' => $parentId,
                     'title' => $child['title'],
                 ],
                 [
@@ -84,7 +88,7 @@ return new class extends Migration
         }
 
         // Update "จัดการรถ" route
-        Menu::where('parent_id', 35)->where('title', 'จัดการรถ')->update([
+        Menu::where('parent_id', $parentId)->where('title', 'จัดการรถ')->update([
             'route' => '/vehicles/manage', // We haven't created this yet, but good to have
             'order' => 5
         ]);

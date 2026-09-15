@@ -8,9 +8,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Calendar, Clock, MapPin, Car, Search, Filter, X, UserCheck, CheckCircle, XCircle, Clock3 } from 'lucide-react';
+import { Plus, Calendar, Clock, MapPin, Car, Search, Filter, X, UserCheck, CheckCircle, Clock3 } from 'lucide-react';
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
+import VehicleSubNav from '../VehicleSubNav';
+import { ThaiDatePicker } from '@/components/ui/thai-date-picker';
 
 interface Booking {
     id: number;
@@ -58,14 +60,14 @@ interface Props {
 
 export default function MyRequests({ bookings, stats, filters }: Props) {
     const [search, setSearch] = useState(filters.search || '');
-    const [status, setStatus] = useState(filters.status || '');
+    const [status, setStatus] = useState(filters.status || 'all');
     const [dateFrom, setDateFrom] = useState(filters.date_from || '');
     const [dateTo, setDateTo] = useState(filters.date_to || '');
 
     const applyFilters = () => {
         router.get(route('vehicles.bookings.my'), {
             search: search || undefined,
-            status: status || undefined,
+            status: status === 'all' ? undefined : status,
             date_from: dateFrom || undefined,
             date_to: dateTo || undefined,
         }, { preserveState: true });
@@ -73,7 +75,7 @@ export default function MyRequests({ bookings, stats, filters }: Props) {
 
     const clearFilters = () => {
         setSearch('');
-        setStatus('');
+        setStatus('all');
         setDateFrom('');
         setDateTo('');
         router.get(route('vehicles.bookings.my'));
@@ -98,26 +100,37 @@ export default function MyRequests({ bookings, stats, filters }: Props) {
         }
     };
 
-    const hasActiveFilters = search || status || dateFrom || dateTo;
+    const hasActiveFilters = search || (status && status !== 'all') || dateFrom || dateTo;
 
     return (
         <AppLayout breadcrumbs={[
-            { title: 'ระบบจองรถ', href: route('vehicles.bookings.index') },
+            { title: 'ระบบจองรถ', href: route('vehicles.index') },
             { title: 'รายการขอใช้รถของฉัน', href: '#' }
         ]}>
             <Head title="รายการขอใช้รถของฉัน" />
-            <div className="p-6 space-y-6">
-                <div className="flex justify-between items-center">
-                    <h1 className="text-2xl font-bold">รายการขอใช้รถของฉัน</h1>
-                    <div className="space-x-2">
-                        <Link href={route('vehicles.bookings.index')}>
-                            <Button variant="outline">รายการทั้งหมด</Button>
-                        </Link>
-                        <Link href={route('vehicles.bookings.create')}>
-                            <Button><Plus className="mr-2 h-4 w-4" /> ขอใช้รถใหม่</Button>
-                        </Link>
+
+            <div className="relative min-h-screen overflow-hidden">
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(16,185,129,0.12),_transparent_55%)]" />
+
+                <div className="relative container mx-auto space-y-6 px-4 py-6">
+                    <VehicleSubNav active="vehicles.bookings.my" />
+
+                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                        <div>
+                            <h1 className="text-3xl font-bold tracking-tight text-slate-800">รายการขอใช้รถของฉัน</h1>
+                            <p className="text-sm text-slate-500">ติดตามสถานะคำขอใช้รถที่คุณส่ง</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            <Link href={route('vehicles.bookings.index')}>
+                                <Button variant="outline" className="rounded-xl">รายการทั้งหมด</Button>
+                            </Link>
+                            <Link href={route('vehicles.bookings.create')}>
+                                <Button className="rounded-xl bg-emerald-600 hover:bg-emerald-700">
+                                    <Plus className="mr-2 h-4 w-4" /> ขอใช้รถใหม่
+                                </Button>
+                            </Link>
+                        </div>
                     </div>
-                </div>
 
                 {/* Stats Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -183,7 +196,7 @@ export default function MyRequests({ bookings, stats, filters }: Props) {
                                         <SelectValue placeholder="ทั้งหมด" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="">ทั้งหมด</SelectItem>
+                                        <SelectItem value="all">ทั้งหมด</SelectItem>
                                         <SelectItem value="pending">รออนุมัติ</SelectItem>
                                         <SelectItem value="approved">อนุมัติแล้ว</SelectItem>
                                         <SelectItem value="rejected">ไม่อนุมัติ</SelectItem>
@@ -194,18 +207,18 @@ export default function MyRequests({ bookings, stats, filters }: Props) {
                             </div>
                             <div className="space-y-2">
                                 <Label>วันที่เริ่ม</Label>
-                                <Input 
-                                    type="date"
+                                <ThaiDatePicker
                                     value={dateFrom}
-                                    onChange={(e) => setDateFrom(e.target.value)}
+                                    onChange={setDateFrom}
+                                    placeholder="วันที่เริ่ม"
                                 />
                             </div>
                             <div className="space-y-2">
                                 <Label>วันที่สิ้นสุด</Label>
-                                <Input 
-                                    type="date"
+                                <ThaiDatePicker
                                     value={dateTo}
-                                    onChange={(e) => setDateTo(e.target.value)}
+                                    onChange={setDateTo}
+                                    placeholder="วันที่สิ้นสุด"
                                 />
                             </div>
                             <div className="space-y-2">
@@ -331,6 +344,7 @@ export default function MyRequests({ bookings, stats, filters }: Props) {
                         ))}
                     </div>
                 )}
+                </div>
             </div>
         </AppLayout>
     );

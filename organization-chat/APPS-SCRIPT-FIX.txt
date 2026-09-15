@@ -1,0 +1,103 @@
+============================================================
+แก้ Server login: LINE login handlers not found
+============================================================
+
+สถานะตอนนี้
+-----------
+✅ Cloudflare Worker (polished-river-f1bb) — ทำงาน
+✅ LIFF Login — สำเร็จ (เห็น Profile / LINE UID)
+❌ Server login — Apps Script ยังไม่มีฟังก์ชัน login
+
+ข้อความ error:
+  "LINE login handlers not found"
+
+แปลว่า: ใน Apps Script มีแค่ router (doGet/doPost)
+         แต่ยังไม่มีฟังก์ชันหลักจาก Code.gs ใน App Script.md
+
+
+สิ่งที่ต้องมีใน Apps Script (ไฟล์ Code.gs)
+------------------------------------------
+
+1) CONFIG (บรรทัด ~32-72 ใน App Script.md)
+   - SPREADSHEET_ID  ← ถ้า Standalone Script ต้องใส่ ID ของ Google Sheet
+   - LINE_CHANNEL_ID: '2011190976'
+   - LINE_LIFF_ID, SESSION_SECONDS, SHEETS
+
+2) Spreadsheet helpers
+   - getSpreadsheet()
+   - getSheet()
+   - ensureHeaders()
+
+3) LINE Login (จำเป็น)
+   - authenticateWithLine(idToken)
+   - verifyLineIdToken(idToken)
+   - getUserByLineId(lineUserId)
+   - createUserFromLine(...)
+   - getUserById(userId)
+   - updateUserLogin(userId)
+
+4) Session
+   - createSession(data)
+   - getSession(token)
+
+5) Router (ท้ายไฟล์ — จาก Code.gs.router.js)
+   - doGet(e)  → routeApi_
+   - doPost(e) → routeApi_
+   - ลบ doGet() แบบ createHtmlOutputFromFile('LIFF_TEST') ออก
+
+
+ขั้นตอนใน Google Apps Script
+---------------------------
+1. เปิดโปรเจกต์:
+   https://script.google.com/ ... (จาก App Script.md)
+
+2. เปิดไฟล์ Code.gs
+
+3. คัดลอกโค้ดจาก App Script.md ส่วน "code.gs"
+   ตั้งแต่ CONFIG จนถึงก่อน "index.html"
+   (อย่าคัด HTML / worker.js มาใส่ใน Apps Script)
+
+4. วาง Code.gs.router.js ทับ doGet/doPost เดิม
+   (หรือรวม doGet/doPost จาก router เข้า Code.gs)
+
+5. ตั้ง SPREADSHEET_ID
+   - เปิด Google Sheet ที่เก็บ Users
+   - Copy ID จาก URL: .../d/XXXXXXXX/edit
+   - ใส่ใน CONFIG.SPREADSHEET_ID
+
+6. Deploy → Manage deployments → Edit (ดินสอ) หรือ New deployment
+   - Type: Web app
+   - Execute as: Me
+   - Who has access: Anyone
+   - Deploy → คัดลอก URL /exec ใหม่ (ถ้าเปลี่ยน)
+
+7. ถ้า URL /exec เปลี่ยน → แก้ CONFIG.GAS_URL ใน worker.js แล้ว deploy Worker อีกครั้ง
+
+
+ทดสอบใน Apps Script Editor
+---------------------------
+รันฟังก์ชัน (ถ้ามี):
+  testUsers()
+
+หรือเปิดในเบราว์เซอร์:
+  .../exec?action=health
+  .../exec?action=users
+
+
+ทดสอบหลังแก้ (จากหน้า Worker)
+-----------------------------
+1. Refresh หน้า https://polished-river-f1bb.karntasin5.workers.dev/
+2. Login LINE อีกครั้ง
+3. Debug log ควรเห็นประมาณ:
+   Server login: {"success":true,"gas":{"success":true,"sessionToken":"...","user":{...}}}
+
+4. กด "ดึง Users" ต้องได้รายชื่อจาก Sheet
+
+
+ถ้ายัง error หลังใส่โค้ดแล้ว
+---------------------------
+- "ไม่พบ Google Spreadsheet" → ใส่ SPREADSHEET_ID
+- "LINE Channel ID ไม่ตรง" → ตรวจ CONFIG.LINE_CHANNEL_ID = 2011190976
+- "LINE Token verification failed" → ตรวจว่า LIFF อยู่ Channel เดียวกัน
+
+ส่งข้อความ error ใหม่จาก Debug log มาได้

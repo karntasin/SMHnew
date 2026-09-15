@@ -18,9 +18,13 @@ class OpdScreen extends Model
     public $timestamps = false;
 
     protected $casts = [
+        // โรงพยาบาลส่วนใหญ่ใช้ bps/bpd; บางเวอร์ชันใช้ bpsys/bpdia
+        'bps' => 'integer',
+        'bpd' => 'integer',
         'bpsys' => 'integer',
         'bpdia' => 'integer',
         'pulse' => 'integer',
+        'hr' => 'integer',
         'temperature' => 'float',
         'bw' => 'float',
         'height' => 'float',
@@ -42,9 +46,9 @@ class OpdScreen extends Model
     public function getVitalSignsAttribute()
     {
         return [
-            'bp_systolic' => $this->bpsys,
-            'bp_diastolic' => $this->bpdia,
-            'pulse' => $this->pulse,
+            'bp_systolic' => $this->bps ?? $this->bpsys,
+            'bp_diastolic' => $this->bpd ?? $this->bpdia,
+            'pulse' => $this->pulse ?? $this->hr,
             'temperature' => $this->temperature,
             'respiratory_rate' => $this->rr,
             'weight' => $this->bw,

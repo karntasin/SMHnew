@@ -13,8 +13,9 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { CheckCircle2, XCircle, FolderOpen, HardDrive } from 'lucide-react';
+import { appPath, storageUrl } from '@/lib/asset';
 
-const DEFAULT_WARNA = '#181818';
+const DEFAULT_WARNA = '#7C3AED';
 
 interface SettingApp {
   nama_app: string;
@@ -44,7 +45,7 @@ export default function SettingForm({ setting, available_drives = [] }: Props) {
   const { data, setData, post, processing, errors } = useForm({
     nama_app: setting?.nama_app || '',
     deskripsi: setting?.deskripsi || '',
-    warna: setting?.warna || '#0ea5e9',
+    warna: setting?.warna || '#7C3AED',
     seo: {
       title: setting?.seo?.title || '',
       description: setting?.seo?.description || '',
@@ -61,8 +62,8 @@ export default function SettingForm({ setting, available_drives = [] }: Props) {
   const [pathMessage, setPathMessage] = useState('');
   const [isChecking, setIsChecking] = useState(false);
 
-  const logoPreview = useRef<string | null>(setting?.logo ? `/storage/${setting.logo}` : null);
-  const faviconPreview = useRef<string | null>(setting?.favicon ? `/storage/${setting.favicon}` : null);
+  const logoPreview = useRef<string | null>(setting?.logo ? storageUrl(setting.logo) : null);
+  const faviconPreview = useRef<string | null>(setting?.favicon ? storageUrl(setting.favicon) : null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,7 +87,7 @@ export default function SettingForm({ setting, available_drives = [] }: Props) {
     setPathMessage('');
     
     // Using fetch for JSON response
-    fetch('/settingsapp/check-path', {
+    fetch(appPath('/settingsapp/check-path'), {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',

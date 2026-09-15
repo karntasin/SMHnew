@@ -46,48 +46,45 @@ class SendDocumentReminders extends Command
         
         foreach ($overdueActions as $action) {
             $document = $action->document;
-            
-            if (!$document) {
+
+            if (! $document) {
                 continue;
             }
-            
-            // 1. Notify sender (ผู้ส่ง)
+
+            $notifiedIds = collect();
+
             if ($action->sender) {
                 $receiverName = $action->receiverDepartment?->name ?? 'ผู้รับ';
                 $action->sender->notify(new DocumentNotification(
-                    $document, 
-                    'reminder_sender', 
+                    $document,
+                    'reminder_sender',
                     $receiverName
                 ));
+                $notifiedIds->push((int) $action->sender->id);
                 $this->info("Sent reminder to sender: {$action->sender->name} for document {$document->document_number}");
             }
-            
-            // 2. Notify all users in receiving department (ผู้รับทั้งหมดในแผนก)
+
+            $receivers = collect();
             if ($action->receiver_department_id) {
-                $receivers = User::where('department_id', $action->receiver_department_id)->get();
-                
-                foreach ($receivers as $receiver) {
-                    $receiver->notify(new DocumentNotification(
-                        $document, 
-                        'reminder_receiver', 
-                        $action->sender?->name ?? 'ผู้ส่ง'
-                    ));
-                }
-                
-                $this->info("Sent reminders to {$receivers->count()} users in department {$action->receiverDepartment?->name}");
+                $receivers = $receivers->merge(User::where('department_id', $action->receiver_department_id)->get());
             }
-            
-            // 3. Notify specific receiver if set
             if ($action->receiver_user_id && $action->receiverUser) {
-                $action->receiverUser->notify(new DocumentNotification(
-                    $document, 
-                    'reminder_receiver', 
+                $receivers->push($action->receiverUser);
+            }
+
+            $receivers = $receivers->unique('id')->reject(fn (User $user) => $notifiedIds->contains((int) $user->id));
+            foreach ($receivers as $receiver) {
+                $receiver->notify(new DocumentNotification(
+                    $document,
+                    'reminder_receiver',
                     $action->sender?->name ?? 'ผู้ส่ง'
                 ));
-                $this->info("Sent reminder to specific receiver: {$action->receiverUser->name}");
             }
-            
-            // Mark reminder as sent
+
+            if ($receivers->isNotEmpty()) {
+                $this->info("Sent reminders to {$receivers->count()} receivers for document {$document->document_number}");
+            }
+
             $action->update(['reminder_sent_at' => now()]);
         }
         

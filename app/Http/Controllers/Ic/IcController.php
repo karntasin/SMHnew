@@ -788,11 +788,20 @@ class IcController extends Controller
         $outbreaks = $query->orderBy('detection_date', 'desc')->paginate(10);
 
         $stats = [
-            'total' => IcOutbreak::count(),
-            'active' => IcOutbreak::whereIn('status', ['investigating', 'active'])->count(),
-            'resolved_this_year' => IcOutbreak::where('status', 'resolved')
-                ->whereYear('resolved_date', now()->year)
-                ->count(),
+            'total_outbreaks' => IcOutbreak::count(),
+            'active_outbreaks' => IcOutbreak::whereIn('status', ['investigating', 'active'])->count(),
+            'total_cases' => (int) IcOutbreak::sum('total_cases'),
+            'by_type' => IcOutbreak::query()
+                ->selectRaw('severity as outbreak_type, COUNT(*) as total')
+                ->groupBy('severity')
+                ->orderByDesc('total')
+                ->get()
+                ->map(fn ($row) => [
+                    'outbreak_type' => (string) $row->outbreak_type,
+                    'total' => (int) $row->total,
+                ])
+                ->values()
+                ->all(),
         ];
 
         return Inertia::render('IC/Outbreak', [
@@ -905,26 +914,60 @@ class IcController extends Controller
         if ($request->filled('topic')) {
             $query->where('topic', $request->topic);
         }
-        if ($request->filled('type')) {
+
+        if ($request->filled('training_type')) {
+            $query->where('training_type', $request->training_type);
+        } elseif ($request->filled('type')) {
             $query->where('training_type', $request->type);
+        }
+
+        if ($request->filled('month') && preg_match('/^\d{4}-\d{2}$/', $request->month)) {
+            [$year, $month] = explode('-', $request->month);
+            $query->whereYear('training_date', (int) $year)->whereMonth('training_date', (int) $month);
         }
 
         $records = $query->orderBy('training_date', 'desc')->paginate(10);
 
         $stats = [
             'total_trainings' => IcEducationRecord::count(),
+            'total_attendees' => (int) IcEducationRecord::sum('total_participants'),
+            'total_hours' => (float) IcEducationRecord::sum('duration_hours'),
             'this_year' => IcEducationRecord::whereYear('training_date', now()->year)->count(),
-            'total_participants' => IcEducationRecord::sum('total_participants'),
             'avg_pass_rate' => round(IcEducationRecord::avg('pass_rate') ?? 0, 1),
+            'by_type' => IcEducationRecord::query()
+                ->select('training_type', DB::raw('COUNT(*) as total'))
+                ->groupBy('training_type')
+                ->orderByDesc('total')
+                ->get()
+                ->map(fn ($row) => [
+                    'training_type' => (string) $row->training_type,
+                    'total' => (int) $row->total,
+                ])
+                ->values()
+                ->all(),
             'by_topic' => IcEducationRecord::select('topic', DB::raw('count(*) as total'))
                 ->groupBy('topic')
                 ->get(),
+            'by_month' => IcEducationRecord::query()
+                ->selectRaw('DATE_FORMAT(training_date, "%Y-%m") as month, COUNT(*) as total')
+                ->groupByRaw('DATE_FORMAT(training_date, "%Y-%m")')
+                ->orderBy('month')
+                ->get()
+                ->map(fn ($row) => [
+                    'month' => (string) $row->month,
+                    'total' => (int) $row->total,
+                ])
+                ->values()
+                ->all(),
         ];
 
         return Inertia::render('IC/Education', [
             'records' => $records,
             'stats' => $stats,
-            'filters' => $request->only(['topic', 'type']),
+            'filters' => [
+                'training_type' => $request->query('training_type', ''),
+                'month' => $request->query('month', ''),
+            ],
         ]);
     }
 
@@ -972,8 +1015,10 @@ class IcController extends Controller
         ]);
 
         $education->attendees()->create([
-            ...$validated,
-            'passed' => $validated['post_test_score'] >= 80,
+            'attendee_name' => $validated['employee_name'],
+            'department' => $validated['department'],
+            'post_test_score' => $validated['post_test_score'],
+            'passed' => ($validated['post_test_score'] ?? 0) >= 80,
         ]);
 
         // Update total_participants
