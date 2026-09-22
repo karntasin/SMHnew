@@ -870,6 +870,7 @@ Route::get('/tv/{boardKey}/queue-data', [App\Http\Controllers\TvBoardController:
 
 // --- Admin (ครอบ middleware auth เดิมของระบบ) ---
 Route::middleware(['web', 'auth'])->prefix('admin/tv')->name('admin.tv.')->group(function () {
+    Route::get('/', function () { return view('admin.tv.index'); })->name('index');
     Route::get('settings/{boardKey?}', [App\Http\Controllers\Admin\TvDisplaySettingController::class, 'edit'])->name('settings.edit');
     Route::put('settings/{boardKey?}', [App\Http\Controllers\Admin\TvDisplaySettingController::class, 'update'])->name('settings.update');
 
@@ -884,3 +885,4 @@ Route::middleware(['web', 'auth'])->prefix('admin/tv')->name('admin.tv.')->group
     Route::patch('rooms/{room}/toggle', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'toggle'])->name('rooms.toggle');
     Route::delete('rooms/{room}', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'destroy'])->name('rooms.destroy');
 });
+

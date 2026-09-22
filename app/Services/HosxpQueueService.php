@@ -36,9 +36,7 @@ class HosxpQueueService
                 'o.cur_dep', 'o.cur_dep_busy', // 'Y' = กำลังตรวจ, 'N' หรือ null = รอคิว (CHAR ไม่ใช่ int)
             ])
             ->whereDate('o.vstdate', now()->toDateString())
-            ->where('o.main_dep', '002')
             ->whereIn('o.cur_dep', $curDeps)
-            ->where('k.department', 'like', 'ห้องตรวจ%')
             ->orderBy('k.department')
             ->orderBy('o.oqueue')
             ->get();
