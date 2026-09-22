@@ -1,10 +1,68 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="th">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>จอแสดงคิวห้องตรวจ</title>
     @vite(['resources/css/app.css', 'resources/js/app.tsx'])
+    <style>
+        /* Typography and Spacing Scaling based on layout mode */
+        .layout-1 .room-card { padding: 3rem; }
+        .layout-1 .room-title { font-size: 3.5rem; }
+        .layout-1 .room-header-wrap { padding: 1.5rem; margin-bottom: 2.5rem; border-radius: 1.5rem; }
+        .layout-1 .wait-badge { font-size: 1.5rem; padding: 0.75rem 1.5rem; }
+        .layout-1 .calling-label { font-size: 2.5rem; }
+        .layout-1 .calling-no { font-size: 8rem; line-height: 1; }
+        .layout-1 .calling-name { font-size: 3.5rem; }
+        .layout-1 .calling-box { padding: 3rem; border-radius: 2rem; margin-bottom: 2rem; }
+        .layout-1 .waiting-title { font-size: 2rem; margin-bottom: 1.5rem; }
+        .layout-1 .waiting-no { font-size: 3rem; }
+        .layout-1 .waiting-name { font-size: 2.5rem; }
+        .layout-1 .waiting-item { padding: 1.5rem 2.5rem; margin-bottom: 1rem; border-radius: 1rem; }
+        .layout-1 .empty-state { font-size: 2rem; padding: 3rem; }
+
+        .layout-2-4 .room-card { padding: 1.5rem; }
+        .layout-2-4 .room-title { font-size: 1.75rem; }
+        .layout-2-4 .room-header-wrap { padding: 1rem; margin-bottom: 1.25rem; border-radius: 1rem; }
+        .layout-2-4 .wait-badge { font-size: 1rem; padding: 0.25rem 0.75rem; }
+        .layout-2-4 .calling-label { font-size: 1.25rem; }
+        .layout-2-4 .calling-no { font-size: 4rem; line-height: 1; }
+        .layout-2-4 .calling-name { font-size: 1.75rem; }
+        .layout-2-4 .calling-box { padding: 1.25rem; border-radius: 1rem; margin-bottom: 1.25rem; }
+        .layout-2-4 .waiting-title { font-size: 1.125rem; margin-bottom: 0.75rem; }
+        .layout-2-4 .waiting-no { font-size: 1.5rem; }
+        .layout-2-4 .waiting-name { font-size: 1.25rem; }
+        .layout-2-4 .waiting-item { padding: 0.75rem 1rem; margin-bottom: 0.5rem; border-radius: 0.5rem; }
+        .layout-2-4 .empty-state { font-size: 1.25rem; padding: 1.5rem; }
+
+        .layout-5-8 .room-card { padding: 1rem; }
+        .layout-5-8 .room-title { font-size: 1.25rem; }
+        .layout-5-8 .room-header-wrap { padding: 0.5rem 0.75rem; margin-bottom: 0.75rem; border-radius: 0.75rem; }
+        .layout-5-8 .wait-badge { font-size: 0.875rem; padding: 0.125rem 0.5rem; }
+        .layout-5-8 .calling-label { font-size: 1rem; }
+        .layout-5-8 .calling-no { font-size: 2.25rem; line-height: 1; }
+        .layout-5-8 .calling-name { font-size: 1.25rem; }
+        .layout-5-8 .calling-box { padding: 0.75rem; border-radius: 0.75rem; margin-bottom: 0.75rem; }
+        .layout-5-8 .waiting-title { font-size: 0.875rem; margin-bottom: 0.5rem; }
+        .layout-5-8 .waiting-no { font-size: 1.125rem; }
+        .layout-5-8 .waiting-name { font-size: 1rem; }
+        .layout-5-8 .waiting-item { padding: 0.375rem 0.75rem; margin-bottom: 0.375rem; border-radius: 0.5rem; }
+        .layout-5-8 .empty-state { font-size: 1rem; padding: 1rem; }
+
+        .layout-9-plus .room-card { padding: 0.75rem; border-radius: 0.75rem; }
+        .layout-9-plus .room-title { font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .layout-9-plus .room-header-wrap { padding: 0.375rem 0.5rem; margin-bottom: 0.5rem; border-radius: 0.5rem; }
+        .layout-9-plus .wait-badge { font-size: 0.75rem; padding: 0.125rem 0.375rem; }
+        .layout-9-plus .calling-label { display: none; }
+        .layout-9-plus .calling-no { font-size: 1.5rem; line-height: 1; }
+        .layout-9-plus .calling-name { font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px; }
+        .layout-9-plus .calling-box { padding: 0.5rem; border-radius: 0.5rem; margin-bottom: 0.5rem; flex-direction: column; align-items: flex-start; gap: 0.25rem; }
+        .layout-9-plus .waiting-title { display: none; }
+        .layout-9-plus .waiting-no { font-size: 0.875rem; }
+        .layout-9-plus .waiting-name { font-size: 0.875rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80px; }
+        .layout-9-plus .waiting-item { padding: 0.25rem 0.5rem; margin-bottom: 0.25rem; border-radius: 0.375rem; }
+        .layout-9-plus .empty-state { font-size: 0.875rem; padding: 0.5rem; }
+    </style>
 </head>
 <body class="bg-slate-900 text-white h-screen w-screen overflow-hidden"
       x-data="tvBoard('{{ $boardKey }}', {{ $settings->queue_poll_seconds }}, {{ $settings->chime_enabled ? 'true' : 'false' }}, {{ $settings->tts_enabled ? 'true' : 'false' }})"
@@ -26,7 +84,7 @@
                 <template x-for="(item, idx) in media" :key="item.id">
                     <div x-show="mediaIndex === idx" class="w-full h-full absolute inset-0 bg-black" x-transition.opacity.duration.700ms>
                         <template x-if="isYoutube(item.file_path)">
-                            <iframe :src="`https://www.youtube.com/embed/` + getYtId(item.file_path) + `?autoplay=1&controls=0&loop=1&playlist=` + getYtId(item.file_path)" 
+                            <iframe :src="https://www.youtube.com/embed/ + getYtId(item.file_path) + ?autoplay=1&controls=0&loop=1&playlist= + getYtId(item.file_path)" 
                                     class="w-full h-full pointer-events-none" frameborder="0" allow="autoplay; fullscreen"></iframe>
                         </template>
                         <template x-if="item.media_type === 'video' && !isYoutube(item.file_path)">
@@ -38,74 +96,88 @@
                     </div>
                 </template>
             @else
-                <div class="p-8 h-full flex flex-col bg-gradient-to-br from-indigo-900 to-slate-900">
+                <div class="p-8 h-full flex flex-col bg-gradient-to-br from-indigo-950 via-slate-900 to-black">
                     <h2 class="text-4xl font-extrabold mb-6 text-yellow-400 drop-shadow-md">📢 ข่าวสาร/ประกาศ</h2>
                     <div class="flex-1 overflow-hidden text-3xl leading-relaxed text-slate-100" x-html="rssHtml"></div>
                 </div>
             @endif
         </div>
 
-        <!-- ฝั่งขวา: รายการคิว -->
-        <div class="h-full overflow-y-auto bg-gradient-to-br from-slate-950 to-slate-900 p-6 flex flex-col"
+        <!-- ฝั่งขวา: รายการคิว (No Scrolling) -->
+        <div class="h-full bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-6 flex flex-col overflow-hidden"
              style="width: {{ $settings->right_panel_width_percent }}%;">
             
-            <div class="flex items-center justify-between mb-6 bg-slate-800/50 p-6 rounded-2xl border border-slate-700 shadow-lg">
+            <div class="flex-shrink-0 flex items-center justify-between mb-6 bg-slate-800/60 backdrop-blur-md p-6 rounded-2xl border border-slate-700/80 shadow-2xl">
                 <div class="flex items-center gap-4">
-                    <div class="bg-indigo-500 p-3 rounded-xl shadow-inner">
+                    <div class="bg-gradient-to-br from-sky-400 to-indigo-600 p-3 rounded-xl shadow-inner">
                         <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
                     </div>
-                    <h1 class="text-4xl font-extrabold text-white tracking-wide">คิวห้องตรวจ</h1>
+                    <h1 class="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-sky-300 to-indigo-300 tracking-wide">คิวรับบริการ</h1>
                 </div>
-                <div class="text-right">
-                    <span class="text-3xl font-bold text-sky-400 drop-shadow-sm" x-text="clockTime"></span>
-                    <div class="text-lg text-slate-400 mt-1" x-text="clockDate"></div>
+                <div class="text-right flex flex-col items-end">
+                    <span class="text-4xl font-black text-amber-400 drop-shadow-lg" x-text="clockTime"></span>
+                    <div class="text-lg font-medium text-slate-400 mt-1" x-text="clockDate"></div>
                 </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-6 flex-1 content-start">
+            <!-- Grid dynamically sized -->
+            <div class="grid gap-4 flex-1 min-h-0" :class="gridClass">
                 <template x-for="(roomData, roomName) in rooms" :key="roomName">
-                    <div class="bg-slate-800/80 rounded-2xl p-5 shadow-xl border border-slate-700 flex flex-col transition-all">
+                    <!-- Room Card -->
+                    <div class="room-card bg-slate-800/50 backdrop-blur-sm rounded-2xl shadow-xl border border-slate-700/50 flex flex-col min-h-0 relative overflow-hidden">
                         
-                        <!-- ชื่อห้อง -->
-                        <div class="bg-slate-900/50 -mx-5 -mt-5 px-5 py-4 rounded-t-2xl border-b border-slate-700/50 mb-4 flex items-center justify-between">
-                            <h2 class="text-2xl font-bold text-sky-300 truncate pr-2" x-text="roomName"></h2>
-                            <div class="bg-indigo-500/20 text-indigo-300 text-sm font-semibold px-3 py-1 rounded-full border border-indigo-500/30">รอ <span x-text="roomData.waiting.length"></span> คิว</div>
+                        <!-- Room Header -->
+                        <div class="room-header-wrap bg-slate-900/60 border border-slate-700/50 flex items-center justify-between flex-shrink-0">
+                            <h2 class="room-title font-extrabold text-sky-300 drop-shadow" x-text="roomName"></h2>
+                            <div class="wait-badge bg-indigo-500/20 text-indigo-300 font-bold rounded-full border border-indigo-500/30 whitespace-nowrap">
+                                รอ <span x-text="roomData.waiting.length"></span>
+                            </div>
                         </div>
 
-                        <!-- กำลังเรียกคิว -->
-                        <div class="mb-4 space-y-2">
+                        <!-- Calling Area -->
+                        <div class="flex-shrink-0 space-y-2">
                             <template x-for="q in roomData.calling" :key="roomName + '-calling-' + q.oqueue">
-                                <div class="row-calling bg-gradient-to-r from-yellow-400 to-amber-500 rounded-xl px-4 py-4 shadow-lg border border-yellow-300 flex justify-between items-center transform scale-100 transition-all">
+                                <div class="calling-box bg-gradient-to-r from-yellow-400 to-amber-500 shadow-xl border border-yellow-300 flex justify-between items-center transform scale-100 transition-all">
                                     <div class="flex items-baseline gap-3">
-                                        <span class="text-amber-900 text-xl font-bold">เรียกคิว</span>
-                                        <span class="text-slate-900 text-4xl font-black drop-shadow-sm" x-text="q.oqueue"></span>
+                                        <span class="calling-label text-amber-900 font-bold tracking-wide uppercase">เรียกคิว</span>
+                                        <span class="calling-no text-slate-900 font-black drop-shadow-sm" x-text="q.oqueue"></span>
                                     </div>
-                                    <span class="text-slate-900 text-2xl font-extrabold truncate pl-4" x-text="q.display_name"></span>
+                                    <span class="calling-name text-slate-900 font-extrabold truncate pl-4" x-text="q.display_name"></span>
                                 </div>
                             </template>
                             <template x-if="roomData.calling.length === 0">
-                                <div class="bg-slate-700/30 rounded-xl px-4 py-4 border border-slate-600 border-dashed text-center">
-                                    <span class="text-slate-500 text-lg font-medium">-- ว่าง --</span>
+                                <div class="calling-box bg-slate-700/30 border border-slate-600 border-dashed flex items-center justify-center">
+                                    <span class="text-slate-500 font-medium empty-state">-- ว่าง --</span>
                                 </div>
                             </template>
                         </div>
 
-                        <!-- คิวรอตรวจ -->
-                        <div class="bg-slate-900/40 rounded-xl p-4 flex-1 border border-slate-700/50">
-                            <h3 class="text-sm text-slate-400 font-bold mb-3 uppercase tracking-wider">คิวรอตรวจ</h3>
-                            <div class="grid grid-cols-1 gap-2">
-                                <template x-for="q in roomData.waiting" :key="roomName + '-waiting-' + q.oqueue">
-                                    <div class="bg-slate-700/50 rounded-lg px-4 py-2 flex justify-between items-center border border-slate-600/50 hover:bg-slate-700/70 transition-colors">
-                                        <span class="text-sky-300 text-xl font-bold" x-text="q.oqueue"></span>
-                                        <span class="text-slate-300 text-lg font-medium truncate pl-2" x-text="q.display_name"></span>
+                        <!-- Waiting Area -->
+                        <div class="bg-slate-900/40 rounded-xl p-3 flex-1 flex flex-col min-h-0 border border-slate-700/50 overflow-hidden relative">
+                            <h3 class="waiting-title text-slate-400 font-bold uppercase tracking-wider flex-shrink-0">คิวรอตรวจ</h3>
+                            <div class="flex-1 overflow-hidden flex flex-col gap-1">
+                                <template x-for="q in roomData.waiting.slice(0, maxWaiting)" :key="roomName + '-waiting-' + q.oqueue">
+                                    <div class="waiting-item bg-slate-800/80 flex justify-between items-center border border-slate-700/80 hover:bg-slate-700 transition-colors">
+                                        <span class="waiting-no text-sky-300 font-bold" x-text="q.oqueue"></span>
+                                        <span class="waiting-name text-slate-300 font-medium truncate pl-2" x-text="q.display_name"></span>
                                     </div>
                                 </template>
+                                <!-- Show dots if more waiting queues exist -->
+                                <template x-if="roomData.waiting.length > maxWaiting">
+                                    <div class="text-center text-slate-500 font-bold text-sm mt-1 animate-pulse">...และอีก <span x-text="roomData.waiting.length - maxWaiting"></span> คิว</div>
+                                </template>
                             </div>
-                            <p x-show="roomData.waiting.length === 0" class="text-slate-500 italic text-center py-4">ไม่มีคิวรอ</p>
+                            <template x-if="roomData.waiting.length === 0">
+                                <div class="absolute inset-0 flex items-center justify-center">
+                                    <span class="text-slate-600 italic font-medium">ไม่มีคิวรอ</span>
+                                </div>
+                            </template>
                         </div>
+
                     </div>
                 </template>
             </div>
+
         </div>
     </div>
 
@@ -124,8 +196,32 @@
                 mediaTimer: null,
                 audioUnlocked: false,
 
+                get roomCount() {
+                    return Object.keys(this.rooms).length;
+                },
+
+                get gridClass() {
+                    const len = this.roomCount;
+                    if (len === 0) return 'grid-cols-1 layout-1';
+                    if (len === 1) return 'grid-cols-1 layout-1';
+                    if (len <= 4) return 'grid-cols-2 layout-2-4';
+                    if (len <= 6) return 'grid-cols-3 layout-5-8';
+                    if (len <= 8) return 'grid-cols-4 layout-5-8';
+                    if (len <= 12) return 'grid-cols-4 layout-9-plus';
+                    return 'grid-cols-5 layout-9-plus';
+                },
+
+                get maxWaiting() {
+                    const len = this.roomCount;
+                    if (len === 1) return 10;
+                    if (len <= 4) return 6;
+                    if (len <= 6) return 4;
+                    if (len <= 8) return 3;
+                    return 2;
+                },
+
                 init() {
-                    this.audioUnlocked = false; // บังคับให้กด 1 ครั้งเสมอ เพื่อให้ Browser อนุญาตให้เล่นเสียงสื่อได้
+                    this.audioUnlocked = false; 
 
                     this.fetchQueue();
                     this.pollTimer = setInterval(() => this.fetchQueue(), this.pollSeconds * 1000);
@@ -139,15 +235,11 @@
 
                 unlockAudio() {
                     this.audioUnlocked = true;
-                    // ปิดเสียงเรียกคิวชั่วคราวตามที่ผู้ใช้ร้องขอ (ใส่ comment ไว้)
-                    // const unlock = new Audio('/sounds/chime.mp3');
-                    // unlock.volume = 0.01;
-                    // unlock.play().catch(()=>{});
                 },
 
                 async fetchQueue() {
                     try {
-                        const res = await fetch(`/tv/${this.boardKey}/queue-data`, { cache: 'no-store' });
+                        const res = await fetch(/tv//queue-data, { cache: 'no-store' });
                         if (!res.ok) return;
                         const data = await res.json();
                         this.detectNewCalls(data.rooms);
@@ -174,13 +266,6 @@
 
                 announce() {
                     if (!this.audioUnlocked) return;
-                    // ปิดใช้งานเสียงเรียกคิวชั่วคราว
-                    /*
-                    if (this.chimeEnabled) {
-                        const audio = new Audio('/sounds/chime.mp3');
-                        audio.play().catch(() => {});
-                    }
-                    */
                 },
 
                 isYoutube(url) {
