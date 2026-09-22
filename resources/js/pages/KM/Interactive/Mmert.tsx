@@ -420,7 +420,7 @@ export default function MmertJourney({ initialProgress }: Props) {
 
     return (
         <QualityPage
-            tone="red"
+            tone="rose"
             icon={ShieldAlert}
             badge="ศูนย์พัฒนาคุณภาพ · KM Interactive · M-MERT"
             title="M-MERT Interactive Learning Lab"
