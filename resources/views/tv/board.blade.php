@@ -84,7 +84,7 @@
                 <template x-for="(item, idx) in media" :key="item.id">
                     <div x-show="mediaIndex === idx" class="w-full h-full absolute inset-0 bg-black" x-transition.opacity.duration.700ms>
                         <template x-if="isYoutube(item.file_path)">
-                            <iframe :src="https://www.youtube.com/embed/ + getYtId(item.file_path) + ?autoplay=1&controls=0&loop=1&playlist= + getYtId(item.file_path)" 
+                            <iframe :src="`https://www.youtube.com/embed/${getYtId(item.file_path)}?autoplay=1&controls=0&loop=1&playlist=${getYtId(item.file_path)}`" 
                                     class="w-full h-full pointer-events-none" frameborder="0" allow="autoplay; fullscreen"></iframe>
                         </template>
                         <template x-if="item.media_type === 'video' && !isYoutube(item.file_path)">
@@ -239,7 +239,7 @@
 
                 async fetchQueue() {
                     try {
-                        const res = await fetch(/tv//queue-data, { cache: 'no-store' });
+                        const res = await fetch(`/tv/${this.boardKey}/queue-data`, { cache: 'no-store' });
                         if (!res.ok) return;
                         const data = await res.json();
                         this.detectNewCalls(data.rooms);
