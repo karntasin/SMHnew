@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="th">
 <head>
     <meta charset="UTF-8">
@@ -21,47 +21,47 @@
         .layout-1 .waiting-item { padding: 1.5rem 2.5rem; margin-bottom: 1rem; border-radius: 1rem; }
         .layout-1 .empty-state { font-size: 2rem; padding: 3rem; }
 
-        .layout-2-4 .room-card { padding: 1.5rem; }
-        .layout-2-4 .room-title { font-size: 1.75rem; }
-        .layout-2-4 .room-header-wrap { padding: 1rem; margin-bottom: 1.25rem; border-radius: 1rem; }
-        .layout-2-4 .wait-badge { font-size: 1rem; padding: 0.25rem 0.75rem; }
-        .layout-2-4 .calling-label { font-size: 1.25rem; }
-        .layout-2-4 .calling-no { font-size: 4rem; line-height: 1; }
-        .layout-2-4 .calling-name { font-size: 1.75rem; }
-        .layout-2-4 .calling-box { padding: 1.25rem; border-radius: 1rem; margin-bottom: 1.25rem; }
-        .layout-2-4 .waiting-title { font-size: 1.125rem; margin-bottom: 0.75rem; }
-        .layout-2-4 .waiting-no { font-size: 1.5rem; }
-        .layout-2-4 .waiting-name { font-size: 1.25rem; }
-        .layout-2-4 .waiting-item { padding: 0.75rem 1rem; margin-bottom: 0.5rem; border-radius: 0.5rem; }
-        .layout-2-4 .empty-state { font-size: 1.25rem; padding: 1.5rem; }
+        .layout-2-4 .room-card { padding: 1.25rem; }
+        .layout-2-4 .room-title { font-size: 1.5rem; }
+        .layout-2-4 .room-header-wrap { padding: 0.75rem; margin-bottom: 1rem; border-radius: 0.75rem; }
+        .layout-2-4 .wait-badge { font-size: 0.875rem; padding: 0.25rem 0.5rem; }
+        .layout-2-4 .calling-label { font-size: 1.125rem; }
+        .layout-2-4 .calling-no { font-size: 3.5rem; line-height: 1; }
+        .layout-2-4 .calling-name { font-size: 1.5rem; }
+        .layout-2-4 .calling-box { padding: 1rem; border-radius: 1rem; margin-bottom: 1rem; }
+        .layout-2-4 .waiting-title { font-size: 1rem; margin-bottom: 0.5rem; }
+        .layout-2-4 .waiting-no { font-size: 1.25rem; }
+        .layout-2-4 .waiting-name { font-size: 1.125rem; }
+        .layout-2-4 .waiting-item { padding: 0.5rem 0.75rem; margin-bottom: 0.375rem; border-radius: 0.5rem; }
+        .layout-2-4 .empty-state { font-size: 1.125rem; padding: 1rem; }
 
-        .layout-5-8 .room-card { padding: 1rem; }
-        .layout-5-8 .room-title { font-size: 1.25rem; }
-        .layout-5-8 .room-header-wrap { padding: 0.5rem 0.75rem; margin-bottom: 0.75rem; border-radius: 0.75rem; }
-        .layout-5-8 .wait-badge { font-size: 0.875rem; padding: 0.125rem 0.5rem; }
-        .layout-5-8 .calling-label { font-size: 1rem; }
-        .layout-5-8 .calling-no { font-size: 2.25rem; line-height: 1; }
-        .layout-5-8 .calling-name { font-size: 1.25rem; }
-        .layout-5-8 .calling-box { padding: 0.75rem; border-radius: 0.75rem; margin-bottom: 0.75rem; }
-        .layout-5-8 .waiting-title { font-size: 0.875rem; margin-bottom: 0.5rem; }
-        .layout-5-8 .waiting-no { font-size: 1.125rem; }
-        .layout-5-8 .waiting-name { font-size: 1rem; }
-        .layout-5-8 .waiting-item { padding: 0.375rem 0.75rem; margin-bottom: 0.375rem; border-radius: 0.5rem; }
-        .layout-5-8 .empty-state { font-size: 1rem; padding: 1rem; }
+        .layout-5-8 .room-card { padding: 0.5rem; }
+        .layout-5-8 .room-title { font-size: 1.125rem; }
+        .layout-5-8 .room-header-wrap { padding: 0.375rem 0.5rem; margin-bottom: 0.5rem; border-radius: 0.5rem; }
+        .layout-5-8 .wait-badge { font-size: 0.75rem; padding: 0.125rem 0.5rem; }
+        .layout-5-8 .calling-label { font-size: 0.875rem; }
+        .layout-5-8 .calling-no { font-size: 1.75rem; line-height: 1; }
+        .layout-5-8 .calling-name { font-size: 1rem; }
+        .layout-5-8 .calling-box { padding: 0.5rem; border-radius: 0.5rem; margin-bottom: 0.5rem; }
+        .layout-5-8 .waiting-title { font-size: 0.75rem; margin-bottom: 0.25rem; }
+        .layout-5-8 .waiting-no { font-size: 1rem; }
+        .layout-5-8 .waiting-name { font-size: 0.875rem; }
+        .layout-5-8 .waiting-item { padding: 0.25rem 0.5rem; margin-bottom: 0.25rem; border-radius: 0.375rem; }
+        .layout-5-8 .empty-state { font-size: 1rem; padding: 0.75rem; }
 
-        .layout-9-plus .room-card { padding: 0.75rem; border-radius: 0.75rem; }
-        .layout-9-plus .room-title { font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .layout-9-plus .room-header-wrap { padding: 0.375rem 0.5rem; margin-bottom: 0.5rem; border-radius: 0.5rem; }
-        .layout-9-plus .wait-badge { font-size: 0.75rem; padding: 0.125rem 0.375rem; }
+        .layout-9-plus .room-card { padding: 0.375rem; border-radius: 0.5rem; }
+        .layout-9-plus .room-title { font-size: 0.875rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .layout-9-plus .room-header-wrap { padding: 0.25rem 0.375rem; margin-bottom: 0.25rem; border-radius: 0.375rem; }
+        .layout-9-plus .wait-badge { font-size: 0.65rem; padding: 0.125rem 0.25rem; }
         .layout-9-plus .calling-label { display: none; }
-        .layout-9-plus .calling-no { font-size: 1.5rem; line-height: 1; }
-        .layout-9-plus .calling-name { font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px; }
-        .layout-9-plus .calling-box { padding: 0.5rem; border-radius: 0.5rem; margin-bottom: 0.5rem; flex-direction: column; align-items: flex-start; gap: 0.25rem; }
+        .layout-9-plus .calling-no { font-size: 1.125rem; line-height: 1; }
+        .layout-9-plus .calling-name { font-size: 0.875rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80px; }
+        .layout-9-plus .calling-box { padding: 0.25rem; border-radius: 0.375rem; margin-bottom: 0.25rem; flex-direction: column; align-items: flex-start; gap: 0.125rem; }
         .layout-9-plus .waiting-title { display: none; }
-        .layout-9-plus .waiting-no { font-size: 0.875rem; }
-        .layout-9-plus .waiting-name { font-size: 0.875rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80px; }
-        .layout-9-plus .waiting-item { padding: 0.25rem 0.5rem; margin-bottom: 0.25rem; border-radius: 0.375rem; }
-        .layout-9-plus .empty-state { font-size: 0.875rem; padding: 0.5rem; }
+        .layout-9-plus .waiting-no { font-size: 0.75rem; }
+        .layout-9-plus .waiting-name { font-size: 0.75rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60px; }
+        .layout-9-plus .waiting-item { padding: 0.125rem 0.25rem; margin-bottom: 0.125rem; border-radius: 0.25rem; }
+        .layout-9-plus .empty-state { font-size: 0.75rem; padding: 0.25rem; }
     </style>
 </head>
 <body class="bg-slate-900 text-white h-screen w-screen overflow-hidden"
@@ -215,9 +215,9 @@
                     const len = this.roomCount;
                     if (len === 1) return 10;
                     if (len <= 4) return 6;
-                    if (len <= 6) return 4;
-                    if (len <= 8) return 3;
-                    return 2;
+                    if (len <= 6) return 5;
+                    if (len <= 8) return 4;
+                    return 4;
                 },
 
                 init() {
