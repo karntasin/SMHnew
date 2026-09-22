@@ -13,9 +13,15 @@ class DrugUsageService
 
     public const FORM_LIQUID = 'liquid';
 
+    public const FORM_TOPICAL = 'topical';
+
     public const FORM_INJECTION = 'injection';
 
-    public const FORM_TOPICAL = 'topical';
+    public const FORM_EPIAO = 'epiao';
+
+    public const FORM_EPREX = 'eprex';
+
+    public const FORM_HAD = 'had';
 
     public const FORM_OTHER = 'other';
 
@@ -30,16 +36,94 @@ class DrugUsageService
         return $this->hosxp->check(false);
     }
 
-    /** @return array<string, string> */
+    /**
+     * 7 หมวดหมู่ตามสีในระบบ HOSxP:
+     * สีดำ = ยาเม็ด
+     * สีน้ำเงิน = ยาน้ำ
+     * สีส้ม = ยาภายนอก
+     * สีชมพู = ยาฉีด
+     * สีเขียว = ยาฉีดห้องไต epiao
+     * สีม่วง = ยาฉีดห้องไต eprex
+     * สีแดง = ยา High Alert
+     *
+     * @return array<string, string>
+     */
     public function formCatalog(): array
     {
         return [
             self::FORM_TABLET => 'ยาเม็ด',
             self::FORM_LIQUID => 'ยาน้ำ',
+            self::FORM_TOPICAL => 'ยาภายนอก',
             self::FORM_INJECTION => 'ยาฉีด',
-            self::FORM_TOPICAL => 'ยาใช้ภายนอก',
-            self::FORM_OTHER => 'อื่นๆ',
+            self::FORM_EPIAO => 'ยาฉีดห้องไต epiao',
+            self::FORM_EPREX => 'ยาฉีดห้องไต eprex',
+            self::FORM_HAD => 'ยา High Alert',
         ];
+    }
+
+    /**
+     * @return array{color_key: string, color_name: string, hex: string, badge: string, dot: string}
+     */
+    public function formColorInfo(string $form): array
+    {
+        return match ($form) {
+            self::FORM_TABLET => [
+                'color_key' => 'black',
+                'color_name' => 'สีดำ',
+                'hex' => '#18181b',
+                'badge' => 'border-zinc-300 bg-zinc-100 text-zinc-900',
+                'dot' => 'bg-zinc-900',
+            ],
+            self::FORM_LIQUID => [
+                'color_key' => 'blue',
+                'color_name' => 'สีน้ำเงิน',
+                'hex' => '#2563eb',
+                'badge' => 'border-blue-200 bg-blue-50 text-blue-700',
+                'dot' => 'bg-blue-600',
+            ],
+            self::FORM_TOPICAL => [
+                'color_key' => 'orange',
+                'color_name' => 'สีส้ม',
+                'hex' => '#ea580c',
+                'badge' => 'border-orange-200 bg-orange-50 text-orange-700',
+                'dot' => 'bg-orange-600',
+            ],
+            self::FORM_INJECTION => [
+                'color_key' => 'pink',
+                'color_name' => 'สีชมพู',
+                'hex' => '#ec4899',
+                'badge' => 'border-pink-200 bg-pink-50 text-pink-700',
+                'dot' => 'bg-pink-500',
+            ],
+            self::FORM_EPIAO => [
+                'color_key' => 'green',
+                'color_name' => 'สีเขียว',
+                'hex' => '#16a34a',
+                'badge' => 'border-emerald-200 bg-emerald-50 text-emerald-700',
+                'dot' => 'bg-emerald-600',
+            ],
+            self::FORM_EPREX => [
+                'color_key' => 'purple',
+                'color_name' => 'สีม่วง',
+                'hex' => '#9333ea',
+                'badge' => 'border-purple-200 bg-purple-50 text-purple-700',
+                'dot' => 'bg-purple-600',
+            ],
+            self::FORM_HAD => [
+                'color_key' => 'red',
+                'color_name' => 'สีแดง',
+                'hex' => '#dc2626',
+                'badge' => 'border-red-200 bg-red-50 text-red-700',
+                'dot' => 'bg-red-600',
+            ],
+            default => [
+                'color_key' => 'slate',
+                'color_name' => 'สีเทา',
+                'hex' => '#64748b',
+                'badge' => 'border-slate-200 bg-slate-50 text-slate-700',
+                'dot' => 'bg-slate-500',
+            ],
+        };
     }
 
     /** @return array<string, array<string, string>> */
@@ -59,6 +143,12 @@ class DrugUsageService
                 'sachet' => 'ซอง',
                 'other' => 'อื่นๆ',
             ],
+            self::FORM_TOPICAL => [
+                'tube' => 'หลอด',
+                'patch' => 'Patch',
+                'spray' => 'สเปรย์/พ่น',
+                'other' => 'อื่นๆ',
+            ],
             self::FORM_INJECTION => [
                 'amp' => 'Amp',
                 'vial' => 'Vial',
@@ -69,9 +159,23 @@ class DrugUsageService
                 'pen' => 'Pen',
                 'other' => 'อื่นๆ',
             ],
-            self::FORM_TOPICAL => [
-                'tube' => 'หลอด',
-                'patch' => 'Patch',
+            self::FORM_EPIAO => [
+                'syringe' => 'เข็ม/Syringe',
+                'vial' => 'Vial',
+                'amp' => 'Amp',
+                'other' => 'อื่นๆ',
+            ],
+            self::FORM_EPREX => [
+                'syringe' => 'เข็ม/Syringe',
+                'vial' => 'Vial',
+                'amp' => 'Amp',
+                'other' => 'อื่นๆ',
+            ],
+            self::FORM_HAD => [
+                'amp' => 'Amp',
+                'vial' => 'Vial',
+                'tab' => 'Tab/เม็ด',
+                'bottle' => 'ขวด',
                 'other' => 'อื่นๆ',
             ],
             self::FORM_OTHER => [
@@ -104,7 +208,8 @@ class DrugUsageService
 
         try {
             $conn = DB::connection('hosxp');
-            $allDrugs = $this->fetchDrugRows($conn, $startDate, $endDate);
+            $allDrugs = $this->fetchDrugRows($conn, $startDate, $endDate)
+                ->map(fn ($row) => $this->enrichRow($row));
 
             $totalQty = (float) $allDrugs->sum('total_qty');
             $totalAmount = (float) $allDrugs->sum('total_amount');
@@ -125,13 +230,15 @@ class DrugUsageService
                 ->map(function (Collection $group, $units) use ($totalQty, $totalAmount) {
                     $qty = (float) $group->sum('total_qty');
                     $amount = (float) $group->sum('total_amount');
+                    $firstRow = $group->first();
+                    $form = $firstRow->form ?? $this->classifyForm((string) $units);
 
                     return [
                         'units' => (string) $units,
-                        'form' => $this->classifyForm((string) $units),
-                        'form_label' => $this->formLabel($this->classifyForm((string) $units)),
-                        'sub_form' => $this->classifySubForm((string) $units),
-                        'sub_form_label' => $this->subFormLabel((string) $units),
+                        'form' => $form,
+                        'form_label' => $this->formLabel($form),
+                        'sub_form' => $firstRow->sub_form ?? $this->classifySubForm((string) $units, $form),
+                        'sub_form_label' => $firstRow->sub_form_label ?? $this->subFormLabel((string) $units, $form),
                         'drug_count' => $group->count(),
                         'total_qty' => $qty,
                         'total_amount' => $amount,
@@ -199,6 +306,7 @@ class DrugUsageService
         ?string $form = null,
         int $page = 1,
         int $perPage = 50,
+        ?string $account = null,
     ): array {
         @set_time_limit(120);
 
@@ -209,6 +317,8 @@ class DrugUsageService
                 'total' => 0,
                 'units' => [],
                 'by_form' => [],
+                'by_account' => [],
+                'by_account_code' => [],
                 'form_catalog' => $this->formCatalog(),
                 'error' => $connection['message'] ?? null,
             ];
@@ -222,8 +332,9 @@ class DrugUsageService
             $totalQty = (float) $all->sum('total_qty');
             $totalAmount = (float) $all->sum('total_amount');
             $byForm = $this->buildByForm($all, $totalQty, $totalAmount);
+            [$byAccount, $byAccountCode] = $this->buildByAccount($all, $totalQty, $totalAmount);
 
-            $filtered = $this->filterByForm($all, $form)
+            $filtered = $this->filterByAccount($this->filterByForm($all, $form), $account)
                 ->sortBy([['form_sort', 'asc'], ['sub_form_sort', 'asc'], ['units', 'asc'], ['name', 'asc']])
                 ->values();
 
@@ -238,8 +349,18 @@ class DrugUsageService
                     'units' => $row->units,
                     'form' => $row->form,
                     'form_label' => $row->form_label,
+                    'color_key' => $row->color_key ?? 'black',
+                    'color_name' => $row->color_name ?? 'สีดำ',
+                    'color_hex' => $row->color_hex ?? '#18181b',
+                    'color_badge' => $row->color_badge ?? 'border-zinc-300 bg-zinc-100 text-zinc-900',
+                    'color_dot' => $row->color_dot ?? 'bg-zinc-900',
                     'sub_form' => $row->sub_form,
                     'sub_form_label' => $row->sub_form_label,
+                    'drugaccount' => $row->drugaccount ? trim((string) $row->drugaccount) : null,
+                    'account' => $row->account ?? 'out',
+                    'account_code' => $row->account_code ?? '(ว่าง)',
+                    'account_label' => $row->account_label ?? 'ยานอกบัญชี',
+                    'account_full_label' => $row->account_full_label ?? 'ยานอกบัญชี (ว่าง)',
                     'unitprice' => (float) ($row->unitprice ?? 0),
                     'total_qty' => (float) ($row->total_qty ?? 0),
                     'total_amount' => (float) ($row->total_amount ?? 0),
@@ -251,6 +372,8 @@ class DrugUsageService
                 'total' => $total,
                 'units' => $this->availableUnits($conn),
                 'by_form' => $byForm,
+                'by_account' => $byAccount,
+                'by_account_code' => $byAccountCode,
                 'form_catalog' => $this->formCatalog(),
             ];
         } catch (\Throwable $e) {
@@ -261,6 +384,8 @@ class DrugUsageService
                 'total' => 0,
                 'units' => [],
                 'by_form' => [],
+                'by_account' => [],
+                'by_account_code' => [],
                 'form_catalog' => $this->formCatalog(),
                 'error' => $e->getMessage(),
             ];
@@ -274,6 +399,7 @@ class DrugUsageService
         ?string $search = null,
         ?string $unit = null,
         ?string $form = null,
+        ?string $account = null,
     ): Collection {
         @set_time_limit(180);
 
@@ -285,11 +411,10 @@ class DrugUsageService
         try {
             $conn = DB::connection('hosxp');
 
-            return $this->filterByForm(
-                $this->fetchDrugRows($conn, $startDate, $endDate, $search, $unit)
-                    ->map(fn ($row) => $this->enrichRow($row)),
-                $form
-            )
+            $all = $this->fetchDrugRows($conn, $startDate, $endDate, $search, $unit)
+                ->map(fn ($row) => $this->enrichRow($row));
+
+            return $this->filterByAccount($this->filterByForm($all, $form), $account)
                 ->sortBy([['form_sort', 'asc'], ['sub_form_sort', 'asc'], ['units', 'asc'], ['name', 'asc']])
                 ->values();
         } catch (\Throwable $e) {
@@ -299,44 +424,74 @@ class DrugUsageService
         }
     }
 
-    public function classifyForm(?string $units): string
+    public function classifyForm(?string $units, ?object $row = null): string
     {
-        $u = mb_strtolower(trim((string) $units));
-        if ($u === '' || $u === '-') {
-            return self::FORM_OTHER;
+        $name = (string) ($row->name ?? '');
+        $dosageform = mb_strtolower(trim((string) ($row->dosageform ?? '')));
+        $u = mb_strtolower(trim((string) ($units ?? ($row->units ?? ''))));
+        $color = isset($row->displaycolor) && $row->displaycolor !== null ? (int) $row->displaycolor : null;
+        $alertLevel = (int) ($row->alert_level ?? 0);
+        $generic = mb_strtolower(trim((string) ($row->generic_name ?? '')));
+
+        // 1. สีแดง = ยา High Alert (color=255 หรือ alert_level > 0 หรือชื่อระบุ HAD)
+        if ($color === 255 || $alertLevel > 0 || stripos($name, '(HAD)') !== false || stripos($name, 'high alert') !== false || stripos($generic, 'high alert') !== false) {
+            return self::FORM_HAD;
         }
 
-        if ($this->matchesAny($u, ['patch', 'pacth'])) {
+        // 2. สีเขียว = ยาฉีดห้องไต epiao (color=32768 หรือชื่อ/generic ระบุ epiao)
+        if ($color === 32768 || stripos($name, 'epiao') !== false || stripos($generic, 'epiao') !== false) {
+            return self::FORM_EPIAO;
+        }
+
+        // 3. สีม่วง = ยาฉีดห้องไต eprex (color=8388736 หรือชื่อ/generic ระบุ eprex)
+        if ($color === 8388736 || stripos($name, 'eprex') !== false || stripos($generic, 'eprex') !== false) {
+            return self::FORM_EPREX;
+        }
+
+        // 4. สีชมพู = ยาฉีด (color=16711935 หรือ dosageform/units บ่งบอกว่าเป็นยาฉีด)
+        if (
+            $color === 16711935 ||
+            in_array($dosageform, ['injection', 'inj'], true) ||
+            $this->matchesAny($u, ['inj', 'injection', 'amp', 'amphule', 'ampoule', 'ampule', 'vial', 'syring', 'syringe', 'prefilled', 'iu/ml'])
+        ) {
+            return self::FORM_INJECTION;
+        }
+
+        // 5. สีส้ม = ยาภายนอก (color=26367 หรือ dosageform/units บ่งบอกว่าเป็นยาภายนอก)
+        if (
+            $color === 26367 ||
+            in_array($dosageform, ['cream', 'ointment', 'lotion', 'gel', 'eye drops', 'ear drops', 'nasal spray', 'inhalations powder', 'nebuliser solution', 'oral paste', 'eye gel', 'eye ointment'], true) ||
+            $this->matchesAny($u, ['patch', 'pacth', 'cream', 'ointment', 'lotion', 'gel', 'spray', 'drop', 'gtt']) ||
+            ($this->matchesAny($u, ['หลอด']) && $this->matchesAny($u, [' g.', ' g)', 'gram', 'กรัม', 'g']))
+        ) {
             return self::FORM_TOPICAL;
         }
 
-        if ($this->matchesAny($u, ['หลอด']) && $this->matchesAny($u, [' g.', ' g)', 'gram', 'กรัม'])) {
-            return self::FORM_TOPICAL;
+        // 6. สีน้ำเงิน = ยาน้ำ (color=16711680 หรือ dosageform/units บ่งบอกว่าเป็นยาน้ำ)
+        if (
+            $color === 16711680 ||
+            in_array($dosageform, ['syrup', 'suspension', 'solution', 'irrigation solution', 'mouthwash', 'elixir'], true) ||
+            $this->matchesAny($u, ['ขวด', 'syrup', 'susp', 'suspension', 'solution', 'elixir', 'ml', 'มล', 'cc', 'ซีซี', 'oral sol', 'oral suspension'])
+        ) {
+            return self::FORM_LIQUID;
         }
 
-        foreach ($this->formPatterns()[self::FORM_INJECTION] as $pattern) {
-            if (str_contains($u, $pattern)) {
-                return self::FORM_INJECTION;
-            }
+        // 7. สีดำ = ยาเม็ด (color=536870912 / tablet / capsule / tab / cap / หรือค่าเริ่มต้น)
+        if (
+            $color === 536870912 ||
+            in_array($dosageform, ['tablet', 'capsule', 'cap', 'tab', 'powder'], true) ||
+            $this->matchesAny($u, ['tab', 'tablet', 'เม็ด', 'cap', 'capsule', 'แคปซูล', 'แค็บซูล', 'แคบซูล', 'แคป', 'แค็บ', 'softgel', 'pill', 'sachet', 'ซอง', 'กระปุก', 'กล่อง'])
+        ) {
+            return self::FORM_TABLET;
         }
 
-        foreach ($this->formPatterns()[self::FORM_LIQUID] as $pattern) {
-            if (str_contains($u, $pattern)) {
-                return self::FORM_LIQUID;
-            }
-        }
-
+        // หากเป็นหลอด และไม่ได้เข้ากลุ่มภายนอก ให้เป็นยาฉีด
         if ($this->matchesAny($u, ['หลอด'])) {
             return self::FORM_INJECTION;
         }
 
-        foreach ($this->formPatterns()[self::FORM_TABLET] as $pattern) {
-            if (str_contains($u, $pattern)) {
-                return self::FORM_TABLET;
-            }
-        }
-
-        return self::FORM_OTHER;
+        // Default to ยาเม็ด (สีดำ)
+        return self::FORM_TABLET;
     }
 
     public function classifySubForm(?string $units, ?string $form = null): string
@@ -392,12 +547,23 @@ class DrugUsageService
                 'softgel', 'pill', 'sachet', 'ซอง', 'กระปุก', 'กล่อง',
             ],
             self::FORM_LIQUID => [
-                'ml', 'มล', 'cc', 'ซีซี', 'bottle', 'bott', 'ขวด', 'syrup', 'drop', 'gtt', 'หยด',
-                'susp', 'solution', 'elixir', 'liquid', 'น้ำ', 'oral sol', 'mdi',
+                'ml', 'มล', 'cc', 'ซีซี', 'ขวด', 'bottle', 'bott', 'syrup', 'susp', 'solution', 'elixir', 'liquid', 'oral sol',
+            ],
+            self::FORM_TOPICAL => [
+                'patch', 'pacth', 'cream', 'ointment', 'lotion', 'gel', 'spray', 'drop', 'gtt',
             ],
             self::FORM_INJECTION => [
                 'amp', 'amphule', 'ampoule', 'ampule', 'vial', 'syring', 'syringe',
-                'unit', 'dose', 'pen', 'inj', 'injection', 'ฉีด', 'prefilled', 'iv ', ' im', 'sc ', 'iu/ml',
+                'unit', 'dose', 'pen', 'inj', 'injection', 'ฉีด', 'prefilled', 'iu/ml',
+            ],
+            self::FORM_EPIAO => [
+                'epiao',
+            ],
+            self::FORM_EPREX => [
+                'eprex',
+            ],
+            self::FORM_HAD => [
+                'had', 'high alert',
             ],
         ];
     }
@@ -417,6 +583,11 @@ class DrugUsageService
                 'bottle' => ['bottle', 'bott', 'ขวด', 'ml', 'มล', 'cc', 'ซีซี', 'syrup', 'drop', 'gtt', 'หยด', 'susp', 'solution', 'elixir', 'liquid', 'น้ำ', 'mdi'],
                 'sachet' => ['sachet', 'ซอง'],
             ],
+            self::FORM_TOPICAL => [
+                'patch' => ['patch', 'pacth'],
+                'spray' => ['spray', 'สเปรย์', 'พ่น'],
+                'tube' => ['หลอด'],
+            ],
             self::FORM_INJECTION => [
                 'amp' => ['amp', 'amphule', 'ampoule', 'ampule'],
                 'vial' => ['vial'],
@@ -426,9 +597,21 @@ class DrugUsageService
                 'dose' => ['dose'],
                 'pen' => ['pen'],
             ],
-            self::FORM_TOPICAL => [
-                'patch' => ['patch', 'pacth'],
-                'tube' => ['หลอด'],
+            self::FORM_EPIAO => [
+                'syringe' => ['syring', 'syringe', 'เข็ม', 'prefilled'],
+                'vial' => ['vial'],
+                'amp' => ['amp'],
+            ],
+            self::FORM_EPREX => [
+                'syringe' => ['syring', 'syringe', 'เข็ม', 'prefilled'],
+                'vial' => ['vial'],
+                'amp' => ['amp'],
+            ],
+            self::FORM_HAD => [
+                'amp' => ['amp', 'amphule', 'ampoule', 'ampule'],
+                'vial' => ['vial'],
+                'tab' => ['tab', 'tablet', 'เม็ด', 'cap', 'capsule'],
+                'bottle' => ['bottle', 'ขวด', 'ml', 'cc'],
             ],
             self::FORM_OTHER => [
                 'other' => [],
@@ -441,9 +624,12 @@ class DrugUsageService
         return match ($form) {
             self::FORM_TABLET => 1,
             self::FORM_LIQUID => 2,
-            self::FORM_INJECTION => 3,
-            self::FORM_TOPICAL => 4,
-            default => 5,
+            self::FORM_TOPICAL => 3,
+            self::FORM_INJECTION => 4,
+            self::FORM_EPIAO => 5,
+            self::FORM_EPREX => 6,
+            self::FORM_HAD => 7,
+            default => 8,
         };
     }
 
@@ -457,14 +643,31 @@ class DrugUsageService
 
     private function enrichRow(object $row): object
     {
-        $form = $this->classifyForm($row->units ?? null);
+        $form = $this->classifyForm($row->units ?? null, $row);
         $subForm = $this->classifySubForm($row->units ?? null, $form);
+        $colorInfo = $this->formColorInfo($form);
+
         $row->form = $form;
         $row->form_label = $this->formLabel($form);
         $row->form_sort = $this->formSortOrder($form);
+        $row->color_key = $colorInfo['color_key'];
+        $row->color_name = $colorInfo['color_name'];
+        $row->color_hex = $colorInfo['hex'];
+        $row->color_badge = $colorInfo['badge'];
+        $row->color_dot = $colorInfo['dot'];
+
         $row->sub_form = $subForm;
         $row->sub_form_label = $this->subFormLabel($row->units ?? null, $form, $subForm);
         $row->sub_form_sort = $this->subFormSortOrder($form, $subForm);
+
+        $account = $this->classifyAccount($row->drugaccount ?? null);
+        $accountCode = trim((string) ($row->drugaccount ?? ''));
+        $isOut = $accountCode === '' || mb_strtoupper($accountCode) === 'NED';
+
+        $row->account = $account;
+        $row->account_code = $isOut ? '(ว่าง)' : $accountCode;
+        $row->account_label = $this->accountLabel($account);
+        $row->account_full_label = $isOut ? 'ยานอกบัญชี (ว่าง)' : "บัญชี {$accountCode}";
 
         return $row;
     }
@@ -476,6 +679,26 @@ class DrugUsageService
         }
 
         return $rows->filter(fn ($row) => ($row->form ?? null) === $form)->values();
+    }
+
+    private function filterByAccount(Collection $rows, ?string $account): Collection
+    {
+        if (! $account || $account === 'all') {
+            return $rows;
+        }
+
+        if (in_array($account, ['in', 'out'], true)) {
+            return $rows->filter(fn ($row) => ($row->account ?? $this->classifyAccount($row->drugaccount ?? null)) === $account)->values();
+        }
+
+        return $rows->filter(function ($row) use ($account) {
+            $code = trim((string) ($row->drugaccount ?? ''));
+            if ($account === '(ว่าง)' || $account === 'none') {
+                return $code === '' || mb_strtoupper($code) === 'NED';
+            }
+
+            return mb_strtolower($code) === mb_strtolower($account);
+        })->values();
     }
 
     /** @return Collection<int, object> */
@@ -499,8 +722,9 @@ class DrugUsageService
     {
         $qty = (float) ($row->total_qty ?? 0);
         $amount = (float) ($row->total_amount ?? 0);
-        $form = $this->classifyForm($row->units ?? null);
-        $subForm = $this->classifySubForm($row->units ?? null, $form);
+        $form = $row->form ?? $this->classifyForm($row->units ?? null, $row);
+        $subForm = $row->sub_form ?? $this->classifySubForm($row->units ?? null, $form);
+        $colorInfo = $this->formColorInfo($form);
 
         return [
             'rank' => $rank,
@@ -510,6 +734,11 @@ class DrugUsageService
             'units' => $row->units,
             'form' => $form,
             'form_label' => $this->formLabel($form),
+            'color_key' => $colorInfo['color_key'],
+            'color_name' => $colorInfo['color_name'],
+            'color_hex' => $colorInfo['hex'],
+            'color_badge' => $colorInfo['badge'],
+            'color_dot' => $colorInfo['dot'],
             'sub_form' => $subForm,
             'sub_form_label' => $this->subFormLabel($row->units ?? null, $form, $subForm),
             'unitprice' => (float) ($row->unitprice ?? 0),
@@ -524,14 +753,15 @@ class DrugUsageService
     private function buildByForm(Collection $allDrugs, float $totalQty, float $totalAmount): array
     {
         $catalog = $this->formCatalog();
-        $grouped = $allDrugs->groupBy(fn ($row) => $this->classifyForm($row->units ?? null));
+        $grouped = $allDrugs->groupBy(fn ($row) => $row->form ?? $this->classifyForm($row->units ?? null, $row));
 
         return collect($catalog)->map(function (string $label, string $key) use ($grouped, $totalQty, $totalAmount) {
             $group = $grouped->get($key, collect());
             $qty = (float) $group->sum('total_qty');
             $amount = (float) $group->sum('total_amount');
+            $colorInfo = $this->formColorInfo($key);
 
-            $subGrouped = $group->groupBy(fn ($row) => $this->classifySubForm($row->units ?? null, $key));
+            $subGrouped = $group->groupBy(fn ($row) => $row->sub_form ?? $this->classifySubForm($row->units ?? null, $key));
             $subCatalog = $this->subFormCatalog()[$key] ?? ['other' => 'อื่นๆ'];
 
             $subtypes = collect($subCatalog)->map(function (string $subLabel, string $subKey) use ($subGrouped, $qty, $amount) {
@@ -553,6 +783,11 @@ class DrugUsageService
             return [
                 'form' => $key,
                 'label' => $label,
+                'color_key' => $colorInfo['color_key'],
+                'color_name' => $colorInfo['color_name'],
+                'color_hex' => $colorInfo['hex'],
+                'color_badge' => $colorInfo['badge'],
+                'color_dot' => $colorInfo['dot'],
                 'drug_count' => $group->count(),
                 'total_qty' => $qty,
                 'total_amount' => $amount,
@@ -573,6 +808,7 @@ class DrugUsageService
 
     private function groupedDrugSelect(Builder $query): Builder
     {
+        $conn = DB::connection('hosxp');
         $q = $query
             ->selectRaw('o.icode as icode')
             ->selectRaw('MAX(d.name) as name')
@@ -583,7 +819,31 @@ class DrugUsageService
             ->selectRaw('COALESCE(SUM(o.sum_price), 0) as total_amount')
             ->selectRaw('COUNT(*) as line_count');
 
-        if ($this->columnExists(DB::connection('hosxp'), 'drugitems', 'drugaccount')) {
+        if ($this->columnExists($conn, 'drugitems', 'displaycolor')) {
+            $q->selectRaw('MAX(d.displaycolor) as displaycolor');
+        } else {
+            $q->selectRaw('NULL as displaycolor');
+        }
+
+        if ($this->columnExists($conn, 'drugitems', 'dosageform')) {
+            $q->selectRaw('MAX(d.dosageform) as dosageform');
+        } else {
+            $q->selectRaw('NULL as dosageform');
+        }
+
+        if ($this->columnExists($conn, 'drugitems', 'alert_level')) {
+            $q->selectRaw('MAX(d.alert_level) as alert_level');
+        } else {
+            $q->selectRaw('NULL as alert_level');
+        }
+
+        if ($this->columnExists($conn, 'drugitems', 'generic_name')) {
+            $q->selectRaw('MAX(d.generic_name) as generic_name');
+        } else {
+            $q->selectRaw('NULL as generic_name');
+        }
+
+        if ($this->columnExists($conn, 'drugitems', 'drugaccount')) {
             $q->selectRaw('MAX(d.drugaccount) as drugaccount');
         } else {
             $q->selectRaw('NULL as drugaccount');
@@ -594,27 +854,32 @@ class DrugUsageService
 
     private function columnExists($conn, string $table, string $column): bool
     {
-        $key = "c:{$table}.{$column}";
+        $key = "cols:{$table}";
         if (! array_key_exists($key, $this->schema)) {
             try {
-                $this->schema[$key] = in_array($column, $conn->getSchemaBuilder()->getColumnListing($table), true);
+                $rows = $conn->select("SHOW COLUMNS FROM `{$table}`");
+                $this->schema[$key] = array_map(function ($r) {
+                    $rowArray = (array) $r;
+
+                    return mb_strtolower((string) ($rowArray['Field'] ?? $rowArray['field'] ?? ''));
+                }, $rows);
             } catch (\Throwable $e) {
-                $this->schema[$key] = false;
+                $this->schema[$key] = [];
             }
         }
 
-        return $this->schema[$key];
+        return in_array(mb_strtolower($column), $this->schema[$key] ?? [], true);
     }
 
     /**
-     * ยาในบัญชี = มีค่า drugaccount (ก ข ค ง จ1 จ2 ฯลฯ)
-     * ยานอกบัญชี = null หรือว่าง
+     * ยาในบัญชี = มีค่า drugaccount (ก ข ค ง จ1 จ2 ฯลฯ) ที่ไม่ใช่ NED
+     * ยานอกบัญชี = null, ว่าง, หรือระบุ NED
      */
     public function classifyAccount(?string $drugaccount): string
     {
         $code = trim((string) $drugaccount);
 
-        return $code !== '' ? 'in' : 'out';
+        return ($code !== '' && mb_strtoupper($code) !== 'NED') ? 'in' : 'out';
     }
 
     public function accountLabel(string $key): string
@@ -653,7 +918,7 @@ class DrugUsageService
             ->groupBy(function ($row) {
                 $code = trim((string) ($row->drugaccount ?? ''));
 
-                return $code !== '' ? $code : '(ว่าง)';
+                return ($code !== '' && mb_strtoupper($code) !== 'NED') ? $code : '(ว่าง)';
             })
             ->map(function (Collection $group, $code) use ($totalQty, $totalAmount) {
                 $qty = (float) $group->sum('total_qty');
@@ -662,7 +927,7 @@ class DrugUsageService
 
                 return [
                     'code' => (string) $code,
-                    'label' => $isOut ? 'นอกบัญชี (ว่าง)' : 'บัญชี '.$code,
+                    'label' => $isOut ? 'ยานอกบัญชี (ว่าง)' : 'บัญชี '.$code,
                     'account' => $isOut ? 'out' : 'in',
                     'drug_count' => $group->count(),
                     'total_qty' => $qty,
@@ -730,16 +995,25 @@ class DrugUsageService
             'top_by_qty' => [],
             'top_by_amount' => [],
             'by_units' => [],
-            'by_form' => collect($this->formCatalog())->map(fn ($label, $key) => [
-                'form' => $key,
-                'label' => $label,
-                'drug_count' => 0,
-                'total_qty' => 0,
-                'total_amount' => 0,
-                'qty_share_percent' => 0,
-                'amount_share_percent' => 0,
-                'subtypes' => [],
-            ])->values()->all(),
+            'by_form' => collect($this->formCatalog())->map(function ($label, $key) {
+                $colorInfo = $this->formColorInfo($key);
+
+                return [
+                    'form' => $key,
+                    'label' => $label,
+                    'color_key' => $colorInfo['color_key'],
+                    'color_name' => $colorInfo['color_name'],
+                    'color_hex' => $colorInfo['hex'],
+                    'color_badge' => $colorInfo['badge'],
+                    'color_dot' => $colorInfo['dot'],
+                    'drug_count' => 0,
+                    'total_qty' => 0,
+                    'total_amount' => 0,
+                    'qty_share_percent' => 0,
+                    'amount_share_percent' => 0,
+                    'subtypes' => [],
+                ];
+            })->values()->all(),
             'by_account' => [
                 ['key' => 'in', 'label' => 'ยาในบัญชี', 'drug_count' => 0, 'total_qty' => 0, 'total_amount' => 0, 'qty_share_percent' => 0, 'amount_share_percent' => 0],
                 ['key' => 'out', 'label' => 'ยานอกบัญชี', 'drug_count' => 0, 'total_qty' => 0, 'total_amount' => 0, 'qty_share_percent' => 0, 'amount_share_percent' => 0],

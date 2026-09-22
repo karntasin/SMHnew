@@ -435,6 +435,58 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::get('/drugs/search', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'searchDrugs'])->name('drugs.search');
         Route::post('/sync-dispense', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'syncDispense'])->name('sync-dispense');
         Route::patch('/balances/{balance}/threshold', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'updateThreshold'])->name('balances.threshold');
+
+        Route::get('/settings/template', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'downloadStockTemplate'])->name('settings.template');
+        Route::post('/settings/import-preview', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'previewStockImport'])->name('settings.import-preview');
+        Route::post('/settings/import-commit', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'commitStockImport'])->name('settings.import-commit');
+        Route::post('/settings/packaging', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'storePackagingType'])->name('settings.packaging.store');
+        Route::put('/settings/packaging/{type}', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'updatePackagingType'])->name('settings.packaging.update');
+        Route::delete('/settings/packaging/{type}', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'destroyPackagingType'])->name('settings.packaging.destroy');
+        Route::post('/settings/locations', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'storeLocation'])->name('settings.locations.store');
+        Route::put('/settings/locations/{location}', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'updateLocation'])->name('settings.locations.update');
+        Route::delete('/settings/locations/{location}', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'destroyLocation'])->name('settings.locations.destroy');
+        Route::post('/settings/upsert', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'upsertSetting'])->name('settings.upsert');
+
+        Route::put('/lots/{lot}', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'lotUpdate'])->name('lots.update');
+        Route::delete('/lots/{lot}', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'lotDestroy'])->name('lots.destroy');
+        Route::post('/lots/{lot}/qr', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'lotRegenerateQr'])->name('lots.qr');
+        Route::get('/drugs/{icode}/units', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'itemUnits'])->name('drugs.units');
+        Route::post('/manual-dispense', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'manualDispense'])->name('manual-dispense');
+        Route::put('/balances/{balance}', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'updateBalance'])->name('balances.update');
+        Route::delete('/balances/{balance}', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'destroyBalance'])->name('balances.destroy');
+        Route::post('/reconcile-stock', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'reconcileStock'])->name('reconcile-stock');
+        Route::get('/drug-out/stock-info', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'drugOutStockInfo'])->name('drug-out.stock-info');
+
+        Route::get('/scan', [App\Http\Controllers\Pharmacy\PharmacyBarcodeController::class, 'index'])->name('scan');
+        Route::post('/scan/resolve', [App\Http\Controllers\Pharmacy\PharmacyBarcodeController::class, 'resolve'])->name('scan.resolve');
+
+        Route::get('/drug-out', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'drugOut'])->name('drug-out');
+        Route::post('/drug-out/issue', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'drugOutIssue'])->name('drug-out.issue');
+        Route::post('/drug-out/return', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'drugOutReturn'])->name('drug-out.return');
+
+        Route::get('/stock-card', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'stockCard'])->name('stock-card');
+        Route::get('/labels', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'batchLabels'])->name('labels');
+        Route::get('/analytics', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'analytics'])->name('analytics');
+
+        Route::get('/sync-dispense/history', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'dispenseSyncHistory'])->name('sync-dispense.history');
+        Route::post('/sync-dispense/retry', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'retryDispenseSync'])->name('sync-dispense.retry');
+
+        // Admin Controller
+        Route::get('/settings', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'settings'])->name('settings');
+        Route::post('/settings/batch', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'saveBatchSettings'])->name('settings.batch');
+        Route::get('/items', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'items'])->name('items');
+        Route::post('/items/import', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'importItems'])->name('items.import');
+        Route::put('/items/{item}', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'updateItem'])->name('items.update');
+        Route::post('/items/{item}/units', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'storeUnit'])->name('items.units.store');
+        Route::put('/items/units/{unit}', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'updateUnit'])->name('items.units.update');
+        Route::post('/items/{item}/barcodes', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'storeBarcode'])->name('items.barcodes.store');
+        Route::delete('/items/barcodes/{barcode}', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'destroyBarcode'])->name('items.barcodes.destroy');
+
+        // Stock Counts
+        Route::get('/counts', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'counts'])->name('counts');
+        Route::post('/counts', [App\Http\Controllers\Pharmacy\PharmacyStockCountController::class, 'store'])->name('counts.store');
+        Route::get('/counts/{count}', [App\Http\Controllers\Pharmacy\PharmacyStockCountController::class, 'show'])->name('counts.show');
+        Route::post('/counts/{count}/complete', [App\Http\Controllers\Pharmacy\PharmacyStockCountController::class, 'complete'])->name('counts.complete');
     });
 
     // RDU Reports (Rational Drug Use) â€” under Pharmacy channel
@@ -651,6 +703,15 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
             Route::post('/courses/{course}/builder/upload', [App\Http\Controllers\HrdCourseBuilderController::class, 'upload'])->name('courses.builder.upload');
             Route::post('/courses/{course}/builder/quiz-import', [App\Http\Controllers\HrdCourseBuilderController::class, 'importQuiz'])->name('courses.builder.quiz-import');
         });
+
+        // à¸à¸²à¸£à¹€à¸£à¸µà¸¢à¸™à¸£à¸¹à¹‰à¹€à¸Šà¸´à¸‡à¹‚à¸•à¹‰à¸•à¸­à¸š (Interactive Learning: SQL & Excel)
+        Route::prefix('interactive')->name('interactive.')->group(function () {
+            Route::get('/', [App\Http\Controllers\Km\KmInteractiveController::class, 'index'])->name('index');
+            Route::get('/sql', [App\Http\Controllers\Km\KmInteractiveController::class, 'sql'])->name('sql');
+            Route::get('/excel', [App\Http\Controllers\Km\KmInteractiveController::class, 'excel'])->name('excel');
+            Route::get('/mmert', [App\Http\Controllers\Km\KmInteractiveController::class, 'mmert'])->name('mmert');
+            Route::post('/progress', [App\Http\Controllers\Km\KmInteractiveController::class, 'saveProgress'])->name('progress');
+        });
     });
 
     // Medical Record Accuracy (MRA)
@@ -795,3 +856,31 @@ Route::post('/locale', [LanguageController::class, 'update'])->name('locale.upda
 
 require __DIR__ . '/settings.php';
 require __DIR__ . '/auth.php';
+
+
+
+
+
+
+
+
+// --- Public TV Display (äÁèµéÍ§ auth à¾ÃÒÐà»Ô´¨Ò¡·ÕÇÕã¹à¤Ã×Í¢èÒÂÀÒÂã¹) ---
+Route::get('/tv/{boardKey?}', [App\Http\Controllers\TvBoardController::class, 'show'])->name('tv.board');
+Route::get('/tv/{boardKey}/queue-data', [App\Http\Controllers\TvBoardController::class, 'queueData'])->name('tv.board.data');
+
+// --- Admin (¤ÃÍº middleware auth à´ÔÁ¢Í§ÃÐºº) ---
+Route::middleware(['web', 'auth'])->prefix('admin/tv')->name('admin.tv.')->group(function () {
+    Route::get('settings/{boardKey?}', [App\Http\Controllers\Admin\TvDisplaySettingController::class, 'edit'])->name('settings.edit');
+    Route::put('settings/{boardKey?}', [App\Http\Controllers\Admin\TvDisplaySettingController::class, 'update'])->name('settings.update');
+
+    Route::get('playlist/{boardKey?}', [App\Http\Controllers\Admin\TvMediaPlaylistController::class, 'index'])->name('playlist.index');
+    Route::post('playlist/{boardKey?}', [App\Http\Controllers\Admin\TvMediaPlaylistController::class, 'store'])->name('playlist.store');
+    Route::patch('playlist/{item}/toggle', [App\Http\Controllers\Admin\TvMediaPlaylistController::class, 'toggle'])->name('playlist.toggle');
+    Route::post('playlist/reorder', [App\Http\Controllers\Admin\TvMediaPlaylistController::class, 'reorder'])->name('playlist.reorder');
+    Route::delete('playlist/{item}', [App\Http\Controllers\Admin\TvMediaPlaylistController::class, 'destroy'])->name('playlist.destroy');
+
+    Route::get('rooms/{boardKey?}', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'index'])->name('rooms.index');
+    Route::post('rooms/{boardKey?}', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'store'])->name('rooms.store');
+    Route::patch('rooms/{room}/toggle', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'toggle'])->name('rooms.toggle');
+    Route::delete('rooms/{room}', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'destroy'])->name('rooms.destroy');
+});

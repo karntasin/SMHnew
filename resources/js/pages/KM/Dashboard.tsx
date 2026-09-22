@@ -6,6 +6,10 @@ import {
     FileText,
     GraduationCap,
     Search,
+    Sparkles,
+    Database,
+    FileSpreadsheet,
+    ArrowRight,
 } from 'lucide-react';
 import { QualityPage, Panel, EmptyState } from '@/components/quality/quality-ui';
 import KmSubNav from '@/pages/KM/KmSubNav';
@@ -49,6 +53,14 @@ export default function KmDashboard({ recentAssets, popularAssets, featuredCours
             subNav={<KmSubNav active="km.dashboard" />}
             actions={
                 <>
+                    <Button
+                        asChild
+                        className="rounded-xl bg-gradient-to-r from-amber-600 to-indigo-600 hover:from-amber-700 hover:to-indigo-700 text-white shadow-xs"
+                    >
+                        <Link href={route('km.interactive.index')}>
+                            <Sparkles className="mr-2 h-4 w-4" /> การเรียนรู้เชิงโต้ตอบ
+                        </Link>
+                    </Button>
                     <Button asChild className="rounded-xl bg-amber-600 hover:bg-amber-700">
                         <Link href={route('km.assets.index')}>
                             <FileText className="mr-2 h-4 w-4" /> คลังความรู้
@@ -78,6 +90,55 @@ export default function KmDashboard({ recentAssets, popularAssets, featuredCours
                     <Button className="rounded-xl bg-amber-600 hover:bg-amber-700">ค้นหา</Button>
                 </div>
             </Panel>
+
+            {/* Interactive Learning Highlight Banner */}
+            <div className="rounded-3xl border border-indigo-200/60 bg-gradient-to-r from-indigo-500/10 via-amber-500/10 to-emerald-500/10 p-5 sm:p-6 shadow-xs">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="space-y-1.5">
+                        <div className="flex items-center gap-2">
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-600 text-white px-2.5 py-0.5 text-xs font-bold shadow-2xs">
+                                <Sparkles className="h-3 w-3" /> แนะนำใหม่
+                            </span>
+                            <span className="text-xs font-bold text-indigo-900 dark:text-indigo-300">
+                                In-Browser Interactive Learning
+                            </span>
+                        </div>
+                        <h3 className="text-base sm:text-lg font-bold text-foreground">
+                            การเรียนรู้เชิงโต้ตอบ: SQL Journey & Excel Master
+                        </h3>
+                        <p className="text-xs sm:text-sm text-muted-foreground">
+                            ระบบฝึกเขียนคำสั่ง SQL บนฐานข้อมูลจำลอง (SQLite WASM) และฝึกเขียนสูตร Excel บนสเปรดชีตจริงในเบราว์เซอร์ พร้อมตรวจคำตอบและเฉลยทันที
+                        </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        <Button
+                            asChild
+                            variant="outline"
+                            className="rounded-xl border-amber-300 bg-background text-amber-800 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/30 text-xs shadow-2xs"
+                        >
+                            <Link href={route('km.interactive.sql')}>
+                                <Database className="mr-1.5 h-3.5 w-3.5 text-amber-600" />
+                                SQL Journey
+                            </Link>
+                        </Button>
+                        <Button
+                            asChild
+                            variant="outline"
+                            className="rounded-xl border-emerald-300 bg-background text-emerald-800 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 text-xs shadow-2xs"
+                        >
+                            <Link href={route('km.interactive.excel')}>
+                                <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
+                                Excel Master
+                            </Link>
+                        </Button>
+                        <Button asChild className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs shadow-2xs">
+                            <Link href={route('km.interactive.index')}>
+                                เข้าห้องเรียนรู้ <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                            </Link>
+                        </Button>
+                    </div>
+                </div>
+            </div>
 
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <Panel

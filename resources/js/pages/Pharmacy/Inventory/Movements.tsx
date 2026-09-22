@@ -12,7 +12,7 @@ type Row = {
     vstdate?: string;
     note?: string;
     created_at?: string;
-    item: { icode?: string; name?: string };
+    item: { icode?: string; name?: string; item_type?: string; item_type_label?: string };
     lot_no?: string;
     from?: string;
     to?: string;
@@ -60,7 +60,14 @@ export default function Movements({ rows }: { rows: Row[] }) {
                                     <td className="px-3 py-2 whitespace-nowrap">{r.created_at}</td>
                                     <td className="px-3 py-2">{typeLabel[r.type] || r.type}</td>
                                     <td className="px-3 py-2">
-                                        <div className="font-medium">{r.item.name}</div>
+                                        <div className="font-medium flex items-center gap-1.5 flex-wrap">
+                                            <span>{r.item.name}</span>
+                                            {r.item.item_type === 'nondrug' && (
+                                                <span className="rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800">
+                                                    📦 ค่าเวชภัณฑ์ที่มิใช่ยา
+                                                </span>
+                                            )}
+                                        </div>
                                         <div className="text-[11px] text-slate-500">{r.item.icode} · lot {r.lot_no || '—'}</div>
                                     </td>
                                     <td className="px-3 py-2 font-semibold">{r.qty}</td>

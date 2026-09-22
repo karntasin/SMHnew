@@ -9,8 +9,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class PharmacyStockMovement extends Model
 {
     protected $fillable = [
-        'type', 'item_id', 'lot_id', 'from_location_id', 'to_location_id',
-        'qty', 'balance_after', 'reference_type', 'reference_id',
+        'type', 'item_id', 'lot_id', 'transaction_unit_id', 'transaction_qty',
+        'unit_factor', 'from_location_id', 'to_location_id', 'qty',
+        'balance_after', 'reference_type', 'reference_id',
         'hn', 'vn', 'vstdate', 'user_id', 'note',
     ];
 
@@ -18,6 +19,8 @@ class PharmacyStockMovement extends Model
     {
         return [
             'qty' => 'decimal:2',
+            'transaction_qty' => 'decimal:2',
+            'unit_factor' => 'decimal:4',
             'balance_after' => 'decimal:2',
             'vstdate' => 'date',
         ];
@@ -31,6 +34,11 @@ class PharmacyStockMovement extends Model
     public function lot(): BelongsTo
     {
         return $this->belongsTo(PharmacyLot::class, 'lot_id');
+    }
+
+    public function transactionUnit(): BelongsTo
+    {
+        return $this->belongsTo(PharmacyItemUnit::class, 'transaction_unit_id');
     }
 
     public function fromLocation(): BelongsTo

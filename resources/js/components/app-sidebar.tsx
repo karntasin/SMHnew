@@ -140,7 +140,7 @@ function RenderMenu({
         const isExpanded = hasChildren && (isChildActive(children) || !!searchQuery.trim());
         const isExternal =
           menu.route &&
-          (menu.route.startsWith('http://') || menu.route.startsWith('https://'));
+          (menu.route.startsWith('http://') || menu.route.startsWith('https://') || menu.route.includes('/admin/tv'));
 
         const itemClass = cn(
           'group/menu-item relative w-full gap-2.5 rounded-lg transition-colors',

@@ -2,7 +2,9 @@ import { Head, Link, router, usePage } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import PharmacySubNav, { pharmacyBreadcrumbs } from '@/pages/Pharmacy/PharmacySubNav';
 import { Button } from '@/components/ui/button';
-import { ArrowRightLeft, Boxes, PackagePlus, QrCode, RefreshCw, TriangleAlert } from 'lucide-react';
+import { ArrowRightLeft, BarChart3, Boxes, ClipboardCheck, FileText, History, PackageMinus, PackagePlus, Printer, QrCode, RefreshCw, ScanLine, Settings, TriangleAlert } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { type SharedData } from '@/types';
 
 type Summary = {
     totals: {
@@ -37,7 +39,9 @@ type Summary = {
 };
 
 export default function InventoryIndex({ summary }: { summary: Summary }) {
-    const flash = (usePage().props as { flash?: { success?: string; error?: string } }).flash;
+    const pageProps = usePage<SharedData & { flash?: { success?: string; error?: string } }>().props;
+    const flash = pageProps.flash;
+    const hasChatFab = Boolean(pageProps.fshhChat?.enabled && pageProps.fshhChat.openUrl);
 
     return (
         <AppLayout breadcrumbs={pharmacyBreadcrumbs([{ title: 'คลังยา / ห้องยา', href: route('pharmacy.inventory.index') }])}>
@@ -51,23 +55,62 @@ export default function InventoryIndex({ summary }: { summary: Summary }) {
                     </div>
                 )}
 
-                <section className="rounded-[2rem] border border-violet-100 bg-gradient-to-br from-slate-900 via-violet-950 to-fuchsia-900 p-6 text-white shadow-xl md:p-8">
-                    <h1 className="text-3xl font-bold tracking-tight">คลังยา และห้องยา</h1>
-                    <p className="mt-2 max-w-2xl text-sm text-violet-100/85">
-                        รับเข้าพร้อม lot / วันหมดอายุ / QR · เบิกจากคลังสู่ห้องยา · ตัดจ่ายตามใบสั่ง HOSxP · แจ้งเตือนเมื่อเหลือน้อยหรือใกล้หมดอายุ
-                    </p>
-                    <div className="mt-5 flex flex-wrap gap-2">
-                        <Button asChild className="rounded-xl bg-white text-violet-900 hover:bg-violet-50">
+                <section className="relative overflow-hidden rounded-[2rem] border border-violet-100 bg-gradient-to-br from-slate-900 via-violet-950 to-fuchsia-900 p-6 text-white shadow-xl md:p-8">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                        <div className="space-y-1">
+                            <h1 className="text-3xl font-bold tracking-tight">คลังยา และห้องยา</h1>
+                            <p className="max-w-2xl text-sm text-violet-100/85">
+                                รับเข้าพร้อม lot / วันหมดอายุ / QR · เบิกจากคลังสู่ห้องยา · จ่ายยาออกหน่วย / คืนยา · ตัดจ่ายตามใบสั่ง HOSxP · แจ้งเตือนเมื่อเหลือน้อยหรือใกล้หมดอายุ
+                            </p>
+                        </div>
+
+                        {/* PROMINENT QUICK SCAN BUTTON */}
+                        <div className="shrink-0">
+                            <Button asChild size="lg" className="rounded-2xl bg-emerald-400 text-emerald-950 hover:bg-emerald-300 font-bold shadow-lg shadow-emerald-950/30 px-5 py-6 text-base border border-emerald-300/40">
+                                <Link href={route('pharmacy.inventory.scan')}>
+                                    <ScanLine className="mr-2.5 h-6 w-6 text-emerald-950" />
+                                    <span>สแกนบาร์โค้ดยา</span>
+                                </Link>
+                            </Button>
+                        </div>
+                    </div>
+
+                    <div className="mt-5 flex flex-wrap gap-2 pt-4 border-t border-white/10">
+                        <Button asChild className="rounded-xl bg-white text-violet-900 hover:bg-violet-50 font-semibold">
                             <Link href={route('pharmacy.inventory.receive')}><PackagePlus className="mr-2 h-4 w-4" />รับเข้ายา</Link>
                         </Button>
-                        <Button asChild variant="secondary" className="rounded-xl">
+                        <Button asChild variant="secondary" className="rounded-xl font-semibold">
                             <Link href={route('pharmacy.inventory.transfer')}><ArrowRightLeft className="mr-2 h-4 w-4" />เบิกเข้าห้องยา</Link>
+                        </Button>
+                        <Button asChild className="rounded-xl bg-rose-500 text-white hover:bg-rose-600 font-semibold shadow-sm">
+                            <Link href={route('pharmacy.inventory.drug-out')}><PackageMinus className="mr-2 h-4 w-4" />ยาออกหน่วย</Link>
                         </Button>
                         <Button asChild variant="secondary" className="rounded-xl">
                             <Link href={route('pharmacy.inventory.lots')}><QrCode className="mr-2 h-4 w-4" />Lot / QR</Link>
                         </Button>
                         <Button asChild variant="secondary" className="rounded-xl">
                             <Link href={route('pharmacy.inventory.stock')}><Boxes className="mr-2 h-4 w-4" />คงเหลือ</Link>
+                        </Button>
+                        <Button asChild variant="secondary" className="rounded-xl">
+                            <Link href={route('pharmacy.inventory.stock-card')}><FileText className="mr-2 h-4 w-4" />บัตรคุมยา</Link>
+                        </Button>
+                        <Button asChild variant="secondary" className="rounded-xl">
+                            <Link href={route('pharmacy.inventory.labels')}><Printer className="mr-2 h-4 w-4" />พิมพ์สติ๊กเกอร์</Link>
+                        </Button>
+                        <Button asChild variant="secondary" className="rounded-xl">
+                            <Link href={route('pharmacy.inventory.analytics')}><BarChart3 className="mr-2 h-4 w-4 text-emerald-400" />วิเคราะห์คลัง (ABC/VEN)</Link>
+                        </Button>
+                        <Button asChild variant="secondary" className="rounded-xl">
+                            <Link href={route('pharmacy.inventory.items')}><Boxes className="mr-2 h-4 w-4" />รายการยา / หน่วย</Link>
+                        </Button>
+                        <Button asChild variant="secondary" className="rounded-xl">
+                            <Link href={route('pharmacy.inventory.counts')}><ClipboardCheck className="mr-2 h-4 w-4" />ตรวจนับยา</Link>
+                        </Button>
+                        <Button asChild variant="secondary" className="rounded-xl">
+                            <Link href={route('pharmacy.inventory.sync-dispense.history')}><History className="mr-2 h-4 w-4" />ประวัติซิงก์ตัดจ่าย</Link>
+                        </Button>
+                        <Button asChild variant="secondary" className="rounded-xl">
+                            <Link href={route('pharmacy.inventory.settings')}><Settings className="mr-2 h-4 w-4" />ตั้งค่า</Link>
                         </Button>
                         <Button
                             type="button"
@@ -82,16 +125,16 @@ export default function InventoryIndex({ summary }: { summary: Summary }) {
 
                 <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
                     {[
-                        { label: 'รายการยา', value: summary.totals.items, tone: 'bg-slate-50 text-slate-800' },
-                        { label: 'Lot ใช้งาน', value: summary.totals.lots_active, tone: 'bg-violet-50 text-violet-800' },
-                        { label: 'เหลือน้อย', value: summary.totals.low, tone: 'bg-amber-50 text-amber-800' },
-                        { label: 'หมดสต็อก', value: summary.totals.empty, tone: 'bg-rose-50 text-rose-800' },
-                        { label: 'ใกล้หมดอายุ 90 วัน', value: summary.totals.expiring_90d, tone: 'bg-orange-50 text-orange-800' },
+                        { label: 'รายการยา', value: summary.totals.items, tone: 'bg-slate-50 text-slate-800 hover:bg-slate-100', href: route('pharmacy.inventory.stock') },
+                        { label: 'Lot ใช้งาน', value: summary.totals.lots_active, tone: 'bg-violet-50 text-violet-800 hover:bg-violet-100', href: route('pharmacy.inventory.lots') },
+                        { label: 'เหลือน้อย', value: summary.totals.low, tone: 'bg-amber-50 text-amber-800 hover:bg-amber-100', href: route('pharmacy.inventory.stock') },
+                        { label: 'หมดสต็อก', value: summary.totals.empty, tone: 'bg-rose-50 text-rose-800 hover:bg-rose-100', href: route('pharmacy.inventory.stock') },
+                        { label: 'ใกล้หมดอายุ 90 วัน', value: summary.totals.expiring_90d, tone: 'bg-orange-50 text-orange-800 hover:bg-orange-100', href: route('pharmacy.inventory.stock', { expiry: 'expiring_90' }) },
                     ].map((c) => (
-                        <div key={c.label} className={`rounded-3xl border border-slate-100 p-4 ${c.tone}`}>
+                        <Link key={c.label} href={c.href} className={`rounded-3xl border border-slate-100 p-4 transition-transform hover:scale-[1.02] ${c.tone}`}>
                             <div className="text-2xl font-bold">{c.value}</div>
                             <div className="text-xs opacity-80">{c.label}</div>
-                        </div>
+                        </Link>
                     ))}
                 </section>
 
@@ -127,18 +170,48 @@ export default function InventoryIndex({ summary }: { summary: Summary }) {
                                 </div>
                             ))}
                         </div>
-                        <h2 className="mb-3 mt-5 text-sm font-semibold text-slate-800">ใกล้หมดอายุ</h2>
+                        <div className="mb-3 mt-5 flex items-center justify-between">
+                            <h2 className="text-sm font-semibold text-slate-800">ใกล้หมดอายุ (≤90 วัน)</h2>
+                            <Link href={route('pharmacy.inventory.stock', { expiry: 'expiring_90' })} className="text-xs font-medium text-orange-700 hover:underline">
+                                ดูในระบบคงเหลือทั้งหมด →
+                            </Link>
+                        </div>
                         <div className="space-y-2">
                             {summary.expiring.length === 0 && <div className="text-sm text-slate-500">ไม่มี lot ใกล้หมดอายุ</div>}
                             {summary.expiring.slice(0, 6).map((row, idx) => (
-                                <div key={idx} className="rounded-2xl border border-orange-100 bg-orange-50/60 px-3 py-2 text-sm">
+                                <Link
+                                    key={idx}
+                                    href={route('pharmacy.inventory.stock', { expiry: 'expiring_90', q: row.item.icode })}
+                                    className="block rounded-2xl border border-orange-100 bg-orange-50/60 px-3 py-2 text-sm transition-colors hover:bg-orange-100/70"
+                                >
                                     <div className="font-medium text-orange-950">{row.item.name}</div>
                                     <div className="text-[11px] text-orange-800">lot {row.lot_no} · หมดอายุ {row.expires_at} · คงเหลือ {row.qty_remaining}</div>
-                                </div>
+                                </Link>
                             ))}
                         </div>
                     </div>
                 </section>
+
+                {/* Floating Quick Scanner Button - Positioned gracefully above the FSHH Chat FAB */}
+                <div
+                    className={cn(
+                        'fixed right-4 z-40 transition-all duration-300 sm:right-6',
+                        hasChatFab ? 'bottom-20 sm:bottom-24' : 'bottom-4 sm:bottom-6'
+                    )}
+                >
+                    <Button
+                        asChild
+                        className="group relative h-12 sm:h-13 rounded-full bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 hover:from-violet-700 hover:via-purple-700 hover:to-indigo-700 text-white font-bold shadow-xl shadow-purple-950/25 px-4 sm:px-5 border border-white/25 backdrop-blur-xs transition-all duration-200 hover:scale-105 active:scale-95"
+                        title="เปิดระบบสแกนบาร์โค้ดยา"
+                    >
+                        <Link href={route('pharmacy.inventory.scan')} className="flex items-center gap-2">
+                            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/20 group-hover:bg-white/30 transition-colors">
+                                <ScanLine className="h-4 w-4 animate-pulse text-white" />
+                            </span>
+                            <span className="text-sm font-semibold tracking-tight">สแกนบาร์โค้ด</span>
+                        </Link>
+                    </Button>
+                </div>
             </div>
         </AppLayout>
     );

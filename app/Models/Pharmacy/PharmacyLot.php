@@ -10,8 +10,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class PharmacyLot extends Model
 {
     protected $fillable = [
-        'item_id', 'location_id', 'lot_no', 'received_at', 'expires_at',
+        'item_id', 'location_id', 'received_unit_id', 'received_package_qty',
+        'unit_factor', 'lot_no', 'received_at', 'expires_at',
         'qty_received', 'qty_remaining', 'supplier', 'invoice_no', 'qr_token',
+        'invoice_unit_price', 'invoice_total_price', 'invoice_date',
         'status', 'received_by', 'notes',
     ];
 
@@ -22,6 +24,11 @@ class PharmacyLot extends Model
             'expires_at' => 'date',
             'qty_received' => 'decimal:2',
             'qty_remaining' => 'decimal:2',
+            'received_package_qty' => 'decimal:2',
+            'unit_factor' => 'decimal:4',
+            'invoice_unit_price' => 'decimal:4',
+            'invoice_total_price' => 'decimal:2',
+            'invoice_date' => 'date',
         ];
     }
 
@@ -33,6 +40,11 @@ class PharmacyLot extends Model
     public function location(): BelongsTo
     {
         return $this->belongsTo(PharmacyLocation::class, 'location_id');
+    }
+
+    public function receivedUnit(): BelongsTo
+    {
+        return $this->belongsTo(PharmacyItemUnit::class, 'received_unit_id');
     }
 
     public function receiver(): BelongsTo

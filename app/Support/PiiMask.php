@@ -66,16 +66,34 @@ class PiiMask
         }
 
         $chars = preg_split('//u', $surname, -1, PREG_SPLIT_NO_EMPTY) ?: [];
-        $len = count($chars);
-        if ($len <= 1) {
-            return '*';
+        
+        $visible = '';
+        $consonantCount = 0;
+
+        for ($i = 0; $i < count($chars); $i++) {
+            $c = $chars[$i];
+            
+            // พยัญชนะไทย หรือ ภาษาอังกฤษ ให้นับเป็น 1 ตัว
+            $isConsonantOrEng = preg_match('/[ก-ฮA-Za-z]/u', $c);
+            
+            // สระ/วรรณยุกต์ที่ตามหลังพยัญชนะ
+            $isTrailing = preg_match('/[\x{0E30}-\x{0E3A}\x{0E45}-\x{0E4E}]/u', $c);
+            
+            if ($consonantCount >= 3) {
+                if ($isTrailing) {
+                    $visible .= $c;
+                } else {
+                    break;
+                }
+            } else {
+                $visible .= $c;
+                if ($isConsonantOrEng) {
+                    $consonantCount++;
+                }
+            }
         }
 
-        $keep = $len >= 4 ? 2 : 1;
-        $visible = implode('', array_slice($chars, 0, $keep));
-        $stars = str_repeat('*', max(1, $len - $keep));
-
-        return $visible.$stars;
+        return $visible . '***';
     }
 
     /**

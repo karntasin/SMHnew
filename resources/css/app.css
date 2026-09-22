@@ -335,3 +335,41 @@
 .animation-delay-6000 {
     animation-delay: 6s;
 }
+
+/* Pharmacy barcode scanner laser line */
+@keyframes barcode-laser-scan {
+    0% {
+        top: 10%;
+        opacity: 0.85;
+    }
+    50% {
+        top: 88%;
+        opacity: 1;
+    }
+    100% {
+        top: 10%;
+        opacity: 0.85;
+    }
+}
+
+.barcode-laser {
+    animation: barcode-laser-scan 1.8s ease-in-out infinite;
+    box-shadow: 0 0 16px 3px rgba(239, 68, 68, 0.95), 0 0 32px 6px rgba(239, 68, 68, 0.45);
+}
+
+.barcode-laser-success {
+    box-shadow: 0 0 16px 3px rgba(16, 185, 129, 0.95), 0 0 32px 6px rgba(16, 185, 129, 0.45);
+}
+
+
+/* TV Queue Display Board Animations */
+@keyframes pulse-row { 
+    0%, 100% { background-color: var(--color-yellow-200, #fef08a); } 
+    50% { background-color: var(--color-yellow-300, #fde047); } 
+}
+.row-calling { 
+    animation: pulse-row 1.2s ease-in-out infinite; 
+}
+[x-cloak] { 
+    display: none !important; 
+}
