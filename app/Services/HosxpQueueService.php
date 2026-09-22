@@ -91,14 +91,7 @@ class HosxpQueueService
         $fname = trim((string) $fname); // ชื่อเต็ม ไม่ต้อง mask ตามที่ร้องขอ
         $lname = trim((string) $lname);
 
-        // นามสกุล: ให้เห็นแค่ 3 ตัวอักษร (พยัญชนะ) ไม่นับสระ
-        preg_match_all('/[ก-ฮa-zA-Z]/u', $lname, $matches);
-        $consonants = $matches[0] ?? [];
-        $maskedLname = implode('', array_slice($consonants, 0, 3));
-        
-        if (count($consonants) > 3) {
-            $maskedLname .= '***';
-        }
+        $maskedLname = \App\Support\PiiMask::surname($lname);
 
         return trim("{$prefix}{$fname} {$maskedLname}");
     }
