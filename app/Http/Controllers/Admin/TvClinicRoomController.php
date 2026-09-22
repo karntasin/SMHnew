@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 namespace App\Http\Controllers\Admin;
 
@@ -14,7 +14,7 @@ class TvClinicRoomController extends Controller
             ->orderBy('sort_order')
             ->get();
 
-        $routePrefix = str_replace(request()->route()->getActionMethod(), '', request()->route()->getName());
+        $routePrefix = 'admin.' . request()->segment(2) . '.';
         return view('admin.tv.rooms', array_merge(compact('rooms', 'boardKey'), ['routePrefix' => $routePrefix]));
     }
 
@@ -35,7 +35,7 @@ class TvClinicRoomController extends Controller
             ]
         );
 
-        return back()->with('status', 'เพิ่ม/แก้ไขห้องตรวจเรียบร้อย');
+        return back()->with('status', 'เน€เธเธดเนเธก/เนเธเนเนเธเธซเนเธญเธเธ•เธฃเธงเธเน€เธฃเธตเธขเธเธฃเนเธญเธข');
     }
 
     public function toggle(TvClinicRoom $room)
@@ -47,6 +47,7 @@ class TvClinicRoomController extends Controller
     public function destroy(TvClinicRoom $room)
     {
         $room->delete();
-        return back()->with('status', 'ลบห้องตรวจเรียบร้อย');
+        return back()->with('status', 'เธฅเธเธซเนเธญเธเธ•เธฃเธงเธเน€เธฃเธตเธขเธเธฃเนเธญเธข');
     }
 }
+

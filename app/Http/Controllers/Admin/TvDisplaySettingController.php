@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 namespace App\Http\Controllers\Admin;
 
@@ -11,7 +11,7 @@ class TvDisplaySettingController extends Controller
     public function edit(string $boardKey = 'default')
     {
         $setting = TvDisplaySetting::firstOrCreate(['board_key' => $boardKey]);
-        $routePrefix = str_replace(request()->route()->getActionMethod(), '', request()->route()->getName());
+        $routePrefix = 'admin.' . request()->segment(2) . '.';
         return view('admin.tv.settings', array_merge(compact('setting'), ['routePrefix' => $routePrefix]));
     }
 
@@ -34,8 +34,9 @@ class TvDisplaySettingController extends Controller
         $setting = TvDisplaySetting::firstOrCreate(['board_key' => $boardKey]);
         $setting->update($data);
 
-        $routePrefix = str_replace(request()->route()->getActionMethod(), '', request()->route()->getName());
+        $routePrefix = 'admin.' . request()->segment(2) . '.';
         return redirect()->route($routePrefix . 'settings.edit', $boardKey)
-            ->with('status', 'บันทึกการตั้งค่าเรียบร้อย');
+            ->with('status', 'เธเธฑเธเธ—เธถเธเธเธฒเธฃเธ•เธฑเนเธเธเนเธฒเน€เธฃเธตเธขเธเธฃเนเธญเธข');
     }
 }
+

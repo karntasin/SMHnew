@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 namespace App\Http\Controllers\Admin;
 
@@ -15,7 +15,7 @@ class TvMediaPlaylistController extends Controller
             ->orderBy('sort_order')
             ->get();
 
-        $routePrefix = str_replace(request()->route()->getActionMethod(), '', request()->route()->getName());
+        $routePrefix = 'admin.' . request()->segment(2) . '.';
         return view('admin.tv.playlist', array_merge(compact('items', 'boardKey'), ['routePrefix' => $routePrefix]));
     }
 
@@ -32,14 +32,14 @@ class TvMediaPlaylistController extends Controller
 
         if ($data['media_type'] === 'youtube') {
             if (empty($data['url'])) {
-                return back()->withErrors(['url' => 'โปรดระบุ YouTube URL']);
+                return back()->withErrors(['url' => 'เนเธเธฃเธ”เธฃเธฐเธเธธ YouTube URL']);
             }
-            // แปลง URL ให้เป็นรูปแบบ embed เสมอถ้าทำได้ (เช่นดึง ID ออกมา)
+            // เนเธเธฅเธ URL เนเธซเนเน€เธเนเธเธฃเธนเธเนเธเธ embed เน€เธชเธกเธญเธ–เนเธฒเธ—เธณเนเธ”เน (เน€เธเนเธเธ”เธถเธ ID เธญเธญเธเธกเธฒ)
             $filePath = $data['url'];
             $dbMediaType = 'video';
         } else {
             if (! $request->hasFile('file')) {
-                return back()->withErrors(['file' => 'โปรดอัปโหลดไฟล์สื่อ']);
+                return back()->withErrors(['file' => 'เนเธเธฃเธ”เธญเธฑเธเนเธซเธฅเธ”เนเธเธฅเนเธชเธทเนเธญ']);
             }
             $path = $request->file('file')->store('tv-media', 'public');
             $filePath = Storage::url($path);
@@ -56,7 +56,7 @@ class TvMediaPlaylistController extends Controller
             'is_active' => true,
         ]);
 
-        return back()->with('status', 'เพิ่มสื่อเรียบร้อย');
+        return back()->with('status', 'เน€เธเธดเนเธกเธชเธทเนเธญเน€เธฃเธตเธขเธเธฃเนเธญเธข');
     }
 
     public function toggle(TvMediaPlaylist $item)
@@ -86,6 +86,7 @@ class TvMediaPlaylistController extends Controller
         }
         $item->delete();
 
-        return back()->with('status', 'ลบสื่อเรียบร้อย');
+        return back()->with('status', 'เธฅเธเธชเธทเนเธญเน€เธฃเธตเธขเธเธฃเนเธญเธข');
     }
 }
+
