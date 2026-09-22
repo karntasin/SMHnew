@@ -156,4 +156,67 @@ class PharmacyDispenseSyncService
             'insufficient' => $insufficient,
         ];
     }
+
+    /**
+     * ดำเนินการลองตัดสต็อกใหม่ (Retry) สำหรับรายการที่เคยตัดไม่สำเร็จ (สต็อกไม่พอ)
+     *
+     * @return array{ok:bool,message:string,retried:int,success:int}
+     */
+    public function retryFailed(?int $id = null, ?int $pharmacyLocationId = null): array
+    {
+        $this->inventory->ensureDefaultLocations();
+        $pharmacy = $pharmacyLocationId
+            ? PharmacyLocation::query()->where('type', 'pharmacy')->find($pharmacyLocationId)
+            : PharmacyLocation::query()->where('type', 'pharmacy')->where('is_active', true)->orderBy('sort_order')->first();
+
+        if (! $pharmacy) {
+            return ['ok' => false, 'message' => 'ไม่พบคลังห้องยา', 'retried' => 0, 'success' => 0];
+        }
+
+        $query = PharmacyDispenseSync::query()->whereIn('status', ['insufficient', 'failed']);
+        if ($id) {
+            $query->where('id', $id);
+        }
+
+        $records = $query->limit(200)->get();
+        if ($records->isEmpty()) {
+            return ['ok' => true, 'message' => 'ไม่มีรายการที่ต้องลองตัดใหม่', 'retried' => 0, 'success' => 0];
+        }
+
+        $retried = 0;
+        $success = 0;
+
+        foreach ($records as $record) {
+            $retried++;
+            try {
+                $movement = $this->inventory->dispenseFromPharmacy(
+                    (int) $pharmacy->id,
+                    (string) $record->icode,
+                    (float) $record->qty,
+                    (string) $record->hn,
+                    (string) $record->vn,
+                    (string) $record->vstdate,
+                    $record->hosxp_key,
+                );
+
+                $record->update([
+                    'status' => 'deducted',
+                    'movement_id' => $movement->id,
+                    'message' => null,
+                ]);
+                $success++;
+            } catch (Throwable $e) {
+                $record->update([
+                    'message' => 'ลองใหม่ล้มเหลว: '.$e->getMessage(),
+                ]);
+            }
+        }
+
+        return [
+            'ok' => true,
+            'message' => "ดำเนินการลองใหม่ {$retried} รายการ · ตัดสต็อกสำเร็จ {$success} รายการ",
+            'retried' => $retried,
+            'success' => $success,
+        ];
+    }
 }

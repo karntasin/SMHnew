@@ -76,11 +76,11 @@
         </tr>
     </table>
 
-    <h2>สรุปตามประเภทยา</h2>
+    <h2>สรุปตามประเภทยาและสีในระบบ HOSxP</h2>
     <table class="data">
         <thead>
             <tr>
-                <th>ประเภท</th>
+                <th>ประเภท / สี</th>
                 <th>รูปแบบ</th>
                 <th class="num">รายการยา</th>
                 <th class="num">จำนวนรวม</th>
@@ -93,7 +93,11 @@
                     @foreach ($item['subtypes'] as $index => $sub)
                         <tr>
                             @if ($index === 0)
-                                <td rowspan="{{ count($item['subtypes']) }}">{{ $item['label'] }}</td>
+                                <td rowspan="{{ count($item['subtypes']) }}">
+                                    <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background-color:{{ $item['color_hex'] ?? '#64748b' }};margin-right:4px;"></span>
+                                    <b>{{ $item['label'] }}</b>
+                                    <span style="font-size:8px;color:#6b7280;">({{ $item['color_name'] ?? '' }})</span>
+                                </td>
                             @endif
                             <td>{{ $sub['label'] }}</td>
                             <td class="num">{{ number_format($sub['drug_count']) }}</td>
@@ -103,7 +107,11 @@
                     @endforeach
                 @else
                     <tr>
-                        <td>{{ $item['label'] }}</td>
+                        <td>
+                            <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background-color:{{ $item['color_hex'] ?? '#64748b' }};margin-right:4px;"></span>
+                            <b>{{ $item['label'] }}</b>
+                            <span style="font-size:8px;color:#6b7280;">({{ $item['color_name'] ?? '' }})</span>
+                        </td>
                         <td>-</td>
                         <td class="num">{{ number_format($item['drug_count']) }}</td>
                         <td class="num">{{ number_format($item['total_qty'], 0) }}</td>
@@ -125,12 +133,13 @@
         <thead>
             <tr>
                 <th style="width:4%">#</th>
-                <th style="width:10%">รหัส</th>
-                <th style="width:28%">ชื่อยา</th>
-                <th style="width:12%">ความแรง</th>
-                <th style="width:10%">หน่วย</th>
-                <th class="num" style="width:12%">ราคา/หน่วย</th>
-                <th class="num" style="width:12%">จำนวน</th>
+                <th style="width:9%">รหัส</th>
+                <th style="width:25%">ชื่อยา</th>
+                <th style="width:11%">ความแรง</th>
+                <th style="width:8%">หน่วย</th>
+                <th style="width:9%">บัญชียา</th>
+                <th class="num" style="width:11%">ราคา/หน่วย</th>
+                <th class="num" style="width:11%">จำนวน</th>
                 <th class="num" style="width:12%">มูลค่า</th>
             </tr>
         </thead>
@@ -138,7 +147,7 @@
             @php $i = 0; @endphp
             @foreach ($grouped as $formName => $formRows)
                 <tr class="section-head">
-                    <td colspan="8">{{ $formName }} ({{ $formRows->count() }} รายการ)</td>
+                    <td colspan="9">{{ $formName }} ({{ $formRows->count() }} รายการ)</td>
                 </tr>
                 @php
                     $subQty = 0;
@@ -156,19 +165,26 @@
                         <td>{{ $row->name }}</td>
                         <td>{{ $row->strength ?: '-' }}</td>
                         <td>{{ $row->units }}</td>
+                        <td>
+                            @if (($row->account ?? '') === 'in')
+                                <span style="color:#0f766e;font-weight:bold;">บัญชี {{ $row->account_code ?? '' }}</span>
+                            @else
+                                <span style="color:#64748b;">นอกบัญชี</span>
+                            @endif
+                        </td>
                         <td class="num">{{ number_format((float) $row->unitprice, 2) }}</td>
                         <td class="num">{{ number_format((float) $row->total_qty, 0) }}</td>
                         <td class="num">{{ number_format((float) $row->total_amount, 2) }}</td>
                     </tr>
                 @endforeach
                 <tr class="subtotal">
-                    <td colspan="6" class="num">รวม {{ $formName }}</td>
+                    <td colspan="7" class="num">รวม {{ $formName }}</td>
                     <td class="num">{{ number_format($subQty, 0) }}</td>
                     <td class="num">{{ number_format($subAmount, 2) }}</td>
                 </tr>
             @endforeach
             <tr class="grand">
-                <td colspan="6" class="num">รวมทั้งหมด</td>
+                <td colspan="7" class="num">รวมทั้งหมด</td>
                 <td class="num">{{ number_format($totalQty, 0) }}</td>
                 <td class="num">{{ number_format($totalAmount, 2) }}</td>
             </tr>

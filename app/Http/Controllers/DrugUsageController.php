@@ -49,6 +49,8 @@ class DrugUsageController extends Controller
         $search = $request->query('search');
         $unit = $request->query('unit');
         $form = $request->query('form');
+        $account = $request->query('account');
+        $account = $account && $account !== 'all' ? $account : null;
         $page = max(1, (int) $request->query('page', 1));
         $perPage = min(100, max(20, (int) $request->query('per_page', 50)));
 
@@ -60,6 +62,7 @@ class DrugUsageController extends Controller
             $form ?: null,
             $page,
             $perPage,
+            $account,
         );
 
         return Inertia::render('DrugUsage/Report', array_merge($this->pageProps($start, $end, ['connection' => $this->drugUsage->connectionStatus()]), [
@@ -67,11 +70,14 @@ class DrugUsageController extends Controller
             'total' => $data['total'],
             'units' => $data['units'],
             'by_form' => $data['by_form'],
+            'by_account' => $data['by_account'],
+            'by_account_code' => $data['by_account_code'],
             'form_catalog' => $data['form_catalog'],
             'filters' => [
                 'search' => $search ?? '',
                 'unit' => $unit ?? 'all',
                 'form' => $form && $form !== 'all' ? $form : 'all',
+                'account' => $account ?? 'all',
                 'page' => $page,
                 'per_page' => $perPage,
             ],
@@ -83,8 +89,8 @@ class DrugUsageController extends Controller
     {
         @set_time_limit(180);
         [$start, $end] = $this->parseDates($request);
-        [$search, $unit, $form] = $this->parseExportFilters($request);
-        $rows = $this->drugUsage->exportRows($start, $end, $search, $unit, $form);
+        [$search, $unit, $form, $account] = $this->parseExportFilters($request);
+        $rows = $this->drugUsage->exportRows($start, $end, $search, $unit, $form, $account);
         $formLabel = $form ? ($this->drugUsage->formCatalog()[$form] ?? $form) : 'ทั้งหมด';
         $filename = 'drug_usage_'.$start.'_'.$end.'.xlsx';
 
@@ -92,7 +98,7 @@ class DrugUsageController extends Controller
             $writer = WriterEntityFactory::createXLSXWriter();
             $writer->openToFile('php://output');
 
-            $groupedByForm = $rows->groupBy(fn ($row) => $row->form ?? DrugUsageService::FORM_OTHER);
+            $groupedByForm = $rows->groupBy(fn ($row) => $row->form ?? DrugUsageService::FORM_TABLET);
             $grandQty = (float) $rows->sum('total_qty');
             $grandAmount = (float) $rows->sum('total_amount');
 
@@ -120,13 +126,13 @@ class DrugUsageController extends Controller
     {
         @set_time_limit(180);
         [$start, $end] = $this->parseDates($request);
-        [$search, $unit, $form] = $this->parseExportFilters($request);
+        [$search, $unit, $form, $account] = $this->parseExportFilters($request);
 
         try {
-            $rows = $this->drugUsage->exportRows($start, $end, $search, $unit, $form);
+            $rows = $this->drugUsage->exportRows($start, $end, $search, $unit, $form, $account);
             $grouped = $rows->groupBy(fn ($row) => ($row->form_label ?? 'อื่นๆ').' · '.($row->sub_form_label ?? '-'));
             $byForm = collect($this->drugUsage->formCatalog())->map(function ($label, $key) use ($rows) {
-                $group = $rows->filter(fn ($row) => ($row->form ?? DrugUsageService::FORM_OTHER) === $key);
+                $group = $rows->filter(fn ($row) => ($row->form ?? DrugUsageService::FORM_TABLET) === $key);
                 $qty = (float) $group->sum('total_qty');
                 $amount = (float) $group->sum('total_amount');
 
@@ -147,9 +153,14 @@ class DrugUsageController extends Controller
                     ->values()
                     ->all();
 
+                $colorInfo = $this->drugUsage->formColorInfo($key);
+
                 return [
                     'form' => $key,
                     'label' => $label,
+                    'color_key' => $colorInfo['color_key'],
+                    'color_name' => $colorInfo['color_name'],
+                    'color_hex' => $colorInfo['hex'],
                     'drug_count' => $group->count(),
                     'total_qty' => $qty,
                     'total_amount' => $amount,
@@ -192,7 +203,7 @@ class DrugUsageController extends Controller
         }
     }
 
-    /** @return array{0: ?string, 1: ?string, 2: ?string} */
+    /** @return array{0: ?string, 1: ?string, 2: ?string, 3: ?string} */
     private function parseExportFilters(Request $request): array
     {
         $search = $request->query('search') ?: null;
@@ -200,8 +211,10 @@ class DrugUsageController extends Controller
         $unit = $unit && $unit !== 'all' ? $unit : null;
         $form = $request->query('form');
         $form = $form && $form !== 'all' ? $form : null;
+        $account = $request->query('account');
+        $account = $account && $account !== 'all' ? $account : null;
 
-        return [$search, $unit, $form];
+        return [$search, $unit, $form, $account];
     }
 
     private function pageProps(string $start, string $end, array $data): array
@@ -342,7 +355,7 @@ class DrugUsageController extends Controller
         ]));
         $writer->addRow(WriterEntityFactory::createRowFromArray([]));
         $writer->addRow(WriterEntityFactory::createRowFromArray([
-            'รูปแบบ', 'รหัสยา', 'ชื่อยา', 'ความแรง', 'หน่วย', 'ราคาต่อหน่วย', 'จำนวนรวม', 'มูลค่ารวม (บาท)',
+            'รูปแบบ', 'รหัสยา', 'ชื่อยา', 'ความแรง', 'หน่วย', 'บัญชียา', 'ราคาต่อหน่วย', 'จำนวนรวม', 'มูลค่ารวม (บาท)',
         ]));
 
         $currentSubForm = null;
@@ -354,7 +367,7 @@ class DrugUsageController extends Controller
         $flushSubtotal = function () use ($writer, &$subQty, &$subAmount) {
             if ($subQty > 0 || $subAmount > 0) {
                 $writer->addRow(WriterEntityFactory::createRowFromArray([
-                    '', '', '', '', 'รวมรูปแบบ', '', $subQty, $subAmount,
+                    '', '', '', '', '', 'รวมรูปแบบ', '', $subQty, $subAmount,
                 ]));
                 $writer->addRow(WriterEntityFactory::createRowFromArray([]));
             }
@@ -383,6 +396,7 @@ class DrugUsageController extends Controller
                 $row->name,
                 $row->strength,
                 $row->units,
+                $row->account_full_label ?? ($row->account === 'in' ? 'ยาในบัญชี' : 'ยานอกบัญชี'),
                 $row->unitprice,
                 $qty,
                 $amount,
@@ -391,7 +405,7 @@ class DrugUsageController extends Controller
 
         $flushSubtotal();
         $writer->addRow(WriterEntityFactory::createRowFromArray([
-            '', '', '', '', 'รวม '.$formName, '', $sheetQty, $sheetAmount,
+            '', '', '', '', '', 'รวม '.$formName, '', $sheetQty, $sheetAmount,
         ]));
     }
 }

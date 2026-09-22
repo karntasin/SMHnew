@@ -138,11 +138,25 @@ interface Props {
 }
 
 const FORM_COLORS: Record<string, string> = {
-    tablet: '#06b6d4',
-    liquid: '#6366f1',
-    injection: '#f43f5e',
-    topical: '#8b5cf6',
+    tablet: '#18181b', // สีดำ = ยาเม็ด
+    liquid: '#2563eb', // สีน้ำเงิน = ยาน้ำ
+    topical: '#ea580c', // สีส้ม = ยาภายนอก
+    injection: '#ec4899', // สีชมพู = ยาฉีด
+    epiao: '#16a34a', // สีเขียว = ยาฉีดห้องไต epiao
+    eprex: '#9333ea', // สีม่วง = ยาฉีดห้องไต eprex
+    had: '#dc2626', // สีแดง = ยา High Alert
     other: '#94a3b8',
+};
+
+const FORM_COLOR_NAMES: Record<string, string> = {
+    tablet: 'สีดำ',
+    liquid: 'สีน้ำเงิน',
+    topical: 'สีส้ม',
+    injection: 'สีชมพู',
+    epiao: 'สีเขียว',
+    eprex: 'สีม่วง',
+    had: 'สีแดง',
+    other: 'สีเทา',
 };
 
 const ACCOUNT_COLORS: Record<string, string> = {
@@ -190,6 +204,8 @@ export default function DrugUsageDashboard({
 
     const formChart = by_form.map((f) => ({
         name: f.label,
+        colorName: FORM_COLOR_NAMES[f.form] || '',
+        fullName: `${f.label} (${FORM_COLOR_NAMES[f.form] || ''})`,
         form: f.form,
         qty: f.total_qty,
         amount: f.total_amount,
@@ -281,20 +297,22 @@ export default function DrugUsageDashboard({
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">
-                <Panel title="แยกตามประเภทยา" description="ยาเม็ด · ยาน้ำ · ยาฉีด · ยาใช้ภายนอก · อื่นๆ">
+                <Panel title="แยกตามประเภทยา" description="แยกตาม 7 หมวดสีในระบบ HOSxP (ดำ, น้ำเงิน, ส้ม, ชมพู, เขียว, ม่วง, แดง)">
                     {formChart.every((f) => f.qty === 0) ? (
                         <EmptyState text="ไม่พบข้อมูล" />
                     ) : (
                         <div className="space-y-4">
-                            <div className="h-56">
+                            <div className="h-72">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart data={formChart} layout="vertical" margin={{ left: 8, right: 24 }}>
                                         <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                                         <XAxis type="number" tickFormatter={(v) => fmtNum(v)} />
-                                        <YAxis type="category" dataKey="name" width={72} tick={{ fontSize: 12 }} />
+                                        <YAxis type="category" dataKey="name" width={115} tick={{ fontSize: 11 }} />
                                         <Tooltip
-                                            formatter={(v: number, name: string) =>
-                                                name === 'qty' ? [fmtNum(v), 'จำนวน'] : [fmtMoney(v), 'มูลค่า']
+                                            formatter={(v: number, name: string, item: any) =>
+                                                name === 'qty'
+                                                    ? [`${fmtNum(v)} หน่วย (${item?.payload?.colorName || ''})`, 'จำนวน']
+                                                    : [fmtMoney(v), 'มูลค่า']
                                             }
                                         />
                                         <Bar dataKey="qty" name="qty" radius={[0, 6, 6, 0]}>
@@ -309,7 +327,7 @@ export default function DrugUsageDashboard({
                                 <table className="w-full text-sm">
                                     <thead>
                                         <tr className="border-b border-slate-100 text-left text-xs text-slate-400">
-                                            <th className="py-2 pr-3">ประเภท</th>
+                                            <th className="py-2 pr-3">ประเภท / สี</th>
                                             <th className="py-2 pr-3 text-right">รายการ</th>
                                             <th className="py-2 pr-3 text-right">จำนวน</th>
                                             <th className="py-2 pr-3 text-right">มูลค่า</th>
@@ -323,10 +341,11 @@ export default function DrugUsageDashboard({
                                                     <td className="py-2 pr-3">
                                                         <span className="inline-flex items-center gap-2 font-medium text-slate-800">
                                                             <span
-                                                                className="h-2.5 w-2.5 rounded-full"
+                                                                className="h-2.5 w-2.5 rounded-full flex-shrink-0"
                                                                 style={{ background: FORM_COLORS[row.form] || '#94a3b8' }}
                                                             />
-                                                            {row.label}
+                                                            <span>{row.label}</span>
+                                                            <span className="text-xs text-slate-400">({FORM_COLOR_NAMES[row.form] || ''})</span>
                                                         </span>
                                                     </td>
                                                     <td className="py-2 pr-3 text-right tabular-nums">{fmtNum(row.drug_count)}</td>
@@ -546,7 +565,15 @@ export default function DrugUsageDashboard({
                                     {topUnits.map((row) => (
                                         <tr key={row.units} className="border-b border-slate-50">
                                             <td className="py-2 pr-3 font-medium text-slate-800">{row.units}</td>
-                                            <td className="py-2 pr-3 text-slate-500">{row.form_label || '-'}</td>
+                                            <td className="py-2 pr-3">
+                                                <span className="inline-flex items-center gap-1.5 text-xs text-slate-600">
+                                                    <span
+                                                        className="h-2 w-2 rounded-full flex-shrink-0"
+                                                        style={{ background: FORM_COLORS[row.form || 'other'] || '#94a3b8' }}
+                                                    />
+                                                    {row.form_label || '-'}
+                                                </span>
+                                            </td>
                                             <td className="py-2 pr-3 text-right tabular-nums">{fmtNum(row.drug_count)}</td>
                                             <td className="py-2 pr-3 text-right tabular-nums">{fmtNum(row.total_qty)}</td>
                                             <td className="py-2 text-right tabular-nums text-cyan-700">{row.qty_share_percent}%</td>

@@ -23,4 +23,9 @@ class PharmacyDispenseSync extends Model
     {
         return $this->belongsTo(PharmacyStockMovement::class, 'movement_id');
     }
+
+    public function item(): BelongsTo
+    {
+        return $this->belongsTo(PharmacyItem::class, 'icode', 'icode');
+    }
 }
