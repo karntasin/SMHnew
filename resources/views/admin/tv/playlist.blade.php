@@ -3,7 +3,7 @@
 <div class="max-w-4xl mx-auto p-6">
     <h1 class="text-2xl font-bold mb-4">จัดการสื่อฝั่งซ้าย</h1>
 
-    <form method="POST" action="{{ route('admin.tv.playlist.store', $boardKey) }}"
+    <form method="POST" action="{{ route($routePrefix . 'playlist.store', $boardKey) }}"
           enctype="multipart/form-data" class="mb-6 space-y-4 bg-white p-6 rounded-lg shadow-sm border" x-data="{ type: 'image' }">
         @csrf
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -54,7 +54,7 @@
                 </td>
                 <td>{{ $item->media_type === 'image' ? $item->duration_seconds . 's' : '-' }}</td>
                 <td>
-                    <form method="POST" action="{{ route('admin.tv.playlist.toggle', $item) }}">
+                    <form method="POST" action="{{ route($routePrefix . 'playlist.toggle', $item) }}">
                         @csrf @method('PATCH')
                         <button class="px-2 py-1 rounded {{ $item->is_active ? 'bg-green-200' : 'bg-red-200' }}">
                             {{ $item->is_active ? 'เปิดใช้งาน' : 'ปิดใช้งาน' }}
@@ -62,7 +62,7 @@
                     </form>
                 </td>
                 <td>
-                    <form method="POST" action="{{ route('admin.tv.playlist.destroy', $item) }}"
+                    <form method="POST" action="{{ route($routePrefix . 'playlist.destroy', $item) }}"
                           onsubmit="return confirm('ยืนยันลบ?')">
                         @csrf @method('DELETE')
                         <button class="text-red-600">ลบ</button>

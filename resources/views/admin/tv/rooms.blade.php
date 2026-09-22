@@ -3,7 +3,7 @@
 <div class="max-w-4xl mx-auto p-6">
     <h1 class="text-2xl font-bold mb-4">จับคู่ห้องตรวจ HOSxP ↔ ชื่อที่แสดงบนทีวี</h1>
 
-    <form method="POST" action="{{ route('admin.tv.rooms.store', $boardKey) }}" class="flex gap-2 mb-6">
+    <form method="POST" action="{{ route($routePrefix . 'rooms.store', $boardKey) }}" class="flex gap-2 mb-6">
         @csrf
         <input type="text" name="hosxp_cur_dep" placeholder="cur_dep เช่น 002" required class="border rounded p-2">
         <input type="text" name="display_name" placeholder="ชื่อที่แสดง" required class="border rounded p-2 flex-1">
@@ -22,7 +22,7 @@
                 <td>{{ $room->display_name }}</td>
                 <td>{{ $room->sort_order }}</td>
                 <td>
-                    <form method="POST" action="{{ route('admin.tv.rooms.toggle', $room) }}">
+                    <form method="POST" action="{{ route($routePrefix . 'rooms.toggle', $room) }}">
                         @csrf @method('PATCH')
                         <button class="px-2 py-1 rounded {{ $room->is_active ? 'bg-green-200' : 'bg-red-200' }}">
                             {{ $room->is_active ? 'เปิดใช้งาน' : 'ปิดใช้งาน' }}
@@ -30,7 +30,7 @@
                     </form>
                 </td>
                 <td>
-                    <form method="POST" action="{{ route('admin.tv.rooms.destroy', $room) }}"
+                    <form method="POST" action="{{ route($routePrefix . 'rooms.destroy', $room) }}"
                           onsubmit="return confirm('ยืนยันลบ?')">
                         @csrf @method('DELETE')
                         <button class="text-red-600">ลบ</button>

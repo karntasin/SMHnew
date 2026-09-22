@@ -864,25 +864,43 @@ require __DIR__ . '/auth.php';
 
 
 
-// --- Public TV Display (ไม่ต้อง auth เพราะเปิดจากทีวีในเครือข่ายภายใน) ---
-Route::get('/tv/{boardKey?}', [App\Http\Controllers\TvBoardController::class, 'show'])->name('tv.board');
-Route::get('/tv/{boardKey}/queue-data', [App\Http\Controllers\TvBoardController::class, 'queueData'])->name('tv.board.data');
 
-// --- Admin (ครอบ middleware auth เดิมของระบบ) ---
-Route::middleware(['web', 'auth'])->prefix('admin/tv')->name('admin.tv.')->group(function () {
-    Route::get('/', function () { return view('admin.tv.index'); })->name('index');
-    Route::get('settings/{boardKey?}', [App\Http\Controllers\Admin\TvDisplaySettingController::class, 'edit'])->name('settings.edit');
-    Route::put('settings/{boardKey?}', [App\Http\Controllers\Admin\TvDisplaySettingController::class, 'update'])->name('settings.update');
 
-    Route::get('playlist/{boardKey?}', [App\Http\Controllers\Admin\TvMediaPlaylistController::class, 'index'])->name('playlist.index');
-    Route::post('playlist/{boardKey?}', [App\Http\Controllers\Admin\TvMediaPlaylistController::class, 'store'])->name('playlist.store');
-    Route::patch('playlist/{item}/toggle', [App\Http\Controllers\Admin\TvMediaPlaylistController::class, 'toggle'])->name('playlist.toggle');
-    Route::post('playlist/reorder', [App\Http\Controllers\Admin\TvMediaPlaylistController::class, 'reorder'])->name('playlist.reorder');
-    Route::delete('playlist/{item}', [App\Http\Controllers\Admin\TvMediaPlaylistController::class, 'destroy'])->name('playlist.destroy');
+// --- Admin TV Routes ---
+$tvSystems = [
+    ['prefix' => 'admin/tv', 'name' => 'admin.tv', 'boardKey' => '002', 'displayPrefix' => 'tv', 'displayName' => 'tv'],
+    ['prefix' => 'admin/er', 'name' => 'admin.er', 'boardKey' => '003', 'displayPrefix' => 'er', 'displayName' => 'er'],
+    ['prefix' => 'admin/drug', 'name' => 'admin.drug', 'boardKey' => '013', 'displayPrefix' => 'drug', 'displayName' => 'drug'],
+];
 
-    Route::get('rooms/{boardKey?}', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'index'])->name('rooms.index');
-    Route::post('rooms/{boardKey?}', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'store'])->name('rooms.store');
-    Route::patch('rooms/{room}/toggle', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'toggle'])->name('rooms.toggle');
-    Route::delete('rooms/{room}', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'destroy'])->name('rooms.destroy');
+foreach ($tvSystems as $sys) {
+    Route::middleware(['web', 'auth'])->prefix($sys['prefix'])->name($sys['name'].'.')->group(function () use ($sys) {
+        Route::get('settings', [App\Http\Controllers\Admin\TvDisplaySettingController::class, 'edit'])->name('settings.edit')->defaults('boardKey', $sys['boardKey']);
+        Route::put('settings', [App\Http\Controllers\Admin\TvDisplaySettingController::class, 'update'])->name('settings.update')->defaults('boardKey', $sys['boardKey']);
+
+        Route::get('playlist', [App\Http\Controllers\Admin\TvMediaPlaylistController::class, 'index'])->name('playlist.index')->defaults('boardKey', $sys['boardKey']);
+        Route::post('playlist', [App\Http\Controllers\Admin\TvMediaPlaylistController::class, 'store'])->name('playlist.store')->defaults('boardKey', $sys['boardKey']);
+        Route::patch('playlist/{item}/toggle', [App\Http\Controllers\Admin\TvMediaPlaylistController::class, 'toggle'])->name('playlist.toggle');
+        Route::post('playlist/reorder', [App\Http\Controllers\Admin\TvMediaPlaylistController::class, 'reorder'])->name('playlist.reorder');
+        Route::delete('playlist/{item}', [App\Http\Controllers\Admin\TvMediaPlaylistController::class, 'destroy'])->name('playlist.destroy');
+
+        Route::get('rooms', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'index'])->name('rooms.index')->defaults('boardKey', $sys['boardKey']);
+        Route::post('rooms', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'store'])->name('rooms.store')->defaults('boardKey', $sys['boardKey']);
+        Route::patch('rooms/{room}/toggle', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'toggle'])->name('rooms.toggle');
+        Route::delete('rooms/{room}', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'destroy'])->name('rooms.destroy');
+    });
+
+    Route::get('/' . $sys['displayPrefix'], [App\Http\Controllers\TvBoardController::class, 'show'])->name($sys['displayName'].'.board')->defaults('boardKey', $sys['boardKey']);
+    Route::get('/' . $sys['displayPrefix'] . '/queue-data', [App\Http\Controllers\TvBoardController::class, 'queueData'])->name($sys['displayName'].'.board.data')->defaults('boardKey', $sys['boardKey']);
+}
+
+
+
+
+Route::get('/dev/seed-menus', function() {
+    $parent = \App\Models\Menu::firstOrCreate(['label' => 'จัดการคิว', 'icon' => 'Monitor', 'route' => null]);
+    \App\Models\Menu::updateOrCreate(['route' => 'admin.tv.index'], ['label' => 'คิวห้องตรวจ', 'parent_id' => $parent->id, 'icon' => 'User']);
+    \App\Models\Menu::updateOrCreate(['route' => 'admin.er.index'], ['label' => 'คิวห้องฉุกเฉิน', 'parent_id' => $parent->id, 'icon' => 'ShieldAlert']);
+    \App\Models\Menu::updateOrCreate(['route' => 'admin.drug.index'], ['label' => 'คิวห้องจ่ายยา', 'parent_id' => $parent->id, 'icon' => 'Pill']);
+    return 'OK';
 });
-

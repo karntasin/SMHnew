@@ -15,7 +15,8 @@ class TvMediaPlaylistController extends Controller
             ->orderBy('sort_order')
             ->get();
 
-        return view('admin.tv.playlist', compact('items', 'boardKey'));
+        $routePrefix = str_replace(request()->route()->getActionMethod(), '', request()->route()->getName());
+        return view('admin.tv.playlist', array_merge(compact('items', 'boardKey'), ['routePrefix' => $routePrefix]));
     }
 
     public function store(Request $request, string $boardKey = 'default')

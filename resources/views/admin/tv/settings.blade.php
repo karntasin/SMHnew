@@ -7,7 +7,7 @@
         <div class="bg-green-100 text-green-800 p-3 rounded mb-4">{{ session('status') }}</div>
     @endif
 
-    <form method="POST" action="{{ route('admin.tv.settings.update', $setting->board_key) }}">
+    <form method="POST" action="{{ route($routePrefix . 'settings.update', $setting->board_key) }}">
         @csrf @method('PUT')
 
         <label class="block mb-2 font-semibold">โหมดสื่อฝั่งซ้าย</label>

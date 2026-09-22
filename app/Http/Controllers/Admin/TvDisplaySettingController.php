@@ -11,7 +11,8 @@ class TvDisplaySettingController extends Controller
     public function edit(string $boardKey = 'default')
     {
         $setting = TvDisplaySetting::firstOrCreate(['board_key' => $boardKey]);
-        return view('admin.tv.settings', compact('setting'));
+        $routePrefix = str_replace(request()->route()->getActionMethod(), '', request()->route()->getName());
+        return view('admin.tv.settings', array_merge(compact('setting'), ['routePrefix' => $routePrefix]));
     }
 
     public function update(Request $request, string $boardKey = 'default')
@@ -33,8 +34,8 @@ class TvDisplaySettingController extends Controller
         $setting = TvDisplaySetting::firstOrCreate(['board_key' => $boardKey]);
         $setting->update($data);
 
-        return redirect()
-            ->route('admin.tv.settings.edit', $boardKey)
+        $routePrefix = str_replace(request()->route()->getActionMethod(), '', request()->route()->getName());
+        return redirect()->route($routePrefix . 'settings.edit', $boardKey)
             ->with('status', 'บันทึกการตั้งค่าเรียบร้อย');
     }
 }

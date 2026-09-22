@@ -14,7 +14,8 @@ class TvClinicRoomController extends Controller
             ->orderBy('sort_order')
             ->get();
 
-        return view('admin.tv.rooms', compact('rooms', 'boardKey'));
+        $routePrefix = str_replace(request()->route()->getActionMethod(), '', request()->route()->getName());
+        return view('admin.tv.rooms', array_merge(compact('rooms', 'boardKey'), ['routePrefix' => $routePrefix]));
     }
 
     public function store(Request $request, string $boardKey = 'default')
