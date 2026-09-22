@@ -1,13 +1,14 @@
 @extends('layouts.admin')
 @section('content')
 <div class="max-w-2xl mx-auto p-6">
+    @include('admin.tv.header')
     <h1 class="text-2xl font-bold mb-4">ตั้งค่าจอแสดงผล ({{ $setting->board_key }})</h1>
 
     @if(session('status'))
         <div class="bg-green-100 text-green-800 p-3 rounded mb-4">{{ session('status') }}</div>
     @endif
 
-    <form method="POST" action="{{ route($routePrefix . 'settings.update', $setting->board_key) }}">
+    <form method="POST" action="{{ route('admin.tv.settings.update', $setting->board_key) }}">
         @csrf @method('PUT')
 
         <label class="block mb-2 font-semibold">โหมดสื่อฝั่งซ้าย</label>

@@ -10,16 +10,22 @@ class TvClinicRoomController extends Controller
 {
     public function index(string $boardKey = 'default')
     {
-        $rooms = TvClinicRoom::where('board_key', $boardKey)
+        $keys = TvClinicRoom::normalizeBoardKeys($boardKey);
+        $rooms = TvClinicRoom::whereIn('board_key', $keys)
             ->orderBy('sort_order')
             ->get();
 
-        $routePrefix = 'admin.' . request()->segment(2) . '.';
-        return view('admin.tv.rooms', array_merge(compact('rooms', 'boardKey'), ['routePrefix' => $routePrefix]));
+        return view('admin.tv.rooms', compact('rooms', 'boardKey'));
     }
 
     public function store(Request $request, string $boardKey = 'default')
     {
+        $primaryKey = match (strtolower(trim($boardKey))) {
+            '003', 'er', 'tv-er' => '003',
+            '013', 'drug', 'tv-drug', 'pharmacy' => '013',
+            default => 'default',
+        };
+
         $data = $request->validate([
             'hosxp_cur_dep' => 'required|string|max:10',
             'display_name' => 'required|string|max:255',
@@ -27,7 +33,7 @@ class TvClinicRoomController extends Controller
         ]);
 
         TvClinicRoom::updateOrCreate(
-            ['board_key' => $boardKey, 'hosxp_cur_dep' => $data['hosxp_cur_dep']],
+            ['board_key' => $primaryKey, 'hosxp_cur_dep' => $data['hosxp_cur_dep']],
             [
                 'display_name' => $data['display_name'],
                 'sort_order' => $data['sort_order'] ?? 0,
@@ -35,7 +41,7 @@ class TvClinicRoomController extends Controller
             ]
         );
 
-        return back()->with('status', 'เน€เธเธดเนเธก/เนเธเนเนเธเธซเนเธญเธเธ•เธฃเธงเธเน€เธฃเธตเธขเธเธฃเนเธญเธข');
+        return back()->with('status', 'เพิ่ม/แก้ไขห้องตรวจเรียบร้อย');
     }
 
     public function toggle(TvClinicRoom $room)
@@ -47,7 +53,6 @@ class TvClinicRoomController extends Controller
     public function destroy(TvClinicRoom $room)
     {
         $room->delete();
-        return back()->with('status', 'เธฅเธเธซเนเธญเธเธ•เธฃเธงเธเน€เธฃเธตเธขเธเธฃเนเธญเธข');
+        return back()->with('status', 'ลบห้องตรวจเรียบร้อย');
     }
 }
-

@@ -11,12 +11,12 @@ class TvMediaPlaylistController extends Controller
 {
     public function index(string $boardKey = 'default')
     {
-        $items = TvMediaPlaylist::where('board_key', $boardKey)
+        $keys = \App\Models\TvClinicRoom::normalizeBoardKeys($boardKey);
+        $items = TvMediaPlaylist::whereIn('board_key', $keys)
             ->orderBy('sort_order')
             ->get();
 
-        $routePrefix = 'admin.' . request()->segment(2) . '.';
-        return view('admin.tv.playlist', array_merge(compact('items', 'boardKey'), ['routePrefix' => $routePrefix]));
+        return view('admin.tv.playlist', compact('items', 'boardKey'));
     }
 
     public function store(Request $request, string $boardKey = 'default')
@@ -32,22 +32,28 @@ class TvMediaPlaylistController extends Controller
 
         if ($data['media_type'] === 'youtube') {
             if (empty($data['url'])) {
-                return back()->withErrors(['url' => 'เนเธเธฃเธ”เธฃเธฐเธเธธ YouTube URL']);
+                return back()->withErrors(['url' => 'โปรดระบุ YouTube URL']);
             }
-            // เนเธเธฅเธ URL เนเธซเนเน€เธเนเธเธฃเธนเธเนเธเธ embed เน€เธชเธกเธญเธ–เนเธฒเธ—เธณเนเธ”เน (เน€เธเนเธเธ”เธถเธ ID เธญเธญเธเธกเธฒ)
+            // แปลง URL ให้เป็นรูปแบบ embed เสมอถ้าทำได้ (เช่นดึง ID ออกมา)
             $filePath = $data['url'];
             $dbMediaType = 'video';
         } else {
             if (! $request->hasFile('file')) {
-                return back()->withErrors(['file' => 'เนเธเธฃเธ”เธญเธฑเธเนเธซเธฅเธ”เนเธเธฅเนเธชเธทเนเธญ']);
+                return back()->withErrors(['file' => 'โปรดอัปโหลดไฟล์สื่อ']);
             }
             $path = $request->file('file')->store('tv-media', 'public');
             $filePath = Storage::url($path);
             $dbMediaType = $data['media_type'];
         }
 
+        $primaryKey = match (strtolower(trim($boardKey))) {
+            '003', 'er', 'tv-er' => '003',
+            '013', 'drug', 'tv-drug', 'pharmacy' => '013',
+            default => 'default',
+        };
+
         TvMediaPlaylist::create([
-            'board_key' => $boardKey,
+            'board_key' => $primaryKey,
             'media_type' => $dbMediaType,
             'title' => $data['title'] ?? null,
             'file_path' => $filePath,
@@ -56,7 +62,7 @@ class TvMediaPlaylistController extends Controller
             'is_active' => true,
         ]);
 
-        return back()->with('status', 'เน€เธเธดเนเธกเธชเธทเนเธญเน€เธฃเธตเธขเธเธฃเนเธญเธข');
+        return back()->with('status', 'เพิ่มสื่อเรียบร้อย');
     }
 
     public function toggle(TvMediaPlaylist $item)
@@ -86,7 +92,6 @@ class TvMediaPlaylistController extends Controller
         }
         $item->delete();
 
-        return back()->with('status', 'เธฅเธเธชเธทเนเธญเน€เธฃเธตเธขเธเธฃเนเธญเธข');
+        return back()->with('status', 'ลบสื่อเรียบร้อย');
     }
 }
-

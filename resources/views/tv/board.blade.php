@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>เธเธญเนเธชเธ”เธเธเธดเธงเธซเนเธญเธเธ•เธฃเธงเธ</title>
+    <title>จอแสดงคิวห้องตรวจ</title>
     @vite(['resources/css/app.css', 'resources/js/app.tsx'])
     <style>
         /* Typography and Spacing Scaling based on layout mode */
@@ -65,27 +65,60 @@
     </style>
 </head>
 @php
-    if ($boardKey == '003') {
-        $iconBg = 'from-rose-500 to-red-700';
-        $titleGradient = 'from-rose-300 to-red-400';
-        $roomTitleColor = 'text-rose-300';
-        $waitBadgeColor = 'bg-rose-500/20 text-rose-300 border-rose-500/30';
-        $waitingNoColor = 'text-rose-300';
-    } elseif ($boardKey == '013') {
-        $iconBg = 'from-emerald-400 to-teal-600';
-        $titleGradient = 'from-emerald-300 to-teal-300';
-        $roomTitleColor = 'text-emerald-300';
-        $waitBadgeColor = 'bg-teal-500/20 text-teal-300 border-teal-500/30';
+    $normalizedKey = match (strtolower(trim($boardKey))) {
+        '003', 'er', 'tv-er' => 'er',
+        '013', 'drug', 'tv-drug', 'pharmacy' => 'drug',
+        default => 'opd',
+    };
+
+    if ($normalizedKey === 'er') {
+        $boardTitle = 'คิวห้องฉุกเฉิน (ER)';
+        $bodyBg = 'bg-stone-950';
+        $rightPanelBg = 'bg-gradient-to-br from-red-950 via-neutral-900 to-rose-950';
+        $headerBoxBg = 'bg-red-900/40 border-red-700/60';
+        $iconBox = 'from-red-500 to-rose-700 shadow-rose-900/40';
+        $titleGradient = 'from-red-200 via-rose-300 to-amber-200';
+        $roomCardClass = 'bg-red-950/40 border-red-700/50 shadow-rose-950/50';
+        $roomHeaderBg = 'bg-red-950/70 border-red-800/50';
+        $roomTitleColor = 'text-rose-200';
+        $waitBadgeColor = 'bg-rose-500/25 text-rose-200 border-rose-500/40';
+        $waitingAreaBg = 'bg-black/40 border-red-900/40';
+        $waitingTitleColor = 'text-rose-300/80';
+        $waitingItemBg = 'bg-red-950/50 border-red-800/40 hover:bg-red-900/40';
+        $waitingNoColor = 'text-amber-300';
+    } elseif ($normalizedKey === 'drug') {
+        $boardTitle = 'คิวห้องจ่ายยา (Pharmacy)';
+        $bodyBg = 'bg-slate-950';
+        $rightPanelBg = 'bg-gradient-to-br from-teal-950 via-slate-900 to-emerald-950';
+        $headerBoxBg = 'bg-emerald-900/30 border-emerald-700/50';
+        $iconBox = 'from-emerald-500 to-teal-700 shadow-emerald-900/40';
+        $titleGradient = 'from-emerald-200 via-teal-200 to-cyan-200';
+        $roomCardClass = 'bg-emerald-950/40 border-emerald-700/50 shadow-emerald-950/50';
+        $roomHeaderBg = 'bg-emerald-950/70 border-emerald-800/50';
+        $roomTitleColor = 'text-emerald-200';
+        $waitBadgeColor = 'bg-emerald-500/25 text-emerald-200 border-emerald-500/40';
+        $waitingAreaBg = 'bg-black/40 border-emerald-900/40';
+        $waitingTitleColor = 'text-emerald-300/80';
+        $waitingItemBg = 'bg-emerald-950/50 border-emerald-800/40 hover:bg-emerald-900/40';
         $waitingNoColor = 'text-emerald-300';
     } else {
-        $iconBg = 'from-sky-400 to-indigo-600';
-        $titleGradient = '{{ $titleGradient }}';
+        $boardTitle = 'คิวรับบริการห้องตรวจ';
+        $bodyBg = 'bg-slate-900';
+        $rightPanelBg = 'bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950';
+        $headerBoxBg = 'bg-slate-800/60 border-slate-700/80';
+        $iconBox = 'from-sky-400 to-indigo-600 shadow-indigo-900/40';
+        $titleGradient = 'from-sky-300 to-indigo-300';
+        $roomCardClass = 'bg-slate-800/50 border-slate-700/50';
+        $roomHeaderBg = 'bg-slate-900/60 border-slate-700/50';
         $roomTitleColor = 'text-sky-300';
         $waitBadgeColor = 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30';
+        $waitingAreaBg = 'bg-slate-900/40 border-slate-700/50';
+        $waitingTitleColor = 'text-slate-400';
+        $waitingItemBg = 'bg-slate-800/80 border-slate-700/80 hover:bg-slate-700';
         $waitingNoColor = 'text-sky-300';
     }
 @endphp
-<body class="bg-slate-900 text-white h-screen w-screen overflow-hidden"
+<body class="{{ $bodyBg }} text-white h-screen w-screen overflow-hidden"
       x-data="tvBoard('{{ $boardKey }}', {{ $settings->queue_poll_seconds }}, {{ $settings->chime_enabled ? 'true' : 'false' }}, {{ $settings->tts_enabled ? 'true' : 'false' }})"
       x-init="init()">
 
@@ -93,13 +126,13 @@
          class="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center cursor-pointer transition-opacity"
          @click="unlockAudio()">
         <div class="text-center px-12 py-10 bg-slate-800 rounded-3xl shadow-2xl border border-slate-700">
-            <p class="text-6xl font-extrabold mb-8 text-sky-400">๐“บ เธฃเธฐเธเธเธเธญเน€เธฃเธตเธขเธเธเธดเธงเธเธฃเนเธญเธกเนเธเนเธเธฒเธ</p>
-            <p class="text-3xl text-slate-300 bg-slate-900/50 p-6 rounded-xl">เนเธเธฃเธ”เธเธ”เธเธธเนเธก OK เธเธเธฃเธตเนเธกเธ— เธซเธฃเธทเธญเนเธ•เธฐเธซเธเนเธฒเธเธญ <br>เน€เธเธทเนเธญเน€เธเธดเธ”เนเธเนเธเธฒเธเน€เธชเธตเธขเธเนเธเนเธเน€เธ•เธทเธญเธ</p>
+            <p class="text-6xl font-extrabold mb-8 text-sky-400">📺 ระบบจอเรียกคิวพร้อมใช้งาน</p>
+            <p class="text-3xl text-slate-300 bg-slate-900/50 p-6 rounded-xl">โปรดกดปุ่ม OK บนรีโมท หรือแตะหน้าจอ <br>เพื่อเปิดใช้งานเสียงแจ้งเตือน</p>
         </div>
     </div>
 
     <div class="flex h-screen w-screen" x-show="audioUnlocked" x-cloak>
-        <!-- เธเธฑเนเธเธเนเธฒเธข: เธชเธทเนเธญ/เธเธฃเธฐเธเธฒเธจ -->
+        <!-- ฝั่งซ้าย: สื่อ/ประกาศ -->
         <div class="h-full relative bg-black shadow-2xl z-10" style="width: {{ $settings->left_panel_width_percent }}%;">
             @if($settings->left_media_mode === 'video' || $settings->left_media_mode === 'image_slider')
                 <template x-for="(item, idx) in media" :key="item.id">
@@ -118,22 +151,22 @@
                 </template>
             @else
                 <div class="p-8 h-full flex flex-col bg-gradient-to-br from-indigo-950 via-slate-900 to-black">
-                    <h2 class="text-4xl font-extrabold mb-6 text-yellow-400 drop-shadow-md">๐“ข เธเนเธฒเธงเธชเธฒเธฃ/เธเธฃเธฐเธเธฒเธจ</h2>
+                    <h2 class="text-4xl font-extrabold mb-6 text-yellow-400 drop-shadow-md">📢 ข่าวสาร/ประกาศ</h2>
                     <div class="flex-1 overflow-hidden text-3xl leading-relaxed text-slate-100" x-html="rssHtml"></div>
                 </div>
             @endif
         </div>
 
-        <!-- เธเธฑเนเธเธเธงเธฒ: เธฃเธฒเธขเธเธฒเธฃเธเธดเธง (No Scrolling) -->
-        <div class="h-full bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-6 flex flex-col overflow-hidden"
+        <!-- ฝั่งขวา: รายการคิว (No Scrolling) -->
+        <div class="h-full {{ $rightPanelBg }} p-6 flex flex-col overflow-hidden"
              style="width: {{ $settings->right_panel_width_percent }}%;">
             
-            <div class="flex-shrink-0 flex items-center justify-between mb-6 bg-slate-800/60 backdrop-blur-md p-6 rounded-2xl border border-slate-700/80 shadow-2xl">
+            <div class="flex-shrink-0 flex items-center justify-between mb-6 {{ $headerBoxBg }} backdrop-blur-md p-6 rounded-2xl border shadow-2xl">
                 <div class="flex items-center gap-4">
-                    <div class="{{ $iconBg }} p-3 rounded-xl shadow-inner">
+                    <div class="bg-gradient-to-br {{ $iconBox }} p-3 rounded-xl shadow-inner">
                         <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
                     </div>
-                    <h1 class="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r {{ $titleGradient }} tracking-wide">เธเธดเธงเธฃเธฑเธเธเธฃเธดเธเธฒเธฃ</h1>
+                    <h1 class="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r {{ $titleGradient }} tracking-wide">{{ $boardTitle }}</h1>
                 </div>
                 <div class="text-right flex flex-col items-end">
                     <span class="text-4xl font-black text-amber-400 drop-shadow-lg" x-text="clockTime"></span>
@@ -145,13 +178,13 @@
             <div class="grid gap-4 flex-1 min-h-0" :class="gridClass">
                 <template x-for="(roomData, roomName) in rooms" :key="roomName">
                     <!-- Room Card -->
-                    <div class="room-card bg-slate-800/50 backdrop-blur-sm rounded-2xl shadow-xl border border-slate-700/50 flex flex-col min-h-0 relative overflow-hidden">
+                    <div class="room-card {{ $roomCardClass }} backdrop-blur-sm rounded-2xl shadow-xl border flex flex-col min-h-0 relative overflow-hidden">
                         
                         <!-- Room Header -->
-                        <div class="room-header-wrap bg-slate-900/60 border border-slate-700/50 flex items-center justify-between flex-shrink-0">
+                        <div class="room-header-wrap {{ $roomHeaderBg }} border flex items-center justify-between flex-shrink-0">
                             <h2 class="room-title font-extrabold {{ $roomTitleColor }} drop-shadow" x-text="roomName"></h2>
                             <div class="wait-badge {{ $waitBadgeColor }} font-bold rounded-full border whitespace-nowrap">
-                                เธฃเธญ <span x-text="roomData.waiting.length"></span>
+                                รอ <span x-text="roomData.waiting.length"></span>
                             </div>
                         </div>
 
@@ -160,7 +193,7 @@
                             <template x-for="q in roomData.calling" :key="roomName + '-calling-' + q.oqueue">
                                 <div class="calling-box bg-gradient-to-r from-yellow-400 to-amber-500 shadow-xl border border-yellow-300 flex justify-between items-center transform scale-100 transition-all">
                                     <div class="flex items-baseline gap-3">
-                                        <span class="calling-label text-amber-900 font-bold tracking-wide uppercase">เน€เธฃเธตเธขเธเธเธดเธง</span>
+                                        <span class="calling-label text-amber-900 font-bold tracking-wide uppercase">เรียกคิว</span>
                                         <span class="calling-no text-slate-900 font-black drop-shadow-sm" x-text="q.oqueue"></span>
                                     </div>
                                     <span class="calling-name text-slate-900 font-extrabold truncate pl-4" x-text="q.display_name"></span>
@@ -168,29 +201,29 @@
                             </template>
                             <template x-if="roomData.calling.length === 0">
                                 <div class="calling-box bg-slate-700/30 border border-slate-600 border-dashed flex items-center justify-center">
-                                    <span class="text-slate-500 font-medium empty-state">-- เธงเนเธฒเธ --</span>
+                                    <span class="text-slate-500 font-medium empty-state">-- ว่าง --</span>
                                 </div>
                             </template>
                         </div>
 
                         <!-- Waiting Area -->
-                        <div class="bg-slate-900/40 rounded-xl p-3 flex-1 flex flex-col min-h-0 border border-slate-700/50 overflow-hidden relative">
-                            <h3 class="waiting-title text-slate-400 font-bold uppercase tracking-wider flex-shrink-0">เธเธดเธงเธฃเธญเธ•เธฃเธงเธ</h3>
+                        <div class="{{ $waitingAreaBg }} rounded-xl p-3 flex-1 flex flex-col min-h-0 border overflow-hidden relative">
+                            <h3 class="waiting-title {{ $waitingTitleColor }} font-bold uppercase tracking-wider flex-shrink-0">คิวรอตรวจ</h3>
                             <div class="flex-1 overflow-hidden flex flex-col gap-1">
                                 <template x-for="q in roomData.waiting.slice(0, maxWaiting)" :key="roomName + '-waiting-' + q.oqueue">
-                                    <div class="waiting-item bg-slate-800/80 flex justify-between items-center border border-slate-700/80 hover:bg-slate-700 transition-colors">
+                                    <div class="waiting-item {{ $waitingItemBg }} flex justify-between items-center border transition-colors">
                                         <span class="waiting-no {{ $waitingNoColor }} font-bold" x-text="q.oqueue"></span>
                                         <span class="waiting-name text-slate-300 font-medium truncate pl-2" x-text="q.display_name"></span>
                                     </div>
                                 </template>
                                 <!-- Show dots if more waiting queues exist -->
                                 <template x-if="roomData.waiting.length > maxWaiting">
-                                    <div class="text-center text-slate-500 font-bold text-sm mt-1 animate-pulse">...เนเธฅเธฐเธญเธตเธ <span x-text="roomData.waiting.length - maxWaiting"></span> เธเธดเธง</div>
+                                    <div class="text-center text-slate-500 font-bold text-sm mt-1 animate-pulse">...และอีก <span x-text="roomData.waiting.length - maxWaiting"></span> คิว</div>
                                 </template>
                             </div>
                             <template x-if="roomData.waiting.length === 0">
                                 <div class="absolute inset-0 flex items-center justify-center">
-                                    <span class="text-slate-600 italic font-medium">เนเธกเนเธกเธตเธเธดเธงเธฃเธญ</span>
+                                    <span class="text-slate-600 italic font-medium">ไม่มีคิวรอ</span>
                                 </div>
                             </template>
                         </div>
@@ -326,4 +359,3 @@
     </script>
 </body>
 </html>
-
