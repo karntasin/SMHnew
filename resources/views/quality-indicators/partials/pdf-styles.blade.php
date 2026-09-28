@@ -253,7 +253,6 @@ table.data th.center {
 }
 .empty {
     color: #94a3b8;
-    font-style: italic;
     padding: 8px;
     border: 1px dashed #cbd5e1;
     border-radius: 6px;
@@ -384,3 +383,143 @@ table.data th.center {
     font-size: 9.5px;
     color: #334155;
 }
+
+/* HA Accreditation Comparative Report Table (Matching 1790051946634.jpg) */
+.ha-table-wrap {
+    margin-bottom: 16px;
+}
+.ha-table-wrap.keep-together {
+    page-break-inside: avoid;
+}
+.ha-table thead tr {
+    page-break-after: avoid;
+}
+.ha-category-bar {
+    background: #ffffff;
+    color: #000080;
+    font-size: 11px;
+    font-weight: bold;
+    text-align: left;
+    padding: 6px 8px;
+    border: 1px solid #000000;
+    border-bottom: 1.5px solid #000000;
+    box-sizing: border-box;
+    width: 100%;
+}
+.ha-table {
+    width: 100%;
+    max-width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    border: 1px solid #000000;
+    border-top: none;
+    background: #ffffff;
+    margin-bottom: 14px;
+}
+.ha-table thead {
+    display: table-header-group;
+}
+.ha-table tr {
+    page-break-inside: avoid;
+}
+.ha-table th,
+.ha-table td {
+    border: 1px solid #000000;
+    vertical-align: middle;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+.ha-header-row th {
+    background: #ffffff;
+    color: #000080;
+    font-size: 10.5px;
+    font-weight: bold;
+    text-align: center;
+    padding: 6px 4px;
+    border: 1px solid #000000;
+}
+.ha-header-row th.col-code { width: 7.5%; }
+.ha-header-row th.col-indicator { width: 51.5%; text-align: center; }
+.ha-header-row th.col-target { width: 9%; }
+.ha-header-row th.col-year {
+    width: 5%;
+    white-space: nowrap;
+    padding: 6px 2px;
+}
+.ha-header-row th.col-status { width: 7%; }
+
+.ha-table td {
+    padding: 5px 6px;
+    font-size: 10px;
+    line-height: 1.35;
+    color: #000000;
+}
+.ha-table td.cell-code {
+    text-align: center;
+    font-weight: bold;
+    color: #1e293b;
+    font-size: 9px;
+    white-space: nowrap;
+}
+.ha-table td.cell-indicator {
+    text-align: left;
+    padding-left: 8px;
+    padding-right: 8px;
+}
+.ha-table td.cell-target {
+    text-align: center;
+    white-space: nowrap;
+}
+.ha-table td.cell-year {
+    text-align: center;
+    white-space: nowrap;
+    padding: 5px 2px;
+}
+.ha-table td.cell-status {
+    text-align: center;
+    padding: 3px 2px;
+}
+.status-badge {
+    display: inline-block;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 8px;
+    font-weight: bold;
+    line-height: 1.25;
+}
+.status-pass {
+    background: #dcfce7;
+    color: #15803d;
+    border: 1px solid #86efac;
+}
+.status-fail {
+    background: #fee2e2;
+    color: #b91c1c;
+    border: 1px solid #fca5a5;
+}
+.status-none {
+    color: #94a3b8;
+}
+.ha-table .sub-col {
+    display: block;
+    font-size: 8.5px;
+    font-weight: normal;
+    color: #000080;
+    margin-top: 1px;
+}
+.ha-table .code-tag {
+    display: inline-block;
+    color: #334155;
+    font-weight: bold;
+    margin-right: 4px;
+    font-size: 9px;
+}
+.ha-group-title {
+    font-size: 13px;
+    font-weight: bold;
+    color: #064e3b;
+    margin-bottom: 6px;
+    padding-bottom: 4px;
+    border-bottom: 2px solid #059669;
+}
+

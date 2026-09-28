@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { QualityPage, StatCard, Panel, StatusPill, EmptyState, Field, qualityInput } from '@/components/quality/quality-ui';
+import { ThaiDatePicker, formatThaiDateFromIso } from '@/components/ui/thai-date-picker';
 import MraSubNav, { mraBreadcrumbs } from './MraSubNav';
 
 interface CategoryStat {
@@ -264,6 +265,15 @@ export default function MraReports({ stats, opd, ipd, filters }: Props) {
         return `${route('mra.reports.export-pdf')}?${params.toString()}`;
     }, [fromDate, toDate, channel]);
 
+    const excelHref = useMemo(() => {
+        const params = new URLSearchParams({
+            from_date: fromDate,
+            to_date: toDate,
+        });
+
+        return `${route('mra.reports.export-excel')}?${params.toString()}`;
+    }, [fromDate, toDate]);
+
     const visibleSections = useMemo(() => {
         if (channel === 'opd') return ['opd'] as const;
         if (channel === 'ipd') return ['ipd'] as const;
@@ -276,14 +286,20 @@ export default function MraReports({ stats, opd, ipd, filters }: Props) {
             icon={FileSearch}
             badge="ศูนย์พัฒนาคุณภาพ · MRA"
             title="รายงานสรุปผลการตรวจ"
-            subtitle="แยกสรุป OPD และ IPD ตามเกณฑ์ MRA ปี 2563"
+            subtitle="แยกสรุป OPD และ IPD ตามเกณฑ์ MRA ปี 2563 (กรองจากวันที่ตรวจสอบ)"
             breadcrumbs={mraBreadcrumbs({ title: 'รายงาน', href: route('mra.reports') })}
             headTitle="รายงาน MRA"
             actions={
-                <div className="flex gap-2 print:hidden">
+                <div className="flex flex-wrap gap-2 print:hidden">
                     <Button variant="outline" onClick={() => window.print()} className="rounded-xl">
                         <Printer className="mr-2 h-4 w-4" />
                         พิมพ์
+                    </Button>
+                    <Button variant="outline" className="rounded-xl border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800" asChild>
+                        <a href={excelHref} target="_blank" rel="noreferrer">
+                            <Download className="mr-2 h-4 w-4 text-emerald-600" />
+                            ส่งออก Excel (MRA)
+                        </a>
                     </Button>
                     <Button variant="outline" className="rounded-xl" asChild>
                         <a href={pdfHref} target="_blank" rel="noreferrer">
@@ -299,26 +315,26 @@ export default function MraReports({ stats, opd, ipd, filters }: Props) {
                 <h1 className="text-xl font-bold">รายงานสรุปผลการตรวจสอบคุณภาพเวชระเบียน</h1>
                 <p className="text-sm">แยก OPD / IPD · ตามเกณฑ์ MRA 2563</p>
                 <p className="mt-2 text-sm">
-                    ช่วงวันที่: {new Date(fromDate).toLocaleDateString('th-TH')} - {new Date(toDate).toLocaleDateString('th-TH')}
+                    ช่วงวันที่ตรวจสอบ: {formatThaiDateFromIso(fromDate)} – {formatThaiDateFromIso(toDate)}
                 </p>
             </div>
 
-            <Panel title="ตัวกรองรายงาน" description="เลือกช่วงวันที่และช่องทางที่ต้องการดู" className="print:hidden">
+            <Panel title="ตัวกรองรายงาน" description="เลือกช่วงวันที่ตรวจสอบ (ปี พ.ศ.) และช่องทางที่ต้องการดู" className="print:hidden">
                 <div className="flex flex-wrap items-end gap-4">
-                    <Field label="จากวันที่">
-                        <input
-                            type="date"
+                    <Field label="วันที่ตรวจสอบ (จากวันที่)">
+                        <ThaiDatePicker
                             value={fromDate}
-                            onChange={(e) => setFromDate(e.target.value)}
-                            className={cn(qualityInput, 'w-44')}
+                            onChange={setFromDate}
+                            className="w-52"
+                            placeholder="เลือกวันที่เริ่มต้น"
                         />
                     </Field>
-                    <Field label="ถึงวันที่">
-                        <input
-                            type="date"
+                    <Field label="วันที่ตรวจสอบ (ถึงวันที่)">
+                        <ThaiDatePicker
                             value={toDate}
-                            onChange={(e) => setToDate(e.target.value)}
-                            className={cn(qualityInput, 'w-44')}
+                            onChange={setToDate}
+                            className="w-52"
+                            placeholder="เลือกวันที่สิ้นสุด"
                         />
                     </Field>
                     <Field label="ช่องทาง">

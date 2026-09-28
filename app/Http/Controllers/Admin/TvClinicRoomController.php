@@ -10,7 +10,8 @@ class TvClinicRoomController extends Controller
 {
     public function index(string $boardKey = 'default')
     {
-        $rooms = TvClinicRoom::where('board_key', $boardKey)
+        $keys = TvClinicRoom::normalizeBoardKeys($boardKey);
+        $rooms = TvClinicRoom::whereIn('board_key', $keys)
             ->orderBy('sort_order')
             ->get();
 
@@ -19,6 +20,12 @@ class TvClinicRoomController extends Controller
 
     public function store(Request $request, string $boardKey = 'default')
     {
+        $primaryKey = match (strtolower(trim($boardKey))) {
+            '003', 'er', 'tv-er' => '003',
+            '013', 'drug', 'tv-drug', 'pharmacy' => '013',
+            default => 'default',
+        };
+
         $data = $request->validate([
             'hosxp_cur_dep' => 'required|string|max:10',
             'display_name' => 'required|string|max:255',
@@ -26,7 +33,7 @@ class TvClinicRoomController extends Controller
         ]);
 
         TvClinicRoom::updateOrCreate(
-            ['board_key' => $boardKey, 'hosxp_cur_dep' => $data['hosxp_cur_dep']],
+            ['board_key' => $primaryKey, 'hosxp_cur_dep' => $data['hosxp_cur_dep']],
             [
                 'display_name' => $data['display_name'],
                 'sort_order' => $data['sort_order'] ?? 0,

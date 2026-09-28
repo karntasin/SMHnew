@@ -41,9 +41,16 @@ class TvBoardController extends Controller
             fn () => $this->queueService->getQueueGroupedByRoom($boardKey)
         );
 
+        $media = Cache::remember(
+            "tv-board:{$boardKey}:media",
+            self::QUEUE_CACHE_TTL,
+            fn () => TvMediaPlaylist::activeForBoard($boardKey)->get()
+        );
+
         return response()->json([
-            'generated_at' => now()->toIso8601String(),
+            'generated_at' => now('Asia/Bangkok')->toIso8601String(),
             'rooms' => $grouped,
+            'media' => $media,
         ]);
     }
 }

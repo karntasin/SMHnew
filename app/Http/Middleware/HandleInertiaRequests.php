@@ -68,7 +68,10 @@ class HandleInertiaRequests extends Middleware
             'name' => config('app.name'),
             'quote' => ['message' => trim($message), 'author' => trim($author)],
             'auth' => [
-                'user' => $request->user() ? array_merge($request->user()->toArray(), ['avatar' => $request->user()->avatar_url]) : null,
+                'user' => $request->user() ? array_merge($request->user()->toArray(), [
+                    'avatar' => $request->user()->avatar_url,
+                    'roles' => $request->user()->getRoleNames(),
+                ]) : null,
             ],
             'flash' => [
                 'success' => session('success'),

@@ -254,6 +254,9 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         
         Route::get('/', [App\Http\Controllers\Document\DocumentController::class, 'index'])->name('index');
         Route::get('/create', [App\Http\Controllers\Document\DocumentController::class, 'create'])->name('create');
+        Route::get('/ai-summarizer', [App\Http\Controllers\Document\DocumentController::class, 'aiSummarizer'])->name('ai_summarizer');
+        Route::post('/summarize-ai', [App\Http\Controllers\Document\DocumentController::class, 'summarizeAi'])->name('summarizeAi');
+        Route::post('/export-docx', [App\Http\Controllers\Document\DocumentController::class, 'exportDocx'])->name('exportDocx');
         Route::post('/', [App\Http\Controllers\Document\DocumentController::class, 'store'])->name('store');
         Route::get('/{document}', [App\Http\Controllers\Document\DocumentController::class, 'show'])->name('show');
         
@@ -269,6 +272,8 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::post('/action/{action}/acknowledge', [App\Http\Controllers\Document\DocumentController::class, 'acknowledgeDocument'])->name('acknowledgeDocument');
         Route::post('/action/{action}/implementation', [App\Http\Controllers\Document\DocumentController::class, 'updateImplementation'])->name('updateImplementation');
     });
+
+    Route::get('/admin-docs/ai-summarizer', [App\Http\Controllers\Document\DocumentController::class, 'aiSummarizer'])->name('admin-docs.ai_summarizer');
 
     // Maintenance System (à¸£à¸°à¸šà¸šà¹à¸ˆà¹‰à¸‡à¸‹à¹ˆà¸­à¸¡)
     Route::prefix('maintenance')->name('maintenance.')->group(function () {
@@ -864,23 +869,72 @@ require __DIR__ . '/auth.php';
 
 
 
-// --- Public TV Display (äÁèµéÍ§ auth à¾ÃÒÐà»Ô´¨Ò¡·ÕÇÕã¹à¤Ã×Í¢èÒÂÀÒÂã¹) ---
-Route::get('/tv/{boardKey?}', [App\Http\Controllers\TvBoardController::class, 'show'])->name('tv.board');
+
+
+// ==========================================
+// --- TV Display & Admin Queue Management ---
+// ==========================================
+
+// --- Public TV Display (à¹„à¸¡à¹ˆà¸•à¹‰à¸­à¸‡ auth à¹€à¸›à¸´à¸”à¸šà¸™à¸ˆà¸­à¸—à¸µà¸§à¸µà¹„à¸”à¹‰à¸—à¸±à¸™à¸—à¸µ) ---
+Route::get('/tv', [App\Http\Controllers\TvBoardController::class, 'show'])->name('tv.board')->defaults('boardKey', 'default');
+Route::get('/er', [App\Http\Controllers\TvBoardController::class, 'show'])->name('tv.er.board')->defaults('boardKey', '003');
+Route::get('/tv-er', [App\Http\Controllers\TvBoardController::class, 'show'])->defaults('boardKey', '003');
+Route::get('/drug', [App\Http\Controllers\TvBoardController::class, 'show'])->name('tv.drug.board')->defaults('boardKey', '013');
+Route::get('/tv-drug', [App\Http\Controllers\TvBoardController::class, 'show'])->defaults('boardKey', '013');
+
+// Generic TV Display & Sub-routes
+Route::get('/tv/{boardKey}', [App\Http\Controllers\TvBoardController::class, 'show'])->where('boardKey', '[a-zA-Z0-9_-]+');
+
+// Queue data polling endpoints
+Route::get('/tv/queue-data', [App\Http\Controllers\TvBoardController::class, 'queueData'])->defaults('boardKey', 'default');
+Route::get('/er/queue-data', [App\Http\Controllers\TvBoardController::class, 'queueData'])->defaults('boardKey', '003');
+Route::get('/tv-er/queue-data', [App\Http\Controllers\TvBoardController::class, 'queueData'])->defaults('boardKey', '003');
+Route::get('/drug/queue-data', [App\Http\Controllers\TvBoardController::class, 'queueData'])->defaults('boardKey', '013');
+Route::get('/tv-drug/queue-data', [App\Http\Controllers\TvBoardController::class, 'queueData'])->defaults('boardKey', '013');
 Route::get('/tv/{boardKey}/queue-data', [App\Http\Controllers\TvBoardController::class, 'queueData'])->name('tv.board.data');
 
-// --- Admin (¤ÃÍº middleware auth à´ÔÁ¢Í§ÃÐºº) ---
-Route::middleware(['web', 'auth'])->prefix('admin/tv')->name('admin.tv.')->group(function () {
-    Route::get('settings/{boardKey?}', [App\Http\Controllers\Admin\TvDisplaySettingController::class, 'edit'])->name('settings.edit');
-    Route::put('settings/{boardKey?}', [App\Http\Controllers\Admin\TvDisplaySettingController::class, 'update'])->name('settings.update');
+// --- Admin Queue Management (à¸•à¹‰à¸­à¸‡ auth) ---
+Route::middleware(['web', 'auth'])->group(function () {
+    // 1. Root Shortcuts & Redirects
+    Route::get('/admin/tv', fn () => redirect('/admin/tv/rooms'));
+    Route::get('/admin/tv-er', fn () => redirect('/admin/tv-er/rooms'));
+    Route::get('/admin/er', fn () => redirect('/admin/tv-er/rooms'));
+    Route::get('/admin/tv-drug', fn () => redirect('/admin/tv-drug/rooms'));
+    Route::get('/admin/drug', fn () => redirect('/admin/tv-drug/rooms'));
 
-    Route::get('playlist/{boardKey?}', [App\Http\Controllers\Admin\TvMediaPlaylistController::class, 'index'])->name('playlist.index');
-    Route::post('playlist/{boardKey?}', [App\Http\Controllers\Admin\TvMediaPlaylistController::class, 'store'])->name('playlist.store');
-    Route::patch('playlist/{item}/toggle', [App\Http\Controllers\Admin\TvMediaPlaylistController::class, 'toggle'])->name('playlist.toggle');
-    Route::post('playlist/reorder', [App\Http\Controllers\Admin\TvMediaPlaylistController::class, 'reorder'])->name('playlist.reorder');
-    Route::delete('playlist/{item}', [App\Http\Controllers\Admin\TvMediaPlaylistController::class, 'destroy'])->name('playlist.destroy');
+    // 2. ER Aliases (/admin/tv-er/* and /admin/er/*)
+    Route::get('/admin/tv-er/rooms', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'index'])->defaults('boardKey', '003');
+    Route::get('/admin/tv-er/settings', [App\Http\Controllers\Admin\TvDisplaySettingController::class, 'edit'])->defaults('boardKey', '003');
+    Route::get('/admin/tv-er/playlist', [App\Http\Controllers\Admin\TvMediaPlaylistController::class, 'index'])->defaults('boardKey', '003');
 
-    Route::get('rooms/{boardKey?}', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'index'])->name('rooms.index');
-    Route::post('rooms/{boardKey?}', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'store'])->name('rooms.store');
-    Route::patch('rooms/{room}/toggle', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'toggle'])->name('rooms.toggle');
-    Route::delete('rooms/{room}', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'destroy'])->name('rooms.destroy');
+    Route::get('/admin/er/rooms', fn () => redirect('/admin/tv-er/rooms'));
+    Route::get('/admin/er/settings', fn () => redirect('/admin/tv-er/settings'));
+    Route::get('/admin/er/playlist', fn () => redirect('/admin/tv-er/playlist'));
+
+    // 3. Pharmacy Aliases (/admin/tv-drug/* and /admin/drug/*)
+    Route::get('/admin/tv-drug/rooms', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'index'])->defaults('boardKey', '013');
+    Route::get('/admin/tv-drug/settings', [App\Http\Controllers\Admin\TvDisplaySettingController::class, 'edit'])->defaults('boardKey', '013');
+    Route::get('/admin/tv-drug/playlist', [App\Http\Controllers\Admin\TvMediaPlaylistController::class, 'index'])->defaults('boardKey', '013');
+
+    Route::get('/admin/drug/rooms', fn () => redirect('/admin/tv-drug/rooms'));
+    Route::get('/admin/drug/settings', fn () => redirect('/admin/tv-drug/settings'));
+    Route::get('/admin/drug/playlist', fn () => redirect('/admin/tv-drug/playlist'));
+
+    // 4. Primary Admin TV Routes (Supports all boardKeys via URL or parameter)
+    Route::prefix('admin/tv')->name('admin.tv.')->group(function () {
+        Route::get('settings/{boardKey?}', [App\Http\Controllers\Admin\TvDisplaySettingController::class, 'edit'])->name('settings.edit');
+        Route::put('settings/{boardKey?}', [App\Http\Controllers\Admin\TvDisplaySettingController::class, 'update'])->name('settings.update');
+
+        Route::get('playlist/{boardKey?}', [App\Http\Controllers\Admin\TvMediaPlaylistController::class, 'index'])->name('playlist.index');
+        Route::post('playlist/{boardKey?}', [App\Http\Controllers\Admin\TvMediaPlaylistController::class, 'store'])->name('playlist.store');
+        Route::patch('playlist/{item}/toggle', [App\Http\Controllers\Admin\TvMediaPlaylistController::class, 'toggle'])->name('playlist.toggle');
+        Route::post('playlist/reorder', [App\Http\Controllers\Admin\TvMediaPlaylistController::class, 'reorder'])->name('playlist.reorder');
+        Route::delete('playlist/{item}', [App\Http\Controllers\Admin\TvMediaPlaylistController::class, 'destroy'])->name('playlist.destroy');
+
+        Route::get('rooms/{boardKey?}', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'index'])->name('rooms.index');
+        Route::post('rooms/{boardKey?}', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'store'])->name('rooms.store');
+        Route::patch('rooms/{room}/toggle', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'toggle'])->name('rooms.toggle');
+        Route::delete('rooms/{room}', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'destroy'])->name('rooms.destroy');
+    });
 });
+

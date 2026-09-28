@@ -90,6 +90,18 @@ export default function AdminHub() {
       ]
     },
     {
+      title: 'จัดการงานเอกสาร',
+      description: 'ระบบผู้ช่วย AI สรุปเนื้อหาเอกสารและแปลงเป็นไฟล์ Word',
+      icon: FileText,
+      color: 'text-emerald-600',
+      bg: 'bg-emerald-100',
+      gradient: 'from-emerald-500 to-teal-500',
+      href: route('admin-docs.ai_summarizer'),
+      links: [
+        { label: 'สรุปหนังสือด้วย AI', href: route('admin-docs.ai_summarizer') },
+      ]
+    },
+    {
       title: t('Medical Equipment Borrowing'),
       description: t('Borrow medical equipment, track stock and return status'),
       icon: Stethoscope,

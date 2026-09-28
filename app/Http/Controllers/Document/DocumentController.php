@@ -73,6 +73,8 @@ class DocumentController extends Controller
             ],
             'statusCounts' => $statusCounts,
             'inboxCount' => $this->pendingInboxCount($user),
+            'departments' => Department::orderBy('name')->get(['id', 'name']),
+            'users' => User::orderBy('name')->get(['id', 'name', 'department_id']),
         ]);
     }
 
@@ -262,10 +264,19 @@ class DocumentController extends Controller
     {
         $user = Auth::user();
 
-        $pendingActionIds = DocumentAction::where('action_type', 'submit_boss')
-            ->where('receiver_user_id', $user->id)
-            ->where('status', 'pending')
-            ->pluck('document_id');
+        if (!$user->hasAnyRole(['boss', 'Boss', 'admin', 'Admin', 'superUser'])) {
+            abort(403, 'เฉพาะผู้อำนวยการ (บทบาท boss) และผู้ดูแลระบบเท่านั้นที่สามารถเข้าถึงกล่องงาน ผอ. ได้');
+        }
+
+        $isAdmin = $user->hasAnyRole(['admin', 'Admin', 'superUser']);
+        $pendingQuery = DocumentAction::where('action_type', 'submit_boss')
+            ->where('status', 'pending');
+
+        if (!$isAdmin) {
+            $pendingQuery->where('receiver_user_id', $user->id);
+        }
+
+        $pendingActionIds = $pendingQuery->pluck('document_id');
 
         $documents = Document::with(['creator', 'department', 'actions' => function ($q) use ($user) {
             $q->where('action_type', 'submit_boss')
@@ -299,11 +310,20 @@ class DocumentController extends Controller
     {
         $user = Auth::user();
 
-        $pendingAction = DocumentAction::where('document_id', $document->id)
+        if (!$user->hasAnyRole(['boss', 'Boss', 'admin', 'Admin', 'superUser'])) {
+            abort(403, 'เฉพาะผู้อำนวยการ (บทบาท boss) และผู้ดูแลระบบเท่านั้นที่สามารถเข้าถึงกล่องงาน ผอ. ได้');
+        }
+
+        $isAdmin = $user->hasAnyRole(['admin', 'Admin', 'superUser']);
+        $pendingQuery = DocumentAction::where('document_id', $document->id)
             ->where('action_type', 'submit_boss')
-            ->where('receiver_user_id', $user->id)
-            ->where('status', 'pending')
-            ->first();
+            ->where('status', 'pending');
+
+        if (!$isAdmin) {
+            $pendingQuery->where('receiver_user_id', $user->id);
+        }
+
+        $pendingAction = $pendingQuery->first();
 
         if (! $pendingAction) {
             return redirect()->route('documents.director.index')
@@ -336,6 +356,91 @@ class DocumentController extends Controller
         ]);
     }
 
+    public function aiSummarizer()
+    {
+        return Inertia::render('documents/AiSummarizer');
+    }
+
+    public function exportDocx(Request $request)
+    {
+        $request->validate([
+            'summary' => 'required|string',
+        ]);
+
+        $summary = $request->input('summary');
+        
+        $phpWord = new \PhpOffice\PhpWord\PhpWord();
+        $phpWord->setDefaultFontName('TH SarabunPSK');
+        $phpWord->setDefaultFontSize(16);
+        
+        $section = $phpWord->addSection();
+        
+        $section->addText('สรุปสาระสำคัญหนังสือ', ['bold' => true, 'size' => 20], ['alignment' => \PhpOffice\PhpWord\SimpleType\Jc::CENTER]);
+        $section->addTextBreak(1);
+        
+        $lines = explode("\n", $summary);
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if (!empty($line)) {
+                $section->addText($line);
+            } else {
+                $section->addTextBreak(1);
+            }
+        }
+        
+        $fileName = 'Document_Summary_' . date('Ymd_His') . '.docx';
+        $tempFile = storage_path('app/temp/' . $fileName);
+        
+        if (!file_exists(storage_path('app/temp'))) {
+            mkdir(storage_path('app/temp'), 0755, true);
+        }
+        
+        $objWriter = \PhpOffice\PhpWord\IOFactory::createWriter($phpWord, 'Word2007');
+        $objWriter->save($tempFile);
+        
+        return response()->download($tempFile)->deleteFileAfterSend(true);
+    }
+
+    public function summarizeAi(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|file|mimes:pdf,jpeg,png,jpg|max:10240',
+        ]);
+
+        $apiKey = config('services.gemini.api_key');
+        if (empty($apiKey)) {
+            return response()->json(['error' => 'ยังไม่ได้ตั้งค่า GEMINI_API_KEY ในระบบ (.env)'], 400);
+        }
+
+        $file = $request->file('file');
+        $mimeType = $file->getMimeType();
+        $base64Data = base64_encode(file_get_contents($file->path()));
+
+        $response = \Illuminate\Support\Facades\Http::post("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={$apiKey}", [
+            'contents' => [
+                [
+                    'parts' => [
+                        ['text' => 'คุณเป็นผู้ช่วยงานธุรการของโรงพยาบาล หน้าที่ของคุณคือการสรุปเอกสารฉบับนี้ เพื่อนำไปกรอกในช่อง "สรุปเนื้อหาสำหรับผู้อำนวยการ" กรุณาสรุปให้กระชับ ได้ใจความ ครอบคลุม: เรื่องอะไร, ใครส่งถึงใคร, และต้องการให้ทำอะไร (Action Required) โดยสรุปไม่เกิน 3-5 บรรทัด'],
+                        [
+                            'inline_data' => [
+                                'mime_type' => $mimeType,
+                                'data' => $base64Data
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]);
+
+        if ($response->successful()) {
+            $summary = $response->json('candidates.0.content.parts.0.text');
+            return response()->json(['summary' => trim($summary ?? '')]);
+        }
+
+        file_put_contents(storage_path('logs/gemini_error.txt'), $response->body());
+        return response()->json(['error' => 'ไม่สามารถสรุปเนื้อหาได้จาก AI: ' . $response->body()], 500);
+    }
+
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -345,6 +450,7 @@ class DocumentController extends Controller
             'origin_type' => 'required|in:internal,external',
             'sender_name' => 'nullable|required_if:origin_type,external|string',
             'department_id' => 'nullable|required_if:origin_type,internal|exists:departments,id',
+            'due_date' => 'nullable|date',
             'description' => 'nullable|string',
             'summary_for_director' => 'nullable|string',
             'file' => 'required|file|mimes:pdf,doc,docx,jpg,jpeg,png|max:10240',
@@ -357,6 +463,7 @@ class DocumentController extends Controller
             'title' => $validated['title'],
             'document_number' => $validated['document_number'],
             'document_date' => $validated['document_date'],
+            'due_date' => $validated['due_date'] ?? null,
             'origin_type' => $validated['origin_type'],
             'sender_name' => $validated['sender_name'] ?? null,
             'department_id' => $validated['department_id'] ?? null,
@@ -394,7 +501,29 @@ class DocumentController extends Controller
             'circularRecipients.user',
         ]);
 
-        $directors = User::role(['admin', 'header', 'Admin', 'Header'])->get();
+        $canViewAll = false;
+        try {
+            $canViewAll = (method_exists($user, 'hasAnyRole') && $user->hasAnyRole(['admin', 'Admin', 'superUser', 'boss', 'Boss']))
+                || (method_exists($user, 'hasRole') && ($user->hasRole('admin') || $user->hasRole('Admin') || $user->hasRole('superUser') || $user->hasRole('boss') || $user->hasRole('Boss')));
+        } catch (\Throwable $e) {
+            $canViewAll = false;
+        }
+
+        if (!$canViewAll) {
+            $hasAccess = $document->department_id === $user->department_id
+                || $document->user_id === $user->id
+                || $document->actions()->where(function ($q) use ($user) {
+                    $q->where('receiver_user_id', $user->id)
+                        ->orWhere('receiver_department_id', $user->department_id)
+                        ->orWhere('sender_id', $user->id);
+                })->exists();
+
+            if (!$hasAccess) {
+                abort(403, 'คุณไม่มีสิทธิ์เข้าถึงหนังสือของแผนกอื่น');
+            }
+        }
+
+        $directors = User::role(['boss', 'Boss', 'admin', 'Admin'])->get();
         if ($directors->isEmpty()) {
             $directors = User::orderBy('name')->limit(20)->get();
         }
@@ -402,6 +531,7 @@ class DocumentController extends Controller
         return Inertia::render('documents/Show', [
             'document' => $document,
             'departments' => Department::orderBy('name')->get(),
+            'users' => User::orderBy('name')->get(['id', 'name', 'department_id']),
             'directors' => $directors,
             'currentUser' => $user->load('department'),
             'userSignatures' => [
@@ -413,6 +543,11 @@ class DocumentController extends Controller
 
     public function submitBoss(Request $request, Document $document)
     {
+        $user = Auth::user();
+        if (!$user->hasAnyRole(['header', 'Header', 'admin', 'Admin', 'superUser'])) {
+            return back()->with('error', 'เฉพาะหัวหน้าแผนก (บทบาท header) เท่านั้นที่สามารถนำเรียนผู้อำนวยการได้');
+        }
+
         if (! in_array($document->status, ['registered', 'pending', 'rejected'])) {
             return back()->with('error', 'ไม่สามารถนำเรียนผู้อำนวยการในสถานะปัจจุบันได้');
         }
@@ -519,34 +654,68 @@ class DocumentController extends Controller
 
     public function forward(Request $request, Document $document)
     {
-        if ($document->status !== 'approved') {
-            return back()->with('error', 'ต้องได้รับการอนุมัติจากผู้อำนวยการก่อนจึงจะส่งต่อแผนกได้');
+        $user = Auth::user();
+        if (!$user->hasAnyRole(['header', 'Header', 'admin', 'Admin', 'superUser'])) {
+            return back()->with('error', 'เฉพาะหัวหน้าแผนก (บทบาท header) เท่านั้นที่สามารถอนุมัติส่งหนังสือได้');
+        }
+
+        if ($document->status === 'cancelled') {
+            return back()->with('error', 'ไม่สามารถส่งต่อหนังสือที่ถูกยกเลิกแล้วได้');
         }
 
         $validated = $request->validate([
-            'department_ids' => 'required|array|min:1',
+            'department_ids' => 'nullable|array',
             'department_ids.*' => 'exists:departments,id',
+            'user_ids' => 'nullable|array',
+            'user_ids.*' => 'exists:users,id',
             'comment' => 'nullable|string',
             'forward_all' => 'nullable|boolean',
+            'due_date' => 'nullable|date',
         ]);
 
-        $departmentIds = $validated['department_ids'];
+        $departmentIds = $validated['department_ids'] ?? [];
+        $userIds = $validated['user_ids'] ?? [];
+
         if ($request->boolean('forward_all')) {
             $departmentIds = Department::pluck('id')->all();
         }
 
+        if (empty($departmentIds) && empty($userIds)) {
+            return back()->with('error', 'กรุณาระบุแผนกหรือบุคคลที่ต้องการส่งต่ออย่างน้อย 1 รายการ');
+        }
+
+        // อัปเดตกำหนดส่งหากมีการระบุใหม่
+        if (!empty($validated['due_date'])) {
+            $document->due_date = $validated['due_date'];
+        }
+
+        // อัปเดตสถานะเอกสารเป็น in_progress
+        $document->status = 'in_progress';
+        if ($document->archived_at) {
+            $document->archived_at = null;
+        }
+        $document->save();
+
+        $senderName = Auth::user()?->name ?? 'ระบบ';
+
+        \Log::info("Document forwarded: {$document->id} to departments: " . json_encode($departmentIds) . ", users: " . json_encode($userIds));
+
+        // 1. ส่งต่อให้แผนก (Departments)
         foreach ($departmentIds as $deptId) {
             DocumentAction::create([
                 'document_id' => $document->id,
                 'sender_id' => Auth::id(),
                 'receiver_department_id' => $deptId,
                 'action_type' => 'forward',
-                'comment' => $validated['comment'],
+                'comment' => $validated['comment'] ?? null,
                 'status' => 'pending',
+                'is_current' => true,
             ]);
 
             $users = User::where('department_id', $deptId)->get();
-            Notification::send($users, new DocumentNotification($document, 'forward', Auth::user()->name, false));
+            if ($users->isNotEmpty()) {
+                Notification::send($users, new DocumentNotification($document, 'forward', $senderName, false));
+            }
 
             $department = Department::find($deptId);
             if ($department) {
@@ -554,14 +723,31 @@ class DocumentController extends Controller
                     $document,
                     $department,
                     'forward',
-                    Auth::user()->name
+                    $senderName
                 );
             }
         }
 
-        $document->update(['status' => 'in_progress']);
+        // 2. ส่งต่อให้รายบุคคล (Individuals / Users)
+        foreach ($userIds as $userId) {
+            DocumentAction::create([
+                'document_id' => $document->id,
+                'sender_id' => Auth::id(),
+                'receiver_user_id' => $userId,
+                'action_type' => 'forward',
+                'comment' => $validated['comment'] ?? null,
+                'status' => 'pending',
+                'is_current' => true,
+            ]);
 
-        return back()->with('success', 'ส่งหนังสือไปยังแผนกที่เกี่ยวข้องเรียบร้อยแล้ว');
+            $targetUser = User::find($userId);
+            if ($targetUser) {
+                $targetUser->notify(new DocumentNotification($document, 'forward', $senderName, false));
+            }
+        }
+
+        $recipientCount = count($departmentIds) + count($userIds);
+        return back()->with('success', "ส่งหนังสือเรียบร้อยแล้ว (ส่งต่อ {$recipientCount} รายการ)");
     }
 
     public function acknowledgeDocument(Request $request, DocumentAction $action)
@@ -835,9 +1021,8 @@ class DocumentController extends Controller
     {
         $canViewAll = false;
         try {
-            $canViewAll = $user->can('document.view-all-departments')
-                || (method_exists($user, 'hasAnyRole') && $user->hasAnyRole(['admin', 'Admin', 'header', 'Header']))
-                || (method_exists($user, 'hasRole') && ($user->hasRole('admin') || $user->hasRole('Admin') || $user->hasRole('header') || $user->hasRole('Header')));
+            $canViewAll = (method_exists($user, 'hasAnyRole') && $user->hasAnyRole(['admin', 'Admin', 'superUser', 'boss', 'Boss']))
+                || (method_exists($user, 'hasRole') && ($user->hasRole('admin') || $user->hasRole('Admin') || $user->hasRole('superUser') || $user->hasRole('boss') || $user->hasRole('Boss')));
         } catch (\Throwable $e) {
             $canViewAll = false;
         }

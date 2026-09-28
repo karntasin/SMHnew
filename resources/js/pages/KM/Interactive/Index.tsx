@@ -273,6 +273,75 @@ export default function InteractiveIndex({ sqlStats, excelStats, mmertStats }: P
                             </Link>
                         </Button>
                     </div>
+
+                    {/* Track 3: M-MERT */}
+                    <div className="rounded-3xl border border-border bg-card p-7 shadow-xs hover:border-rose-500/40 transition flex flex-col justify-between space-y-6">
+                        <div className="space-y-4">
+                            <div className="flex items-start justify-between">
+                                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-600 dark:text-rose-400">
+                                    <ShieldAlert className="h-7 w-7" />
+                                </div>
+                                <span className="inline-flex items-center rounded-full bg-rose-100 px-3 py-1 text-xs font-bold text-rose-800 dark:bg-rose-950/60 dark:text-rose-300">
+                                    {mmertTotal} บทเรียน
+                                </span>
+                            </div>
+
+                            <div>
+                                <h3 className="text-xl font-bold text-foreground flex items-center gap-2">
+                                    M-MERT: หลักสูตรเตรียมพร้อมทีมแพทย์เคลื่อนที่
+                               </h3>
+                                <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                                    เรียนรู้บทบาท หน้าที่ และขั้นตอนการปฏิบัติงานของทีมแพทย์ตอบโต้ภาวะฉุกเฉินและภัยพิบัติ (M-MERT) ครอบคลุมตั้งแต่การเตรียมความพร้อมก่อนออกปฏิบัติงาน ไปจนถึงแนวทางการถอนกำลัง
+                                </p>
+                            </div>
+
+                            {/* Features list */}
+                            <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground pt-2">
+                                <div className="flex items-center gap-1.5">
+                                    <CheckCircle2 className="h-3.5 w-3.5 text-rose-600 shrink-0" />
+                                    <span>Interactive Quiz</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                    <CheckCircle2 className="h-3.5 w-3.5 text-rose-600 shrink-0" />
+                                    <span>Role-based Scenarios</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                    <CheckCircle2 className="h-3.5 w-3.5 text-rose-600 shrink-0" />
+                                    <span>Incident Command</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                    <CheckCircle2 className="h-3.5 w-3.5 text-rose-600 shrink-0" />
+                                    <span>Mass Casualty</span>
+                                </div>
+                            </div>
+
+                            {/* Progress bar */}
+                            <div className="space-y-1.5 pt-2">
+                                <div className="flex items-center justify-between text-xs">
+                                    <span className="text-muted-foreground">ความคืบหน้า</span>
+                                    <span className="font-bold text-foreground">
+                                        {mmertCount} / {mmertTotal} บท ({mmertPct}%)
+                                    </span>
+                                </div>
+                                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                                    <div
+                                        className="h-full bg-rose-600 transition-all duration-500"
+                                        style={{ width: `${mmertPct}%` }}
+                                    ></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <Button
+                            asChild
+                            className="w-full bg-rose-600 hover:bg-rose-700 text-white rounded-2xl py-6 font-bold text-sm gap-2 shadow-xs"
+                        >
+                            <Link href={route('km.interactive.mmert')}>
+                                {mmertCount > 0 ? 'เรียนต่อจากที่ค้างไว้' : 'เริ่มเรียนรู้ M-MERT'}
+                                <ArrowRight className="h-4 w-4" />
+                            </Link>
+                        </Button>
+                    </div>
                 </div>
 
                 {/* Why Interactive Learning section */}

@@ -17,9 +17,20 @@ class TvClinicRoom extends Model
         'is_active' => 'boolean',
     ];
 
+    public static function normalizeBoardKeys(string $boardKey): array
+    {
+        return match (strtolower(trim($boardKey))) {
+            '002', 'tv', 'opd', 'default' => ['default', '002', 'tv', 'opd'],
+            '003', 'er', 'tv-er' => ['003', 'er', 'tv-er'],
+            '013', 'drug', 'tv-drug', 'pharmacy' => ['013', 'drug', 'tv-drug', 'pharmacy'],
+            default => [$boardKey],
+        };
+    }
+
     public function scopeActiveForBoard($query, string $boardKey = 'default')
     {
-        return $query->where('board_key', $boardKey)
+        $keys = self::normalizeBoardKeys($boardKey);
+        return $query->whereIn('board_key', $keys)
             ->where('is_active', true)
             ->orderBy('sort_order');
     }

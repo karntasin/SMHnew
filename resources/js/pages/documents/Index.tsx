@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, router } from '@inertiajs/react';
+import { Link, router, usePage } from '@inertiajs/react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,10 +11,11 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { Plus, Search, Eye } from 'lucide-react';
+import { Plus, Search, Eye, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import DocumentShell from './DocumentShell';
 import { DOCUMENT_STATUS_BADGE, DOCUMENT_STATUS_LABELS, documentBreadcrumbs } from './DocumentSubNav';
+import ForwardDocumentDialog from './ForwardDocumentDialog';
 
 interface Document {
     id: number;
@@ -23,6 +24,7 @@ interface Document {
     status: string;
     created_at: string;
     document_date: string;
+    due_date?: string | null;
     origin_type: string;
     type: string;
     creator?: { name: string };
@@ -41,6 +43,8 @@ interface Props {
     };
     statusCounts: Record<string, number>;
     inboxCount?: number;
+    departments?: { id: number; name: string }[];
+    users?: { id: number; name: string; department_id?: number | null }[];
 }
 
 const FILTERS = [
@@ -53,8 +57,17 @@ const FILTERS = [
     { key: 'archived', label: 'เข้าคลัง' },
 ];
 
-export default function Index({ documents, filters, statusCounts = {} }: Props) {
+export default function Index({ documents, filters, statusCounts = {}, departments = [], users = [] }: Props) {
+    const { auth } = usePage<any>().props;
+    const userRoles: string[] = (auth?.user?.roles || []).map((r: any) =>
+        (typeof r === 'string' ? r : r.name || '').toLowerCase()
+    );
+    const canForward = userRoles.includes('header') || userRoles.includes('admin') || userRoles.includes('superuser');
+    const isBoss = userRoles.includes('boss');
+
     const [search, setSearch] = useState(filters?.search || '');
+    const [forwardDoc, setForwardDoc] = useState<Document | null>(null);
+    const [isForwardOpen, setIsForwardOpen] = useState(false);
     const currentStatus = filters?.status || 'all';
 
     const apply = (status = currentStatus, page?: number) => {
@@ -80,12 +93,14 @@ export default function Index({ documents, filters, statusCounts = {} }: Props) 
                     <h1 className="text-2xl font-bold text-slate-900">รายการหนังสือ</h1>
                     <p className="mt-1 text-sm text-slate-500">ค้นหา กรองสถานะ และเปิดดูรายละเอียดการดำเนินงาน</p>
                 </div>
-                <Button asChild className="rounded-xl bg-indigo-600 hover:bg-indigo-700">
-                    <Link href={route('documents.create')}>
-                        <Plus className="mr-2 h-4 w-4" />
-                        รับหนังสือเข้า
-                    </Link>
-                </Button>
+                {!isBoss && (
+                    <Button asChild className="rounded-xl bg-indigo-600 hover:bg-indigo-700">
+                        <Link href={route('documents.create')}>
+                            <Plus className="mr-2 h-4 w-4" />
+                            รับหนังสือเข้า
+                        </Link>
+                    </Button>
+                )}
             </div>
 
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
@@ -137,13 +152,14 @@ export default function Index({ documents, filters, statusCounts = {} }: Props) 
                             <TableHead>สถานะ</TableHead>
                             <TableHead>ผู้สร้าง</TableHead>
                             <TableHead>ลงวันที่</TableHead>
+                            <TableHead>กำหนดส่ง</TableHead>
                             <TableHead className="text-right">จัดการ</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {documents.data.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={7} className="py-10 text-center text-slate-400">
+                                <TableCell colSpan={8} className="py-10 text-center text-slate-400">
                                     ไม่พบหนังสือตามเงื่อนไข
                                 </TableCell>
                             </TableRow>
@@ -168,12 +184,34 @@ export default function Index({ documents, filters, statusCounts = {} }: Props) 
                                     <TableCell className="text-slate-500">
                                         {doc.document_date ? new Date(doc.document_date).toLocaleDateString('th-TH') : '-'}
                                     </TableCell>
+                                    <TableCell>
+                                        {doc.due_date ? (
+                                            <span className={new Date(doc.due_date) < new Date() ? 'text-red-500 font-semibold' : 'text-slate-500'}>
+                                                {new Date(doc.due_date).toLocaleDateString('th-TH')}
+                                            </span>
+                                        ) : '-'}
+                                    </TableCell>
                                     <TableCell className="text-right">
-                                        <Button asChild size="sm" variant="outline" className="rounded-xl">
-                                            <Link href={route('documents.show', doc.id)}>
-                                                <Eye className="mr-1 h-3.5 w-3.5" /> เปิด
-                                            </Link>
-                                        </Button>
+                                        <div className="flex items-center justify-end gap-1.5">
+                                            {canForward && (
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="rounded-xl border-indigo-200 text-indigo-700 hover:bg-indigo-50 hover:text-indigo-800"
+                                                    onClick={() => {
+                                                        setForwardDoc(doc);
+                                                        setIsForwardOpen(true);
+                                                    }}
+                                                >
+                                                    <Send className="mr-1 h-3.5 w-3.5" /> ส่งต่อ
+                                                </Button>
+                                            )}
+                                            <Button asChild size="sm" variant="outline" className="rounded-xl">
+                                                <Link href={route('documents.show', doc.id)}>
+                                                    <Eye className="mr-1 h-3.5 w-3.5" /> เปิด
+                                                </Link>
+                                            </Button>
+                                        </div>
                                     </TableCell>
                                 </TableRow>
                             ))
@@ -197,6 +235,18 @@ export default function Index({ documents, filters, statusCounts = {} }: Props) 
                     </div>
                 )}
             </div>
+
+            <ForwardDocumentDialog
+                open={isForwardOpen}
+                onOpenChange={setIsForwardOpen}
+                document={forwardDoc}
+                departments={departments}
+                users={users}
+                onSuccess={() => {
+                    // refresh current list
+                    apply();
+                }}
+            />
         </DocumentShell>
     );
 }

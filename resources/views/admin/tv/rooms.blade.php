@@ -1,6 +1,7 @@
 @extends('layouts.admin')
 @section('content')
 <div class="max-w-4xl mx-auto p-6">
+    @include('admin.tv.header')
     <h1 class="text-2xl font-bold mb-4">จับคู่ห้องตรวจ HOSxP ↔ ชื่อที่แสดงบนทีวี</h1>
 
     <form method="POST" action="{{ route('admin.tv.rooms.store', $boardKey) }}" class="flex gap-2 mb-6">

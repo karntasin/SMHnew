@@ -8,255 +8,123 @@
 <body>
     <div class="page-header">
         <div class="hospital-name">{{ $hospitalName }}</div>
-        <div class="hospital-sub">ศูนย์พัฒนาคุณภาพ · รายงานสรุปตัวชี้วัดคุณภาพ</div>
+        <div class="hospital-sub">ศูนย์พัฒนาคุณภาพ · รายงานตัวชี้วัดคุณภาพ</div>
     </div>
     <div class="page-footer">
         {{ $hospitalName }} · {{ $reportTitle }} · พิมพ์เมื่อ {{ $generatedAt }}
     </div>
 
-    @php
-        $tocItems = [];
-        $chapter = 0;
-        foreach ($groups as $group) {
-            $chapter++;
-            $tocItems[] = [
-                'level' => 1,
-                'num' => (string) $chapter,
-                'code' => '',
-                'title' => $group['title'],
-                'owner' => $group['subtitle'],
-                'count' => $group['indicators']->count(),
-            ];
-            foreach ($group['indicators'] as $i => $row) {
-                $tocItems[] = [
-                    'level' => 2,
-                    'num' => $chapter.'.'.($i + 1),
-                    'code' => $row['indicator']->code ?: '—',
-                    'title' => $row['indicator']->name,
-                    'owner' => $group['title'],
-                    'count' => null,
-                ];
-            }
-        }
-    @endphp
-
-    <table class="hero">
-        <tr>
-            <td class="hero-left">
-                <div class="eyebrow">รายงานสรุปตัวชี้วัดคุณภาพ</div>
-                <h1>{{ $reportTitle }}</h1>
-                <div class="hero-sub">{{ $hospitalName }} · {{ $groups->count() }} กลุ่ม · รวม {{ $groups->sum(fn ($g) => $g['indicators']->count()) }} ตัวชี้วัด</div>
-            </td>
-            <td class="hero-right">
-                <div class="report-date">{{ $generatedAtDate }}</div>
-                <div class="report-meta">สร้างเมื่อ {{ $generatedAt }}</div>
-            </td>
-        </tr>
-    </table>
-
-    <div class="section toc-wrap">
-        <h2>สารบัญ</h2>
-        <table class="toc">
-            <thead>
-                <tr>
-                    <th class="num">ลำดับ</th>
-                    <th class="code">รหัส</th>
-                    <th>รายการ</th>
-                    <th class="owner">กลุ่ม / หน่วยงาน</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach ($tocItems as $item)
-                    <tr class="{{ $item['level'] === 1 ? 'toc-group' : '' }}">
-                        <td class="num">{{ $item['num'] }}</td>
-                        <td class="code wrap">{{ $item['level'] === 1 ? '—' : $item['code'] }}</td>
-                        <td class="wrap">
-                            {{ $item['title'] }}
-                            @if ($item['level'] === 1)
-                                <span style="font-weight:normal;color:#64748b"> · {{ $item['count'] }} ตัวชี้วัด</span>
-                            @endif
-                        </td>
-                        <td class="owner wrap">{{ $item['owner'] }}</td>
-                    </tr>
-                @endforeach
-            </tbody>
+    @if ($groups->count() > 1)
+        {{-- Cover / Multi-Group TOC --}}
+        <table class="hero">
+            <tr>
+                <td class="hero-left">
+                    <div class="eyebrow">รายงานสรุปตัวชี้วัดคุณภาพ</div>
+                    <h1>{{ $reportTitle }}</h1>
+                    <div class="hero-sub">{{ $hospitalName }} · รวม {{ $groups->count() }} กลุ่ม · {{ $groups->sum(fn ($g) => $g['indicators']->count()) }} ตัวชี้วัด</div>
+                </td>
+                <td class="hero-right">
+                    <div class="report-date">{{ $generatedAtDate }}</div>
+                    <div class="report-meta">สร้างเมื่อ {{ $generatedAt }}</div>
+                </td>
+            </tr>
         </table>
-        <div class="toc-note">หมายเหตุ: รายละเอียดและประวัติการวัดผลของแต่ละตัวชี้วัดอยู่ในบทถัดไปตามลำดับสารบัญ</div>
-    </div>
+
+        <div class="section toc-wrap">
+            <h2>สารบัญกลุ่มตัวชี้วัด</h2>
+            <table class="toc">
+                <thead>
+                    <tr>
+                        <th class="num">ลำดับ</th>
+                        <th>กลุ่ม / หน่วยงาน</th>
+                        <th class="owner">ประเภท</th>
+                        <th class="num">จำนวน</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach ($groups as $gIndex => $grp)
+                        <tr class="toc-group">
+                            <td class="num">{{ $gIndex + 1 }}</td>
+                            <td class="wrap"><strong>{{ $grp['title'] }}</strong></td>
+                            <td class="owner wrap">{{ $grp['subtitle'] }}</td>
+                            <td class="num">{{ $grp['indicators']->count() }} ตัวชี้วัด</td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+    @endif
 
     @foreach ($groups as $gIndex => $group)
-        <div class="section-break">
+        <div class="{{ $groups->count() > 1 ? 'section-break' : '' }}">
             <table class="hero">
                 <tr>
                     <td class="hero-left">
-                        <div class="eyebrow">บทที่ {{ $gIndex + 1 }} · รายงานสรุปตัวชี้วัดคุณภาพ</div>
+                        <div class="eyebrow">
+                            @if ($groups->count() > 1)
+                                กลุ่มที่ {{ $gIndex + 1 }} ·
+                            @endif
+                            รายงานตัวชี้วัดคุณภาพ
+                        </div>
                         <h1>{{ $group['title'] }}</h1>
-                        <div class="hero-sub">{{ $group['subtitle'] }} · รวม {{ $group['indicators']->count() }} ตัวชี้วัด</div>
+                        <div class="hero-sub">{{ $group['subtitle'] }} · รวม {{ $group['indicators']->count() }} ตัวชี้วัด (ข้อมูลย้อนหลัง 5 ปี{{ ($type ?? '') === 'organization' ? '' : 'งบประมาณ' }})</div>
                     </td>
                     <td class="hero-right">
                         <div class="report-date">{{ $generatedAtDate }}</div>
-                        <div class="report-meta">สร้างเมื่อ {{ $generatedAt }}</div>
+                        <div class="report-meta">
+                            มีข้อมูล {{ $group['with_data'] }} · ผ่าน {{ $group['pass_count'] }} · ไม่ผ่าน {{ $group['fail_count'] }} · ไม่มีข้อมูล {{ $group['no_data'] }}
+                        </div>
                     </td>
                 </tr>
             </table>
 
-            <div class="group-banner">
-                <div class="name">{{ $group['title'] }}</div>
-                <div class="summary-line">
-                    มีข้อมูล {{ $group['with_data'] }} ·
-                    ผ่านเป้าหมาย {{ $group['pass_count'] }} ·
-                    ไม่ผ่าน {{ $group['fail_count'] }} ·
-                    ไม่มีข้อมูล {{ $group['no_data'] }}
-                </div>
-            </div>
-
-            <div class="section">
-                <h2>{{ $gIndex + 1 }}.1 ตารางสรุปตัวชี้วัด</h2>
-                @if ($group['indicators']->isEmpty())
-                    <div class="empty">ไม่พบตัวชี้วัดในกลุ่มนี้</div>
-                @else
-                    <table class="data">
-                        <colgroup>
-                            <col style="width:6%">
-                            <col style="width:12%">
-                            <col style="width:30%">
-                            <col style="width:16%">
-                            <col style="width:14%">
-                            <col style="width:12%">
-                            <col style="width:10%">
-                        </colgroup>
-                        <thead>
-                            <tr>
-                                <th class="center">#</th>
-                                <th>รหัส</th>
-                                <th>ชื่อตัวชี้วัด</th>
-                                <th>เป้าหมาย</th>
-                                <th class="num">ผลล่าสุด</th>
-                                <th>งวดล่าสุด</th>
-                                <th class="center">สถานะ</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach ($group['indicators'] as $i => $row)
-                                <tr>
-                                    <td class="center">{{ $i + 1 }}</td>
-                                    <td class="wrap"><strong>{{ $row['indicator']->code ?: '-' }}</strong></td>
-                                    <td class="wrap">
-                                        {{ $row['indicator']->name }}
-                                        @if ($row['indicator']->category)
-                                            <div style="font-size:7.5px;color:#64748b;margin-top:1px">{{ $row['indicator']->category }}</div>
-                                        @endif
-                                    </td>
-                                    <td class="wrap">
-                                        {{ $row['indicator']->target_operator }}
-                                        {{ $formatNum($row['indicator']->target_value) }}
-                                        {{ $row['indicator']->unit }}
-                                    </td>
-                                    <td class="num wrap">
-                                        @if ($row['latest'])
-                                            <strong>{{ $formatNum($row['latest']->result_value) }}</strong>
-                                            {{ $row['indicator']->unit }}
-                                        @else
-                                            -
-                                        @endif
-                                    </td>
-                                    <td class="wrap">
-                                        @if ($row['latest'])
-                                            {{ $formatPeriod($row['latest']->period_date) }}
-                                        @else
-                                            -
-                                        @endif
-                                    </td>
-                                    <td class="center">
-                                        @if ($row['pass'] === null)
-                                            <span class="badge badge-na">ไม่มีข้อมูล</span>
-                                        @elseif ($row['pass'])
-                                            <span class="badge badge-pass">ผ่าน</span>
-                                        @else
-                                            <span class="badge badge-fail">ไม่ผ่าน</span>
-                                        @endif
-                                    </td>
+            @if ($group['categories']->isEmpty())
+                <div class="empty">ไม่พบตัวชี้วัดในกลุ่มนี้</div>
+            @else
+                @foreach ($group['categories'] as $cat)
+                    <div class="ha-table-wrap {{ $cat['indicators']->count() <= 10 ? 'keep-together' : '' }}">
+                        <div class="ha-category-bar">
+                            {{ $cat['name'] !== 'ตัวชี้วัดทั่วไป' ? $cat['name'] : ($groups->count() > 1 ? $group['title'] : 'ตัวชี้วัดคุณภาพ') }}
+                        </div>
+                        <table class="ha-table">
+                            <thead>
+                                <tr class="ha-header-row">
+                                    <th class="col-code">รหัส</th>
+                                    <th class="col-indicator">ชื่อตัวชี้วัด</th>
+                                    <th class="col-target">เป้าหมาย</th>
+                                    @foreach ($years as $yr)
+                                        <th class="col-year">{!! $yearHeaders[$yr] !!}</th>
+                                    @endforeach
+                                    <th class="col-status">ประเมินผล</th>
                                 </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
-                @endif
-            </div>
-
-            <div class="section">
-                <h2>{{ $gIndex + 1 }}.2 รายละเอียดและประวัติการวัดผล</h2>
-                @forelse ($group['indicators'] as $i => $row)
-                    @php $ind = $row['indicator']; @endphp
-                    <div class="indicator-block">
-                        <div class="indicator-head">
-                            <span class="code">{{ $gIndex + 1 }}.{{ $i + 1 }} {{ $ind->code ?: '—' }}</span>
-                            <span class="iname wrap">{{ $ind->name }}</span>
-                            @if ($row['pass'] === null)
-                                <span class="badge badge-na" style="float:right">ไม่มีข้อมูล</span>
-                            @elseif ($row['pass'])
-                                <span class="badge badge-pass" style="float:right">ผ่าน</span>
-                            @else
-                                <span class="badge badge-fail" style="float:right">ไม่ผ่าน</span>
-                            @endif
-                        </div>
-                        <div class="indicator-body">
-                            <div class="mini-meta">
-                                เป้าหมาย: {{ $ind->target_operator }} {{ $formatNum($ind->target_value) }} {{ $ind->unit }}
-                                · ความถี่: {{ $ind->frequency }}
-                                @if ($ind->formula_description)
-                                    · สูตร: {{ $ind->formula_description }}
-                                @endif
-                            </div>
-
-                            @if ($row['entries']->isEmpty())
-                                <div class="empty">ยังไม่มีข้อมูลการวัดผล</div>
-                            @else
-                                <table class="data">
-                                    <colgroup>
-                                        <col style="width:16%">
-                                        <col style="width:14%">
-                                        <col style="width:14%">
-                                        <col style="width:18%">
-                                        <col style="width:12%">
-                                        <col style="width:26%">
-                                    </colgroup>
-                                    <thead>
-                                        <tr>
-                                            <th>งวด</th>
-                                            <th class="num">ตัวตั้ง</th>
-                                            <th class="num">ตัวหาร</th>
-                                            <th class="num">ผลลัพธ์</th>
-                                            <th class="center">สถานะ</th>
-                                            <th>หมายเหตุ</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        @foreach ($row['entries'] as $entry)
-                                            @php $p = $isPassFor($ind, $entry->result_value); @endphp
-                                            <tr>
-                                                <td class="wrap">{{ $formatPeriod($entry->period_date) }}</td>
-                                                <td class="num wrap">{{ $formatNum($entry->numerator) }}</td>
-                                                <td class="num wrap">{{ $formatNum($entry->denominator) }}</td>
-                                                <td class="num wrap"><strong>{{ $formatNum($entry->result_value) }}</strong> {{ $ind->unit }}</td>
-                                                <td class="center">
-                                                    @if ($p)
-                                                        <span class="badge badge-pass">ผ่าน</span>
-                                                    @else
-                                                        <span class="badge badge-fail">ไม่ผ่าน</span>
-                                                    @endif
-                                                </td>
-                                                <td class="wrap">{{ $entry->notes ?: '-' }}</td>
-                                            </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($cat['indicators'] as $row)
+                                    <tr>
+                                        <td class="cell-code">{{ $row['code'] ?: '-' }}</td>
+                                        <td class="cell-indicator">{{ $row['name'] }}</td>
+                                        <td class="cell-target">{{ $row['target_display'] }}</td>
+                                        @foreach ($years as $yr)
+                                            <td class="cell-year">
+                                                {{ $row['yearly_values'][$yr]['value'] }}
+                                            </td>
                                         @endforeach
-                                    </tbody>
-                                </table>
-                            @endif
-                        </div>
+                                        <td class="cell-status">
+                                            @if ($row['latest_status'] === true)
+                                                <span class="status-badge status-pass">ผ่าน</span>
+                                            @elseif ($row['latest_status'] === false)
+                                                <span class="status-badge status-fail">ไม่ผ่าน</span>
+                                            @else
+                                                <span class="status-none">-</span>
+                                            @endif
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
                     </div>
-                @empty
-                    <div class="empty">ไม่พบตัวชี้วัด</div>
-                @endforelse
-            </div>
+                @endforeach
+            @endif
 
             <table class="sign-row">
                 <tr>

@@ -6,18 +6,21 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Save, Upload } from 'lucide-react';
+import { Save, Upload, Sparkles, Loader2 } from 'lucide-react';
 import DocumentShell from './DocumentShell';
 import { documentBreadcrumbs } from './DocumentSubNav';
+import axios from 'axios';
 
 interface CreateProps {
     departments: { id: number; name: string }[];
 }
 
 export default function Create({ departments }: CreateProps) {
+    const [isSummarizing, setIsSummarizing] = React.useState(false);
     const { data, setData, post, processing, errors } = useForm({
         document_number: '',
         document_date: new Date().toISOString().split('T')[0],
+        due_date: '',
         title: '',
         description: '',
         summary_for_director: '',
@@ -27,6 +30,24 @@ export default function Create({ departments }: CreateProps) {
         type: 'normal',
         file: null as File | null,
     });
+
+    const handleAiSummarize = async () => {
+        if (!data.file) {
+            alert("กรุณาเลือกไฟล์เอกสาร และรอให้ไฟล์อัปโหลดเสร็จก่อนให้ AI สรุป");
+            return;
+        }
+        setIsSummarizing(true);
+        const formData = new FormData();
+        formData.append('file', data.file);
+        try {
+            const res = await axios.post(route('documents.summarizeAi'), formData);
+            setData('summary_for_director', res.data.summary);
+        } catch (error: any) {
+            alert(error.response?.data?.error || "เกิดข้อผิดพลาดในการสรุปเนื้อหา");
+        } finally {
+            setIsSummarizing(false);
+        }
+    };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -72,6 +93,11 @@ export default function Create({ departments }: CreateProps) {
                         <Input id="document_date" className="rounded-xl" type="date" value={data.document_date}
                             onChange={(e) => setData('document_date', e.target.value)} required />
                     </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="due_date">กำหนดส่ง (ถ้ามี)</Label>
+                        <Input id="due_date" className="rounded-xl" type="datetime-local" value={data.due_date}
+                            onChange={(e) => setData('due_date', e.target.value)} />
+                    </div>
                 </div>
 
                 {data.origin_type === 'internal' ? (
@@ -107,7 +133,23 @@ export default function Create({ departments }: CreateProps) {
                 </div>
 
                 <div className="space-y-2">
-                    <Label htmlFor="summary_for_director">ข้อความสรุปสำหรับนำเรียน ผอ. (กรอกตอนนี้หรือภายหลัง)</Label>
+                    <div className="flex items-center justify-between">
+                        <Label htmlFor="summary_for_director">ข้อความสรุปสำหรับนำเรียน ผอ. (กรอกตอนนี้หรือภายหลัง)</Label>
+                        <Button 
+                            type="button" 
+                            variant="outline" 
+                            size="sm"
+                            onClick={handleAiSummarize}
+                            disabled={isSummarizing}
+                            className="rounded-full bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border-indigo-200"
+                        >
+                            {isSummarizing ? (
+                                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> กำลังสรุป...</>
+                            ) : (
+                                <><Sparkles className="mr-2 h-4 w-4" /> ให้ AI ช่วยสรุปเนื้อหา</>
+                            )}
+                        </Button>
+                    </div>
                     <Textarea id="summary_for_director" className="rounded-xl" value={data.summary_for_director}
                         onChange={(e) => setData('summary_for_director', e.target.value)} rows={3}
                         placeholder="สรุปเนื้อหาและข้อเสนอเพื่อนำเรียนผู้อำนวยการ..." />

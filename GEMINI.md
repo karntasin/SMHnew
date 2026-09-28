@@ -112,7 +112,7 @@ resources/views/             # Blade views (non-Inertia)
 
 ---
 
-## 8. ข้อห้ามเด็ดขาด
+### 8. ข้อห้ามเด็ดขาด
 
 ```
 ❌ php artisan บน PowerShell (PHP 8.0 ไม่ตรง)
@@ -122,4 +122,6 @@ resources/views/             # Blade views (non-Inertia)
 ❌ ทิ้งไฟล์ debug/temp ไว้ใน public/ (ล้างออกหลังใช้)
 ❌ เพิ่ม <?php tag ซ้ำซ้อนในไฟล์ routes/web.php
 ❌ สร้าง Blade view สำหรับหน้า Inertia (ใช้ resources/js/pages แทน)
+❌ ใช้ PowerShell (Get-Content / Set-Content / Add-Content) อ่านหรือเขียนไฟล์ที่มีภาษาไทยโดยไม่ระบุ -Encoding UTF8 เด็ดขาด (จะทำให้ภาษาไทยเพี้ยนเป็น 'เธ...' หรือ '???') — ให้ใช้เครื่องมือ replace_file_content / write_to_file ของ IDE เสมอ
+❌ ลืมรัน npm run build หลังแก้ไฟล์ React/TSX ใน resources/js/ (ระบบอ่าน asset จาก public/build หากไม่ build การแก้ไขจะไม่แสดงผล)
 ```

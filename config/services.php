@@ -52,6 +52,11 @@ return [
         'verify_ssl' => filter_var(env('FSHH_CHAT_VERIFY_SSL', true), FILTER_VALIDATE_BOOLEAN),
     ],
 
+    'custom_llm' => [
+        'url' => env('CUSTOM_LLM_URL', 'http://192.168.0.175:8000/api/chat'),
+        'timeout' => (int) env('CUSTOM_LLM_TIMEOUT', 60),
+    ],
+
     'telegram' => [
         'bot_token' => env('TELEGRAM_BOT_TOKEN'),
         'chat_id' => env('TELEGRAM_CHAT_ID'),
@@ -80,5 +85,9 @@ return [
         'enabled' => filter_var(env('HOSXP_NOTIFY_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
         /** IP เครื่อง HOSxP ที่ login อยู่จริง ใช้เป็นตัวตนผู้ส่ง (ต้องมีใน onlineuser) */
         'sender_computer' => env('HOSXP_NOTIFY_SENDER_COMPUTER', ''),
+    ],
+
+    'gemini' => [
+        'api_key' => env('GEMINI_API_KEY'),
     ],
 ];

@@ -9,12 +9,14 @@ use App\Models\Mra\MraCategory;
 use App\Models\Mra\MraCriteria;
 use App\Models\Hosxp\Patient;
 use App\Services\HosxpService;
+use App\Services\Mra\MraExcelReportService;
 use App\Services\ThaiPdfService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Response;
 
 class MraController extends Controller
@@ -669,6 +671,27 @@ class MraController extends Controller
     }
 
     /**
+     * ส่งออกรายงาน MRA เป็นไฟล์ Excel (.xlsx) ที่มี 2 Sheet (IPD และ OPD-ER)
+     */
+    public function exportReportsExcel(Request $request, MraExcelReportService $excelService): BinaryFileResponse
+    {
+        $fromDate = $request->input('from_date', now()->startOfMonth()->format('Y-m-d'));
+        $toDate = $request->input('to_date', now()->format('Y-m-d'));
+
+        $spreadsheet = $excelService->generateReport($fromDate, $toDate);
+
+        $tempFile = tempnam(sys_get_temp_dir(), 'mra_excel_');
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        $writer->save($tempFile);
+
+        $filename = "รายงานสรุป-MRA_{$fromDate}_{$toDate}.xlsx";
+
+        return response()->download($tempFile, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ])->deleteFileAfterSend(true);
+    }
+
+    /**
      * ตั้งค่า MRA
      */
     public function settings()
@@ -855,18 +878,18 @@ class MraController extends Controller
         $channel = in_array($channel, ['all', 'opd', 'ipd'], true) ? $channel : 'all';
 
         $buildStats = function (?string $auditType) use ($fromDate, $toDate) {
-            $query = MraAudit::whereBetween('visit_date', [$fromDate, $toDate]);
+            $query = MraAudit::whereDate('audited_at', '>=', $fromDate)
+                ->whereDate('audited_at', '<=', $toDate)
+                ->whereIn('status', ['audited', 'corrected']);
             if ($auditType) {
                 $query->where('audit_type', $auditType);
             }
 
-            $completed = (clone $query)->whereIn('status', ['audited', 'corrected']);
-
             return [
                 'total_audits' => (clone $query)->count(),
-                'completed_audits' => (clone $completed)->count(),
-                'avg_accuracy' => round((clone $completed)->avg('accuracy_percentage') ?? 0, 2),
-                'passed_audits' => (clone $completed)->where('accuracy_percentage', '>=', 80)->count(),
+                'completed_audits' => (clone $query)->count(),
+                'avg_accuracy' => round((clone $query)->avg('accuracy_percentage') ?? 0, 2),
+                'passed_audits' => (clone $query)->where('accuracy_percentage', '>=', 80)->count(),
                 'target' => 80,
             ];
         };
@@ -878,7 +901,8 @@ class MraController extends Controller
                 ->get()
                 ->map(function ($category) use ($fromDate, $toDate, $auditType) {
                     $details = MraAuditDetail::whereHas('audit', function ($q) use ($fromDate, $toDate, $auditType) {
-                        $q->whereBetween('visit_date', [$fromDate, $toDate])
+                        $q->whereDate('audited_at', '>=', $fromDate)
+                            ->whereDate('audited_at', '<=', $toDate)
                             ->where('audit_type', $auditType)
                             ->whereIn('status', ['audited', 'corrected']);
                     })->whereHas('criteria', function ($q) use ($category) {
@@ -905,7 +929,8 @@ class MraController extends Controller
         $buildTopErrors = function (string $auditType) use ($fromDate, $toDate) {
             return MraAuditDetail::where('result', 'fail')
                 ->whereHas('audit', function ($q) use ($fromDate, $toDate, $auditType) {
-                    $q->whereBetween('visit_date', [$fromDate, $toDate])
+                    $q->whereDate('audited_at', '>=', $fromDate)
+                        ->whereDate('audited_at', '<=', $toDate)
                         ->where('audit_type', $auditType)
                         ->whereIn('status', ['audited', 'corrected']);
                 })

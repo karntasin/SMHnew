@@ -817,6 +817,11 @@ class PharmacyInventoryController extends Controller
             $priorMovements = $priorQuery->orderBy('created_at')->orderBy('id')->get();
             $startingBalance = 0.0;
             foreach ($priorMovements as $pm) {
+                if ($locationId) {
+                    if ($pm->type === 'transfer_in' && $pm->to_location_id != $locationId) continue;
+                    if ($pm->type === 'transfer_out' && $pm->from_location_id != $locationId) continue;
+                }
+
                 $isIn = false;
                 $isOut = false;
                 if ($locationId) {
@@ -856,6 +861,11 @@ class PharmacyInventoryController extends Controller
             $rows = [];
 
             foreach ($rangeMovements as $m) {
+                if ($locationId) {
+                    if ($m->type === 'transfer_in' && $m->to_location_id != $locationId) continue;
+                    if ($m->type === 'transfer_out' && $m->from_location_id != $locationId) continue;
+                }
+
                 $inQty = 0.0;
                 $outQty = 0.0;
 

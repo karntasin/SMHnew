@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useForm, router } from '@inertiajs/react';
+import { Link, useForm, router, usePage } from '@inertiajs/react';
 import DocumentShell from './DocumentShell';
 import { documentBreadcrumbs } from './DocumentSubNav';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { storageUrl } from '@/lib/asset';
+import ForwardDocumentDialog from './ForwardDocumentDialog';
 
 interface DocumentAction {
     id: number;
@@ -75,6 +76,7 @@ interface ShowProps {
     document: Document;
     directors: User[];
     departments: Department[];
+    users?: User[];
     currentUser: User;
     userSignatures: { signature_path: string | null; stamp_path: string | null };
 }
@@ -105,7 +107,7 @@ const IMPL_STATUS: Record<string, { label: string; color: string }> = {
     not_relevant: { label: 'ไม่เกี่ยวข้อง — ส่งกลับต้นทาง', color: 'bg-orange-100 text-orange-800' },
 };
 
-export default function Show({ document, directors, departments, currentUser, userSignatures }: ShowProps) {
+export default function Show({ document, directors, departments, users = [], currentUser, userSignatures }: ShowProps) {
     const [isForwardOpen, setIsForwardOpen] = useState(false);
     const [isSubmitBossOpen, setIsSubmitBossOpen] = useState(false);
     const [isApproveOpen, setIsApproveOpen] = useState(false);
@@ -162,9 +164,16 @@ export default function Show({ document, directors, departments, currentUser, us
         !['completed', 'not_relevant'].includes(a.implementation_status || '')
     );
 
-    const canForward = document.status === 'approved';
-    const canSubmitBoss = ['registered', 'pending', 'rejected'].includes(document.status);
-    const isOriginDept = document.department_id === currentUser.department_id
+    const { auth } = usePage<any>().props;
+    const userRoles: string[] = (auth?.user?.roles || []).map((r: any) =>
+        (typeof r === 'string' ? r : r.name || '').toLowerCase()
+    );
+    const isHeaderOrAdmin = userRoles.includes('header') || userRoles.includes('admin') || userRoles.includes('superuser');
+
+    const canForward = isHeaderOrAdmin && ['approved', 'in_progress', 'registered', 'distributed'].includes(document.status);
+    const canSubmitBoss = isHeaderOrAdmin && ['registered', 'pending', 'rejected'].includes(document.status);
+    const isOriginDept = userRoles.includes('admin') || userRoles.includes('superuser')
+        || document.department_id === currentUser.department_id
         || document.user_id === currentUser.id;
 
     const currentStepIndex = (() => {
@@ -446,41 +455,11 @@ export default function Show({ document, directors, departments, currentUser, us
                             </Dialog>
                         )}
 
-                        {/* ส่งต่อแผนก */}
+                        {/* ส่งต่อแผนก / บุคคล */}
                         {canForward && isOriginDept && (
-                            <Dialog open={isForwardOpen} onOpenChange={setIsForwardOpen}>
-                                <DialogTrigger asChild>
-                                    <Button variant="outline">
-                                        <Send className="mr-2 h-4 w-4" /> ส่งต่อแผนก
-                                    </Button>
-                                </DialogTrigger>
-                                <DialogContent>
-                                    <DialogHeader><DialogTitle>ส่งหนังสือไปยังแผนกที่เกี่ยวข้อง</DialogTitle></DialogHeader>
-                                    <div className="space-y-4 py-4">
-                                        <Button type="button" variant="secondary" size="sm" onClick={selectAllDepartments}>
-                                            <Building2 className="mr-1 h-4 w-4" /> เลือกทุกแผนก
-                                        </Button>
-                                        <div className="grid grid-cols-2 gap-2 border p-3 rounded-md max-h-60 overflow-y-auto">
-                                            {departments.map(dept => (
-                                                <div key={dept.id} className="flex items-center space-x-2">
-                                                    <Checkbox id={`dept-${dept.id}`}
-                                                        checked={forwardData.department_ids.includes(String(dept.id))}
-                                                        onCheckedChange={() => toggleDepartment(String(dept.id))} />
-                                                    <label htmlFor={`dept-${dept.id}`} className="text-sm">{dept.name}</label>
-                                                </div>
-                                            ))}
-                                        </div>
-                                        <Textarea value={forwardData.comment} onChange={e => setForwardData('comment', e.target.value)}
-                                            placeholder="บันทึกข้อความ/สั่งการ..." />
-                                    </div>
-                                    <DialogFooter>
-                                        <Button variant="outline" onClick={() => setIsForwardOpen(false)}>ยกเลิก</Button>
-                                        <Button onClick={handleForward} disabled={forwardProcessing || forwardData.department_ids.length === 0}>
-                                            ยืนยันส่ง ({forwardData.department_ids.length} แผนก)
-                                        </Button>
-                                    </DialogFooter>
-                                </DialogContent>
-                            </Dialog>
+                            <Button variant="outline" onClick={() => setIsForwardOpen(true)}>
+                                <Send className="mr-2 h-4 w-4" /> ส่งต่อหนังสือ
+                            </Button>
                         )}
 
                         {/* รับหนังสือ */}
@@ -662,6 +641,14 @@ export default function Show({ document, directors, departments, currentUser, us
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <ForwardDocumentDialog
+                open={isForwardOpen}
+                onOpenChange={setIsForwardOpen}
+                document={document}
+                departments={departments}
+                users={users}
+            />
         </DocumentShell>
     );
 }

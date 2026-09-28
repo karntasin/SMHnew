@@ -1,4 +1,4 @@
-import { Link } from '@inertiajs/react';
+import { Link, usePage } from '@inertiajs/react';
 import { cn } from '@/lib/utils';
 import {
     ClipboardList,
@@ -9,6 +9,7 @@ import {
     FileText,
     Inbox,
     LayoutDashboard,
+    Sparkles,
 } from 'lucide-react';
 
 export type DocumentTabKey =
@@ -18,7 +19,8 @@ export type DocumentTabKey =
     | 'documents.index'
     | 'documents.create'
     | 'documents.pendingReview'
-    | 'documents.director.index';
+    | 'documents.director.index'
+    | 'documents.ai_summarizer';
 
 const tabs: { key: DocumentTabKey; label: string; hint: string; icon: typeof LayoutDashboard }[] = [
     { key: 'documents.dashboard', label: 'ภาพรวม', hint: 'สถิติและติดตาม', icon: LayoutDashboard },
@@ -28,6 +30,7 @@ const tabs: { key: DocumentTabKey; label: string; hint: string; icon: typeof Lay
     { key: 'documents.create', label: 'รับหนังสือเข้า', hint: 'ลงทะเบียนรับเข้า', icon: FilePlus2 },
     { key: 'documents.pendingReview', label: 'ระหว่างนำเรียน', hint: 'รอ ผอ. พิจารณา', icon: FileText },
     { key: 'documents.director.index', label: 'กล่องงาน ผอ.', hint: 'ลงนาม/อนุมัติ', icon: FileSignature },
+    { key: 'documents.ai_summarizer', label: 'ผู้ช่วย AI', hint: 'AI สรุปเอกสาร', icon: Sparkles },
 ];
 
 export const DOCUMENT_STATUS_LABELS: Record<string, string> = {
@@ -63,6 +66,35 @@ export function documentBreadcrumbs(extra?: { title: string; href: string }[]) {
 }
 
 export default function DocumentSubNav({ active }: { active: DocumentTabKey }) {
+    const { auth } = usePage().props as any;
+    const userRoles: string[] = (auth?.user?.roles || []).map((r: any) =>
+        (typeof r === 'string' ? r : r.name || '').toLowerCase()
+    );
+
+    const isBoss = userRoles.includes('boss');
+    const isAdmin = userRoles.includes('admin') || userRoles.includes('superuser');
+
+    // กรองแท็บตามสิทธิ์ของแต่ละบทบาท:
+    // 1. บทบาท boss จะเห็นแค่ 4 แท็บ: ภาพรวม, รายการหนังสือ, กล่องงาน ผอ., ผู้ช่วย AI
+    // 2. บทบาท admin จะเห็นได้ทุกแท็บ (รวมถึง กล่องงาน ผอ.)
+    // 3. บทบาทอื่นๆ (header, user ฯลฯ) จะไม่เห็นเมนู "กล่องงาน ผอ."
+    const visibleTabs = tabs.filter((tab) => {
+        if (isBoss) {
+            return [
+                'documents.dashboard',
+                'documents.index',
+                'documents.director.index',
+                'documents.ai_summarizer',
+            ].includes(tab.key);
+        }
+
+        if (tab.key === 'documents.director.index') {
+            return isAdmin;
+        }
+
+        return true;
+    });
+
     return (
         <nav className="rounded-3xl border border-indigo-100/80 bg-white/90 p-2 shadow-xl shadow-indigo-900/5 backdrop-blur">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-2">
@@ -74,8 +106,8 @@ export default function DocumentSubNav({ active }: { active: DocumentTabKey }) {
                     งานธุรการ · รับส่งหนังสือ
                 </div>
             </div>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
-                {tabs.map((tab) => {
+            <div className={cn('grid gap-2 sm:grid-cols-2 lg:grid-cols-3', isBoss ? 'xl:grid-cols-4' : 'xl:grid-cols-7')}>
+                {visibleTabs.map((tab) => {
                     const Icon = tab.icon;
                     const isActive = active === tab.key;
 

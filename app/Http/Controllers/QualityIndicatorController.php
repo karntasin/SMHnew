@@ -8,6 +8,7 @@ use App\Models\Department;
 use App\Models\TeamHa;
 use App\Services\QualityIndicatorFamilyService;
 use App\Services\ThaiPdfService;
+use App\Support\ThaiFiscalPeriod;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -30,6 +31,7 @@ class QualityIndicatorController extends Controller
 
         $departmentId = $request->filled('department_id') ? (int) $request->query('department_id') : null;
         $teamId = $request->filled('team_id') ? (int) $request->query('team_id') : null;
+        $category = $request->filled('category') ? trim((string) $request->query('category')) : null;
 
         $query = QualityIndicator::where('type', $type)
             ->with(['department', 'team', 'family.master'])
@@ -45,6 +47,10 @@ class QualityIndicatorController extends Controller
             $query->where('team_id', $teamId);
         }
 
+        if ($type === 'organization' && $category && $category !== 'all') {
+            $query->where('category', $category);
+        }
+
         $indicators = $query->get()->map(function (QualityIndicator $indicator) {
             $this->families->overlaySharedFields($indicator);
             $master = $this->families->masterOf($indicator);
@@ -53,6 +59,12 @@ class QualityIndicatorController extends Controller
 
             return $indicator;
         });
+
+        $orgCategoryCounts = [
+            'all' => QualityIndicator::where('type', 'organization')->count(),
+            'sar' => QualityIndicator::where('type', 'organization')->where('category', 'แบบประเมินตนเอง SAR')->count(),
+            'strategy' => QualityIndicator::where('type', 'organization')->where('category', 'แผนยุทธศาสตร์ รพ.')->count(),
+        ];
 
         $departments = Department::query()->orderBy('name')->get(['id', 'name']);
         $teams = TeamHa::query()->orderBy('abbreviation')->get(['id', 'abbreviation', 'name_th']);
@@ -85,9 +97,11 @@ class QualityIndicatorController extends Controller
             'departments' => $departments,
             'teams' => $teams,
             'linkableIndicators' => $linkableIndicators,
+            'orgCategoryCounts' => $orgCategoryCounts,
             'filters' => [
                 'department_id' => $departmentId,
                 'team_id' => $teamId,
+                'category' => $category,
                 'search' => $request->query('search', ''),
             ],
         ]);
@@ -294,6 +308,7 @@ class QualityIndicatorController extends Controller
         $type = $request->query('type'); // optional: department|ha_team|organization|null=all
         $departmentId = $request->filled('department_id') ? (int) $request->query('department_id') : null;
         $teamId = $request->filled('team_id') ? (int) $request->query('team_id') : null;
+        $category = $request->filled('category') ? trim((string) $request->query('category')) : null;
 
         $query = QualityIndicator::with(['family.master.entries' => function ($q) {
             $q->orderBy('period_date', 'desc')->limit(1);
@@ -308,6 +323,9 @@ class QualityIndicatorController extends Controller
         }
         if ($teamId) {
             $query->where('team_id', $teamId);
+        }
+        if ($type === 'organization' && $category && $category !== 'all') {
+            $query->where('category', $category);
         }
 
         $indicators = $query->orderBy('code')->get()->map(function (QualityIndicator $indicator) {
@@ -326,6 +344,7 @@ class QualityIndicatorController extends Controller
                 'type' => $type,
                 'department_id' => $departmentId,
                 'team_id' => $teamId,
+                'category' => $category,
             ],
         ]);
     }
@@ -404,11 +423,21 @@ class QualityIndicatorController extends Controller
 
         $departmentId = $request->filled('department_id') ? (int) $request->query('department_id') : null;
         $teamId = $request->filled('team_id') ? (int) $request->query('team_id') : null;
+        $category = $request->filled('category') ? trim((string) $request->query('category')) : null;
 
-        $groups = $this->buildReportGroups($type, $departmentId, $teamId);
+        $currentFy = ThaiFiscalPeriod::currentFiscalYearBe();
+        $endYear = ($type === 'organization') ? ((int) now()->year + 543) : $currentFy;
+        $years = range($endYear - 4, $endYear);
+
+        $groups = $this->buildReportGroups($type, $departmentId, $teamId, $years, $category);
 
         if ($groups->isEmpty()) {
             abort(404, 'ไม่พบข้อมูลตัวชี้วัดสำหรับรายงานนี้');
+        }
+
+        $yearHeaders = [];
+        foreach ($years as $yr) {
+            $yearHeaders[$yr] = "ปี {$yr}";
         }
 
         [$fontRegularUri, $fontBoldUri] = $pdf->fontUris();
@@ -416,14 +445,20 @@ class QualityIndicatorController extends Controller
 
         $reportTitle = match ($type) {
             'ha_team' => $teamId ? 'รายงานตัวชี้วัดทีม HA' : 'รายงานตัวชี้วัดทีม HA (แยกตามทีม)',
-            'organization' => 'รายงานตัวชี้วัดระดับองค์กร',
+            'organization' => ($category && $category !== 'all')
+                ? "รายงานตัวชี้วัดระดับองค์กร: {$category}"
+                : 'รายงานตัวชี้วัดระดับองค์กร',
             default => $departmentId ? 'รายงานตัวชี้วัดแผนก' : 'รายงานตัวชี้วัดแผนก (แยกตามแผนก)',
         };
 
         $html = view('quality-indicators.group-pdf', [
+            'type' => $type,
             'hospitalName' => self::HOSPITAL_NAME,
             'reportTitle' => $reportTitle,
             'groups' => $groups,
+            'years' => $years,
+            'yearHeaders' => $yearHeaders,
+            'currentFy' => $currentFy,
             'generatedAt' => $this->formatThaiDateTime($now),
             'generatedAtDate' => $this->formatThaiDate($now),
             'formatNum' => fn ($v) => $this->formatNum($v),
@@ -437,7 +472,9 @@ class QualityIndicatorController extends Controller
             'ha_team' => $teamId && ($groups->first()['slug'] ?? null)
                 ? 'ตัวชี้วัด-ทีม-'.$groups->first()['slug'].'.pdf'
                 : 'รายงานตัวชี้วัด-ทีมHA.pdf',
-            'organization' => 'รายงานตัวชี้วัด-องค์กร.pdf',
+            'organization' => ($category && $category !== 'all')
+                ? 'รายงานตัวชี้วัด-องค์กร-'.($category === 'แบบประเมินตนเอง SAR' ? 'SAR' : 'StrategicPlan').'.pdf'
+                : 'รายงานตัวชี้วัด-องค์กร.pdf',
             default => $departmentId && ($groups->first()['slug'] ?? null)
                 ? 'ตัวชี้วัด-แผนก-'.$groups->first()['slug'].'.pdf'
                 : 'รายงานตัวชี้วัด-แผนก.pdf',
@@ -450,9 +487,10 @@ class QualityIndicatorController extends Controller
     }
 
     /**
-     * @return Collection<int, array{title: string, subtitle: string, slug: string, indicators: Collection, with_data: int, pass_count: int, fail_count: int, no_data: int}>
+     * @param  array<int, int>  $years
+     * @return Collection<int, array{title: string, subtitle: string, slug: string, categories: Collection, indicators: Collection, with_data: int, pass_count: int, fail_count: int, no_data: int}>
      */
-    private function buildReportGroups(string $type, ?int $departmentId, ?int $teamId): Collection
+    private function buildReportGroups(string $type, ?int $departmentId, ?int $teamId, array $years, ?string $category = null): Collection
     {
         $baseQuery = QualityIndicator::query()
             ->where('type', $type)
@@ -473,17 +511,18 @@ class QualityIndicatorController extends Controller
                     $dept?->name ?: 'แผนก',
                     'ระดับแผนก/ฝ่าย',
                     $dept?->name ?: (string) $departmentId,
-                    $indicators
+                    $indicators,
+                    $years
                 )]);
             }
 
             $indicators = $baseQuery->get()->groupBy('department_id');
 
-            return $indicators->map(function (Collection $items, $deptId) {
+            return $indicators->map(function (Collection $items, $deptId) use ($years) {
                 $dept = $items->first()?->department;
                 $title = $dept?->name ?: ('แผนก #'.$deptId);
 
-                return $this->makeGroup($title, 'ระดับแผนก/ฝ่าย', $title, $items->values());
+                return $this->makeGroup($title, 'ระดับแผนก/ฝ่าย', $title, $items->values(), $years);
             })->values();
         }
 
@@ -499,48 +538,159 @@ class QualityIndicatorController extends Controller
                     $title,
                     'ระดับทีม HA',
                     $team?->abbreviation ?: $title,
-                    $indicators
+                    $indicators,
+                    $years
                 )]);
             }
 
             $indicators = $baseQuery->get()->groupBy('team_id');
 
-            return $indicators->map(function (Collection $items, $tid) {
+            return $indicators->map(function (Collection $items, $tid) use ($years) {
                 $team = $items->first()?->team;
                 $title = $team
                     ? trim(($team->abbreviation ? $team->abbreviation.' - ' : '').$team->name_th)
                     : ('ทีม #'.$tid);
 
-                return $this->makeGroup($title, 'ระดับทีม HA', $team?->abbreviation ?: $title, $items->values());
+                return $this->makeGroup($title, 'ระดับทีม HA', $team?->abbreviation ?: $title, $items->values(), $years);
             })->values();
         }
 
-        $indicators = $baseQuery->get();
+        if ($category && $category !== 'all') {
+            $indicators = (clone $baseQuery)->where('category', $category)->get();
 
-        return collect([$this->makeGroup('ระดับองค์กร', 'ตัวชี้วัดภาพรวมองค์กร', 'organization', $indicators)]);
+            return collect([$this->makeGroup(
+                $category,
+                'ตัวชี้วัดระดับองค์กร',
+                $category === 'แบบประเมินตนเอง SAR' ? 'SAR' : 'StrategicPlan',
+                $indicators,
+                $years
+            )]);
+        }
+
+        $all = $baseQuery->get();
+        if ($all->isEmpty()) {
+            return collect();
+        }
+
+        $hasCategories = $all->pluck('category')->filter()->unique();
+        if ($hasCategories->count() > 1) {
+            return $all->groupBy(fn ($i) => $i->category ?: 'ทั่วไป')->map(function (Collection $items, $cat) use ($years) {
+                return $this->makeGroup($cat, 'ตัวชี้วัดระดับองค์กร', $cat, $items->values(), $years);
+            })->values();
+        }
+
+        return collect([$this->makeGroup('ระดับองค์กร', 'ตัวชี้วัดภาพรวมองค์กร', 'organization', $all, $years)]);
     }
 
-    private function makeGroup(string $title, string $subtitle, string $slug, Collection $indicators): array
+    /**
+     * @param  array<int, int>  $years
+     * @return array{title: string, subtitle: string, slug: string, categories: Collection, indicators: Collection, with_data: int, pass_count: int, fail_count: int, no_data: int}
+     */
+    private function makeGroup(string $title, string $subtitle, string $slug, Collection $indicators, array $years): array
     {
-        $rows = $indicators->map(function (QualityIndicator $indicator) {
+        $rows = $indicators->map(function (QualityIndicator $indicator) use ($years) {
             $this->families->overlaySharedFields($indicator);
             $master = $indicator->family?->master ?? $indicator;
-            $entries = $master->entries
-                ->sortByDesc(fn ($e) => (string) $e->period_date)
-                ->take(12)
-                ->values();
-            $latest = $entries->first();
+            $entries = $master->entries ?? collect();
+
+            $isOrg = ($indicator->type === 'organization');
+            $byFy = [];
+            foreach ($entries as $e) {
+                if (! $e->period_date) {
+                    continue;
+                }
+                $dt = Carbon::parse($e->period_date);
+                $fy = $isOrg
+                    ? ((int) $dt->year + 543)
+                    : (($dt->month >= 10) ? ((int) $dt->year + 543 + 1) : ((int) $dt->year + 543));
+                $byFy[$fy][] = $e;
+            }
+
+            $tVal = $indicator->target_value !== null
+                ? ((float) $indicator->target_value == (int) $indicator->target_value
+                    ? (string) (int) $indicator->target_value
+                    : number_format((float) $indicator->target_value, 2))
+                : null;
+
+            if ($tVal !== null) {
+                $op = trim($indicator->target_operator ?? '');
+                $targetDisplay = ($op === '=' || $op === '') ? $tVal : ($op.' '.$tVal);
+                if (! empty($indicator->unit)) {
+                    $targetDisplay .= ' '.$indicator->unit;
+                }
+            } else {
+                $targetDisplay = '-';
+            }
+
+            $yearlyValues = [];
+            $hasAnyData = false;
+            foreach ($years as $yr) {
+                if (! empty($byFy[$yr])) {
+                    $latestEntry = collect($byFy[$yr])->sortByDesc(fn ($e) => (string) $e->period_date)->first();
+                    $val = $latestEntry->result_value;
+                    if ($val !== null && $val !== '') {
+                        $hasAnyData = true;
+                        $formattedVal = (float) $val == (int) $val ? (string) (int) $val : number_format((float) $val, 2);
+                        $isPass = $this->isPass($indicator, (float) $val);
+                        $yearlyValues[$yr] = [
+                            'value' => $formattedVal,
+                            'raw' => (float) $val,
+                            'pass' => $isPass,
+                            'entry' => $latestEntry,
+                        ];
+                    } else {
+                        $yearlyValues[$yr] = [
+                            'value' => '-',
+                            'raw' => null,
+                            'pass' => null,
+                            'entry' => null,
+                        ];
+                    }
+                } else {
+                    $yearlyValues[$yr] = [
+                        'value' => '-',
+                        'raw' => null,
+                        'pass' => null,
+                        'entry' => null,
+                    ];
+                }
+            }
+
+            $latest = $entries->sortByDesc(fn ($e) => (string) $e->period_date)->first();
             $pass = $latest ? $this->isPass($indicator, (float) $latest->result_value) : null;
+
+            // Evaluate pass/fail against latest year with data
+            $latestStatus = null;
+            foreach (array_reverse($years) as $yr) {
+                if (isset($yearlyValues[$yr]) && $yearlyValues[$yr]['raw'] !== null) {
+                    $latestStatus = $yearlyValues[$yr]['pass'];
+                    break;
+                }
+            }
 
             return [
                 'indicator' => $indicator,
+                'code' => $indicator->code,
+                'name' => $indicator->name,
+                'category' => trim($indicator->category ?? '') ?: 'ตัวชี้วัดทั่วไป',
+                'target_display' => $targetDisplay,
+                'yearly_values' => $yearlyValues,
+                'latest_status' => $latestStatus,
+                'has_data' => $hasAnyData,
                 'entries' => $entries->sortBy(fn ($e) => (string) $e->period_date)->values(),
                 'latest' => $latest,
                 'pass' => $pass,
             ];
         });
 
-        $withData = $rows->filter(fn ($r) => $r['latest'] !== null)->count();
+        $categories = $rows->groupBy('category')->map(function (Collection $items, string $catName) {
+            return [
+                'name' => $catName,
+                'indicators' => $items->values(),
+            ];
+        })->values();
+
+        $withData = $rows->filter(fn ($r) => $r['has_data'] || $r['latest'] !== null)->count();
         $passCount = $rows->filter(fn ($r) => $r['pass'] === true)->count();
         $failCount = $rows->filter(fn ($r) => $r['pass'] === false)->count();
 
@@ -548,6 +698,7 @@ class QualityIndicatorController extends Controller
             'title' => $title,
             'subtitle' => $subtitle,
             'slug' => preg_replace('/[^\p{L}\p{N}\-_]+/u', '-', $slug) ?: 'group',
+            'categories' => $categories,
             'indicators' => $rows,
             'with_data' => $withData,
             'pass_count' => $passCount,

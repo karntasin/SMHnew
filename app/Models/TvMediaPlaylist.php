@@ -20,7 +20,8 @@ class TvMediaPlaylist extends Model
 
     public function scopeActiveForBoard($query, string $boardKey = 'default')
     {
-        return $query->where('board_key', $boardKey)
+        $keys = TvClinicRoom::normalizeBoardKeys($boardKey);
+        return $query->whereIn('board_key', $keys)
             ->where('is_active', true)
             ->orderBy('sort_order');
     }

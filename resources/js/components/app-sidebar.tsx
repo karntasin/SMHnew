@@ -140,7 +140,14 @@ function RenderMenu({
         const isExpanded = hasChildren && (isChildActive(children) || !!searchQuery.trim());
         const isExternal =
           menu.route &&
-          (menu.route.startsWith('http://') || menu.route.startsWith('https://') || menu.route.includes('/admin/tv'));
+          (menu.route.startsWith('http://') ||
+           menu.route.startsWith('https://') ||
+           menu.route.includes('/admin/tv') ||
+           menu.route.includes('/admin/er') ||
+           menu.route.includes('/admin/drug') ||
+           menu.route.startsWith('/tv') ||
+           menu.route.startsWith('/er') ||
+           menu.route.startsWith('/drug'));
 
         const itemClass = cn(
           'group/menu-item relative w-full gap-2.5 rounded-lg transition-colors',

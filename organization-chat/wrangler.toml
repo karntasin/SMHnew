@@ -8,6 +8,7 @@ binding = "AI"
 [vars]
 LIFF_ID = "2011190976-nGVbTYZD"
 LINE_CHANNEL_ID = "2011190976"
+LARAVEL_API_URL = "https://fshh-app.online/organization-chat/api"
 
 [assets]
 directory = "./public"
