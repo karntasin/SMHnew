@@ -382,6 +382,38 @@ async function runModel(env, messages) {
   }
 }
 
+const DEFAULT_LARAVEL_API = 'https://fshh-app.online/organization-chat/api';
+
+async function askCustomLlmViaLaravel(env, question, history) {
+  const laravelUrl = (env && env.LARAVEL_API_URL) || DEFAULT_LARAVEL_API;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 35000);
+  try {
+    const res = await fetch(`${laravelUrl}?action=ai`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'ai',
+        message: question,
+        question: question,
+        history: history || [],
+      }),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      return null;
+    }
+    const data = await res.json();
+    return data;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function handleAiAsk(request, env) {
   if (request.method === 'OPTIONS') {
     return jsonResponse({ ok: true }, 204);
@@ -441,12 +473,28 @@ export async function handleAiAsk(request, env) {
     return jsonResponse({ success: false, error: rate.error }, 429);
   }
 
+  // 1. ส่งไปยัง Custom LLM ผ่าน Laravel (เชื่อมต่อ LAN http://192.168.0.239:8000/api/chat และ Cloudflare Tunnel สำหรับเน็ตนอก)
+  try {
+    const customResult = await askCustomLlmViaLaravel(env, question, body.history);
+    if (customResult && customResult.success && customResult.answer) {
+      return jsonResponse({
+        success: true,
+        refused: false,
+        source: 'custom_llm',
+        answer: customResult.answer,
+        updatedAt: null,
+      });
+    }
+  } catch {
+    // ข้ามไป fallback หาก Custom LLM ยังไม่ตอบสนอง
+  }
+
   if (!env.AI) {
     return jsonResponse({
       success: true,
       source: 'none',
       answer:
-        'ยังไม่ได้เปิด Cloudflare Workers AI บน Worker นี้ ผู้ดูแลระบบต้องผูก AI binding แล้ว deploy อีกครั้ง',
+        'ยังไม่ได้เปิด Cloudflare Workers AI บน Worker นี้ และไม่สามารถเชื่อมต่อ Custom LLM ได้ในขณะนี้',
       updatedAt: null,
     });
   }

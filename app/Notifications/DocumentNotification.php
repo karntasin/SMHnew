@@ -43,6 +43,8 @@ class DocumentNotification extends Notification
             'completed' => 'หนังสือดำเนินการเสร็จสิ้นทุกแผนก',
             'reminder_sender' => '⚠️ หนังสือยังไม่ได้รับการรับทราบเกิน 3 ชั่วโมง',
             'reminder_receiver' => '⚠️ คุณมีหนังสือรอรับทราบเกิน 3 ชั่วโมง',
+            'deadline_warning' => '⏳ หนังสือใกล้ถึงกำหนดส่งแล้ว',
+            'deadline_overdue' => '🚨 หนังสือเลยกำหนดส่ง!',
         ];
 
         $title = $messages[$this->action] ?? 'แจ้งเตือนระบบหนังสือ';
@@ -52,7 +54,7 @@ class DocumentNotification extends Notification
             $message .= " (โดย {$this->actorName})";
         }
 
-        $isUrgent = in_array($this->action, ['submit_boss', 'approve', 'reject', 'return_origin', 'reminder_sender', 'reminder_receiver']);
+        $isUrgent = in_array($this->action, ['submit_boss', 'approve', 'reject', 'return_origin', 'reminder_sender', 'reminder_receiver', 'deadline_warning', 'deadline_overdue']);
 
         return [
             'title' => $title,

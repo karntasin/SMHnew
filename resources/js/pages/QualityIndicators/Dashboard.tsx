@@ -66,6 +66,7 @@ interface Props {
         type?: string | null;
         department_id?: number | null;
         team_id?: number | null;
+        category?: string | null;
     };
 }
 
@@ -80,6 +81,7 @@ export default function Dashboard({
         filters?.department_id ? String(filters.department_id) : 'all',
     );
     const [teamFilter, setTeamFilter] = useState(filters?.team_id ? String(filters.team_id) : 'all');
+    const [categoryFilter, setCategoryFilter] = useState(filters?.category || 'all');
     const [search, setSearch] = useState('');
 
     const filteredIndicators = useMemo(() => {
@@ -93,10 +95,11 @@ export default function Dashboard({
         );
     }, [indicators, search]);
 
-    const applyFilters = (patch: { type?: string; department_id?: string; team_id?: string }) => {
+    const applyFilters = (patch: { type?: string; department_id?: string; team_id?: string; category?: string }) => {
         const nextType = patch.type ?? typeFilter;
         const nextDept = patch.department_id ?? departmentFilter;
         const nextTeam = patch.team_id ?? teamFilter;
+        const nextCat = patch.category ?? categoryFilter;
 
         router.get(
             route('quality-indicators.dashboard'),
@@ -104,6 +107,7 @@ export default function Dashboard({
                 type: nextType !== 'all' ? nextType : undefined,
                 department_id: nextType === 'department' && nextDept !== 'all' ? nextDept : undefined,
                 team_id: nextType === 'ha_team' && nextTeam !== 'all' ? nextTeam : undefined,
+                category: nextType === 'organization' && nextCat !== 'all' ? nextCat : undefined,
             },
             { preserveState: true, replace: true },
         );
@@ -143,6 +147,9 @@ export default function Dashboard({
         if (effectiveType === 'ha_team' && teamFilter !== 'all') {
             params.set('team_id', teamFilter);
         }
+        if (effectiveType === 'organization' && categoryFilter !== 'all') {
+            params.set('category', categoryFilter);
+        }
         return `${route('quality-indicators.export-pdf')}?${params.toString()}`;
     })();
 
@@ -151,6 +158,8 @@ export default function Dashboard({
             return teamFilter !== 'all' ? 'PDF ทีมนี้' : 'PDF แยกตามทีม';
         }
         if (typeFilter === 'organization') {
+            if (categoryFilter === 'แบบประเมินตนเอง SAR') return 'PDF แบบประเมิน SAR';
+            if (categoryFilter === 'แผนยุทธศาสตร์ รพ.') return 'PDF แผนยุทธศาสตร์ รพ.';
             return 'PDF ระดับองค์กร';
         }
         if (typeFilter === 'department') {
@@ -219,7 +228,8 @@ export default function Dashboard({
                                 setTypeFilter(v);
                                 setDepartmentFilter('all');
                                 setTeamFilter('all');
-                                applyFilters({ type: v, department_id: 'all', team_id: 'all' });
+                                setCategoryFilter('all');
+                                applyFilters({ type: v, department_id: 'all', team_id: 'all', category: 'all' });
                             }}
                         >
                             <SelectTrigger className="rounded-xl">
@@ -233,6 +243,28 @@ export default function Dashboard({
                             </SelectContent>
                         </Select>
                     </div>
+
+                    {typeFilter === 'organization' && (
+                        <div className="min-w-[220px] flex-1 space-y-1.5">
+                            <Label>หัวข้อย่อยระดับองค์กร</Label>
+                            <Select
+                                value={categoryFilter}
+                                onValueChange={(v) => {
+                                    setCategoryFilter(v);
+                                    applyFilters({ category: v });
+                                }}
+                            >
+                                <SelectTrigger className="rounded-xl">
+                                    <SelectValue placeholder="ทุกหัวข้อ" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">ทุกหัวข้อย่อย (ทั้งหมด)</SelectItem>
+                                    <SelectItem value="แบบประเมินตนเอง SAR">แบบประเมินตนเอง SAR</SelectItem>
+                                    <SelectItem value="แผนยุทธศาสตร์ รพ.">แผนยุทธศาสตร์ รพ.</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
 
                     {typeFilter === 'department' && (
                         <div className="min-w-[220px] flex-1 space-y-1.5">
@@ -284,7 +316,7 @@ export default function Dashboard({
                         </div>
                     )}
 
-                    {(typeFilter !== 'all' || departmentFilter !== 'all' || teamFilter !== 'all' || search.trim()) && (
+                    {(typeFilter !== 'all' || departmentFilter !== 'all' || teamFilter !== 'all' || categoryFilter !== 'all' || search.trim()) && (
                         <Button
                             type="button"
                             variant="outline"
@@ -293,8 +325,9 @@ export default function Dashboard({
                                 setTypeFilter('all');
                                 setDepartmentFilter('all');
                                 setTeamFilter('all');
+                                setCategoryFilter('all');
                                 setSearch('');
-                                applyFilters({ type: 'all', department_id: 'all', team_id: 'all' });
+                                applyFilters({ type: 'all', department_id: 'all', team_id: 'all', category: 'all' });
                             }}
                         >
                             ล้างตัวกรอง

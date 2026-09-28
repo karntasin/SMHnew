@@ -39,7 +39,7 @@ import {
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Search, BarChart2, MoreVertical, Pencil, Trash, FileDown, Upload, Link2 } from 'lucide-react';
+import { Plus, Search, BarChart2, MoreVertical, Pencil, Trash, FileDown, Upload, Link2, ClipboardCheck, Target, Layers, Copy } from 'lucide-react';
 import { QualityPage, StatCard, Panel, StatusPill, EmptyState, qualityInput } from '@/components/quality/quality-ui';
 import IndicatorsSubNav from '@/pages/QualityIndicators/IndicatorsSubNav';
 import { cn } from '@/lib/utils';
@@ -99,7 +99,7 @@ const LINK_TYPE_LABEL: Record<string, string> = {
     ha_team: 'ระดับทีม HA',
 };
 
-export default function Index({ indicators, type, departments, teams, linkableIndicators = [], filters }: {
+export default function Index({ indicators, type, departments, teams, linkableIndicators = [], filters, orgCategoryCounts }: {
     indicators: Indicator[];
     type: 'department' | 'ha_team' | 'organization';
     departments: Department[];
@@ -108,18 +108,34 @@ export default function Index({ indicators, type, departments, teams, linkableIn
     filters?: {
         department_id?: number | null;
         team_id?: number | null;
+        category?: string | null;
         search?: string;
+    };
+    orgCategoryCounts?: {
+        all: number;
+        sar: number;
+        strategy: number;
     };
 }) {
     const [isOpen, setIsOpen] = useState(false);
     const [search, setSearch] = useState(filters?.search || '');
     const [departmentFilter, setDepartmentFilter] = useState(filters?.department_id ? String(filters.department_id) : 'all');
     const [teamFilter, setTeamFilter] = useState(filters?.team_id ? String(filters.team_id) : 'all');
+    const [orgCategoryFilter, setOrgCategoryFilter] = useState(filters?.category || 'all');
     const [editingIndicator, setEditingIndicator] = useState<Indicator | null>(null);
+    const [copyingFrom, setCopyingFrom] = useState<Indicator | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<Indicator | null>(null);
     const [deleting, setDeleting] = useState(false);
     const [linkSourceType, setLinkSourceType] = useState<'all' | 'organization' | 'department' | 'ha_team'>('all');
     const [linkSearch, setLinkSearch] = useState('');
+
+    const defaultCategoryForType = (t: string, currentCatFilter = orgCategoryFilter) => {
+        if (t === 'organization') {
+            if (currentCatFilter === 'แผนยุทธศาสตร์ รพ.') return 'แผนยุทธศาสตร์ รพ.';
+            return 'แบบประเมินตนเอง SAR';
+        }
+        return 'Clinical';
+    };
 
     const { data, setData, post, put, processing, errors, reset } = useForm({
         type: type,
@@ -127,7 +143,7 @@ export default function Index({ indicators, type, departments, teams, linkableIn
         team_id: '',
         code: '',
         name: '',
-        category: 'Clinical',
+        category: defaultCategoryForType(type),
         unit: '%',
         target_value: '',
         target_operator: '<',
@@ -146,7 +162,7 @@ export default function Index({ indicators, type, departments, teams, linkableIn
                 team_id: editingIndicator.team?.id.toString() || '',
                 code: editingIndicator.code || '',
                 name: editingIndicator.name || '',
-                category: editingIndicator.category || 'Clinical',
+                category: editingIndicator.category || defaultCategoryForType(type),
                 unit: editingIndicator.unit || '%',
                 target_value: editingIndicator.target_value?.toString() || '',
                 target_operator: editingIndicator.target_operator || '<',
@@ -157,27 +173,49 @@ export default function Index({ indicators, type, departments, teams, linkableIn
                 link_to_id: '',
             });
             setIsOpen(true);
+        } else if (copyingFrom) {
+            setData({
+                type: type,
+                department_id: copyingFrom.department?.id.toString() || '',
+                team_id: copyingFrom.team?.id.toString() || '',
+                code: copyingFrom.code ? `${copyingFrom.code}-copy` : '',
+                name: copyingFrom.name ? `${copyingFrom.name} (สำเนา)` : '',
+                category: copyingFrom.category || defaultCategoryForType(type),
+                unit: copyingFrom.unit || '%',
+                target_value: copyingFrom.target_value !== null && copyingFrom.target_value !== undefined ? copyingFrom.target_value.toString() : '',
+                target_operator: copyingFrom.target_operator || '<',
+                frequency: copyingFrom.frequency || 'Monthly',
+                description: copyingFrom.description || '',
+                formula_description: copyingFrom.formula_description || '',
+                is_active: true,
+                link_to_id: '',
+            });
+            setIsOpen(true);
         } else {
             reset();
             setData('type', type);
+            setData('category', defaultCategoryForType(type));
             setLinkSourceType('all');
             setLinkSearch('');
         }
-    }, [editingIndicator, type]);
+    }, [editingIndicator, copyingFrom, type]);
 
     useEffect(() => {
         setDepartmentFilter(filters?.department_id ? String(filters.department_id) : 'all');
         setTeamFilter(filters?.team_id ? String(filters.team_id) : 'all');
+        setOrgCategoryFilter(filters?.category || 'all');
         setSearch(filters?.search || '');
-    }, [type, filters?.department_id, filters?.team_id]);
+    }, [type, filters?.department_id, filters?.team_id, filters?.category]);
 
     const applyListFilters = (patch: {
         department_id?: string;
         team_id?: string;
+        category?: string;
         search?: string;
     }) => {
         const nextDept = patch.department_id ?? departmentFilter;
         const nextTeam = patch.team_id ?? teamFilter;
+        const nextCat = patch.category ?? orgCategoryFilter;
         const nextSearch = patch.search ?? search;
 
         router.get(
@@ -186,6 +224,7 @@ export default function Index({ indicators, type, departments, teams, linkableIn
                 type,
                 department_id: type === 'department' && nextDept !== 'all' ? nextDept : undefined,
                 team_id: type === 'ha_team' && nextTeam !== 'all' ? nextTeam : undefined,
+                category: type === 'organization' && nextCat !== 'all' ? nextCat : undefined,
                 search: nextSearch || undefined,
             },
             { preserveState: true, replace: true },
@@ -205,7 +244,7 @@ export default function Index({ indicators, type, departments, teams, linkableIn
     const getSubtitle = () => {
         if (type === 'department') return 'บริหารจัดการตัวชี้วัดคุณภาพระดับแผนก/หน่วยงาน';
         if (type === 'ha_team') return 'บริหารจัดการตัวชี้วัดคุณภาพระดับทีมนำทางคลินิก (PCT/Teams)';
-        return 'บริหารจัดการตัวชี้วัดคุณภาพระดับองค์กร';
+        return 'บริหารจัดการตัวชี้วัดคุณภาพระดับองค์กร (แบบประเมินตนเอง SAR & แผนยุทธศาสตร์ รพ.)';
     };
 
     const ownerLabel = (indicator: Indicator) => {
@@ -219,15 +258,26 @@ export default function Index({ indicators, type, departments, teams, linkableIn
 
     const handleCreate = () => {
         setEditingIndicator(null);
+        setCopyingFrom(null);
         reset();
-        setData('type', type);
+        setData((prev) => ({
+            ...prev,
+            type: type,
+            category: defaultCategoryForType(type),
+        }));
         setLinkSourceType('all');
         setLinkSearch('');
         setIsOpen(true);
     };
 
     const handleEdit = (indicator: Indicator) => {
+        setCopyingFrom(null);
         setEditingIndicator(indicator);
+    };
+
+    const handleCopy = (indicator: Indicator) => {
+        setEditingIndicator(null);
+        setCopyingFrom(indicator);
     };
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -240,6 +290,7 @@ export default function Index({ indicators, type, departments, teams, linkableIn
             onFinish: () => unlockPage(),
             onSuccess: () => {
                 setEditingIndicator(null);
+                setCopyingFrom(null);
                 reset();
                 unlockPage();
             },
@@ -333,6 +384,9 @@ export default function Index({ indicators, type, departments, teams, linkableIn
         if (type === 'ha_team' && teamFilter !== 'all') {
             params.set('team_id', teamFilter);
         }
+        if (type === 'organization' && orgCategoryFilter !== 'all') {
+            params.set('category', orgCategoryFilter);
+        }
         return `${route('quality-indicators.export-pdf')}?${params.toString()}`;
     })();
 
@@ -343,6 +397,8 @@ export default function Index({ indicators, type, departments, teams, linkableIn
         if (type === 'ha_team') {
             return teamFilter !== 'all' ? 'PDF ทีมนี้' : 'PDF แยกตามทีม';
         }
+        if (orgCategoryFilter === 'แบบประเมินตนเอง SAR') return 'PDF แบบประเมิน SAR';
+        if (orgCategoryFilter === 'แผนยุทธศาสตร์ รพ.') return 'PDF แผนยุทธศาสตร์ รพ.';
         return 'PDF ระดับองค์กร';
     })();
 
@@ -406,6 +462,115 @@ export default function Index({ indicators, type, departments, teams, linkableIn
                     </Link>
                 ))}
             </div>
+
+            {type === 'organization' && (
+                <div className="rounded-2xl border border-sky-200/80 bg-gradient-to-r from-sky-50/70 via-blue-50/40 to-indigo-50/30 p-3.5 sm:p-4 shadow-xs">
+                    <div className="mb-2.5 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <span className="inline-block h-2 w-2 rounded-full bg-sky-500 animate-pulse" />
+                            <span className="text-xs font-semibold uppercase tracking-wider text-sky-900">
+                                หัวข้อย่อยตัวชี้วัดระดับองค์กร
+                            </span>
+                        </div>
+                        {orgCategoryFilter !== 'all' && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setOrgCategoryFilter('all');
+                                    applyListFilters({ category: 'all' });
+                                }}
+                                className="text-xs font-medium text-sky-700 hover:text-sky-900 hover:underline"
+                            >
+                                ดูทั้งหมด
+                            </button>
+                        )}
+                    </div>
+                    <div className="flex flex-wrap gap-2.5">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setOrgCategoryFilter('all');
+                                applyListFilters({ category: 'all' });
+                            }}
+                            className={cn(
+                                'inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-semibold transition-all cursor-pointer',
+                                orgCategoryFilter === 'all'
+                                    ? 'border-sky-600 bg-sky-600 text-white shadow-sm ring-2 ring-sky-200'
+                                    : 'border-white bg-white text-slate-700 shadow-2xs hover:border-sky-200 hover:bg-sky-50/50',
+                            )}
+                        >
+                            <Layers className="h-4 w-4" />
+                            <span>ทั้งหมด</span>
+                            <span
+                                className={cn(
+                                    'ml-1 rounded-full px-2 py-0.5 text-xs font-bold',
+                                    orgCategoryFilter === 'all'
+                                        ? 'bg-sky-700 text-white'
+                                        : 'bg-slate-100 text-slate-700',
+                                )}
+                            >
+                                {orgCategoryCounts?.all ?? indicators.length}
+                            </span>
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => {
+                                const cat = 'แบบประเมินตนเอง SAR';
+                                setOrgCategoryFilter(cat);
+                                applyListFilters({ category: cat });
+                            }}
+                            className={cn(
+                                'inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-semibold transition-all cursor-pointer',
+                                orgCategoryFilter === 'แบบประเมินตนเอง SAR'
+                                    ? 'border-blue-600 bg-blue-600 text-white shadow-sm ring-2 ring-blue-200'
+                                    : 'border-white bg-white text-slate-700 shadow-2xs hover:border-blue-200 hover:bg-blue-50/50',
+                            )}
+                        >
+                            <ClipboardCheck className="h-4 w-4" />
+                            <span>แบบประเมินตนเอง SAR</span>
+                            <span
+                                className={cn(
+                                    'ml-1 rounded-full px-2 py-0.5 text-xs font-bold',
+                                    orgCategoryFilter === 'แบบประเมินตนเอง SAR'
+                                        ? 'bg-blue-700 text-white'
+                                        : 'bg-blue-100 text-blue-700',
+                                )}
+                            >
+                                {orgCategoryCounts?.sar ?? 0}
+                            </span>
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => {
+                                const cat = 'แผนยุทธศาสตร์ รพ.';
+                                setOrgCategoryFilter(cat);
+                                applyListFilters({ category: cat });
+                            }}
+                            className={cn(
+                                'inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-semibold transition-all cursor-pointer',
+                                orgCategoryFilter === 'แผนยุทธศาสตร์ รพ.'
+                                    ? 'border-amber-600 bg-amber-600 text-white shadow-sm ring-2 ring-amber-200'
+                                    : 'border-white bg-white text-slate-700 shadow-2xs hover:border-amber-200 hover:bg-amber-50/50',
+                            )}
+                        >
+                            <Target className="h-4 w-4" />
+                            <span>แผนยุทธศาสตร์ รพ.</span>
+                            <span
+                                className={cn(
+                                    'ml-1 rounded-full px-2 py-0.5 text-xs font-bold',
+                                    orgCategoryFilter === 'แผนยุทธศาสตร์ รพ.'
+                                        ? 'bg-amber-700 text-white'
+                                        : 'bg-amber-100 text-amber-800',
+                                )}
+                            >
+                                {orgCategoryCounts?.strategy ?? 0}
+                            </span>
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {(type === 'department' || type === 'ha_team') && (
                 <Panel title="กรองข้อมูล" description={type === 'department' ? 'แยกดูตามแผนก/หน่วยงาน' : 'แยกดูตามทีม HA'}>
@@ -512,8 +677,19 @@ export default function Index({ indicators, type, departments, teams, linkableIn
                                                 }
                                             />
                                         </div>
-                                        <h3 className="mb-1 line-clamp-2 text-base font-semibold text-slate-800">{indicator.name}</h3>
-                                        <p className="mb-1 text-sm text-slate-500">{indicator.category}</p>
+                                        {indicator.category === 'แบบประเมินตนเอง SAR' ? (
+                                            <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50/80 px-2 py-0.5 text-xs font-semibold text-blue-700 w-fit">
+                                                <ClipboardCheck className="h-3.5 w-3.5" />
+                                                <span>แบบประเมินตนเอง SAR</span>
+                                            </div>
+                                        ) : indicator.category === 'แผนยุทธศาสตร์ รพ.' ? (
+                                            <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50/80 px-2 py-0.5 text-xs font-semibold text-amber-800 w-fit">
+                                                <Target className="h-3.5 w-3.5" />
+                                                <span>แผนยุทธศาสตร์ รพ.</span>
+                                            </div>
+                                        ) : (
+                                            <p className="mb-1 text-sm text-slate-500">{indicator.category || 'ทั่วไป'}</p>
+                                        )}
                                         <p className="mb-2 text-xs font-medium text-emerald-700">{ownerLabel(indicator)}</p>
                                         {(indicator.aliases_count ?? 0) > 0 || indicator.is_master === false ? (
                                             <p className="mb-4 inline-flex items-center gap-1 text-[11px] font-medium text-violet-700">
@@ -557,6 +733,10 @@ export default function Index({ indicators, type, departments, teams, linkableIn
                                                 <Pencil className="mr-2 h-4 w-4" />
                                                 แก้ไข (Edit)
                                             </DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => handleCopy(indicator)}>
+                                                <Copy className="mr-2 h-4 w-4" />
+                                                คัดลอกและสร้างใหม่ (Duplicate)
+                                            </DropdownMenuItem>
                                             <DropdownMenuSeparator />
                                             <DropdownMenuItem
                                                 className="text-red-600"
@@ -584,21 +764,38 @@ export default function Index({ indicators, type, departments, teams, linkableIn
                     setIsOpen(open);
                     if (!open) {
                         setEditingIndicator(null);
+                        setCopyingFrom(null);
                         unlockPage();
                     }
                 }}
             >
                 <DialogContent className="max-w-2xl">
                     <DialogHeader>
-                        <DialogTitle>{editingIndicator ? 'แก้ไขตัวชี้วัด' : 'เพิ่มตัวชี้วัดใหม่'}</DialogTitle>
+                        <DialogTitle>
+                            {editingIndicator
+                                ? 'แก้ไขตัวชี้วัด'
+                                : copyingFrom
+                                ? 'คัดลอกและสร้างตัวชี้วัดใหม่'
+                                : 'เพิ่มตัวชี้วัดใหม่'}
+                        </DialogTitle>
                         <DialogDescription>
                             {editingIndicator
                                 ? 'การแก้ชื่อ/เป้า/สูตร มีผลต่อทุกรหัสที่เชื่อมข้อมูลชุดเดียวกัน'
+                                : copyingFrom
+                                ? `คัดลอกข้อมูลจาก "${copyingFrom.code ? copyingFrom.code + ' ' : ''}${copyingFrom.name}" สามารถแก้ไขข้อมูลก่อนบันทึกเป็นตัวชี้วัดใหม่ได้`
                                 : 'สร้างตัวใหม่ หรือสร้างรหัสลูกที่ชี้ข้อมูลชุดเดียวกับตัวชี้วัดที่มีอยู่'}
                         </DialogDescription>
                     </DialogHeader>
                     <form onSubmit={handleSubmit} className="space-y-4">
-                        {!editingIndicator && (
+                        {copyingFrom && (
+                            <div className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50/70 p-3 text-xs text-blue-800">
+                                <Copy className="h-4 w-4 shrink-0 text-blue-600" />
+                                <div>
+                                    กำลังคัดลอกข้อมูลจาก <strong>{copyingFrom.code ? `${copyingFrom.code} - ` : ''}{copyingFrom.name}</strong> เพื่อสร้างเป็นตัวชี้วัดตัวใหม่
+                                </div>
+                            </div>
+                        )}
+                        {!editingIndicator && !copyingFrom && (
                             <div className="space-y-3 rounded-2xl border border-violet-100 bg-violet-50/40 p-3">
                                 <Label>ใช้ร่วมกับตัวชี้วัดที่มีอยู่</Label>
                                 <div className="grid gap-3 sm:grid-cols-2">
@@ -744,12 +941,28 @@ export default function Index({ indicators, type, departments, teams, linkableIn
                                             <SelectValue placeholder="เลือกหมวดหมู่" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="Clinical">Clinical (คลินิก)</SelectItem>
-                                            <SelectItem value="Non-Clinical">Non-Clinical (ทั่วไป)</SelectItem>
-                                            <SelectItem value="HA-I-1">HA ตอนที่ 1</SelectItem>
-                                            <SelectItem value="HA-I-2">HA ตอนที่ 2</SelectItem>
-                                            <SelectItem value="HA-I-3">HA ตอนที่ 3</SelectItem>
-                                            <SelectItem value="HA-I-4">HA ตอนที่ 4</SelectItem>
+                                            {(data.type === 'organization' || type === 'organization') && (
+                                                <SelectGroup>
+                                                    <SelectLabel className="font-semibold text-sky-800">
+                                                        หัวข้อย่อยระดับองค์กร
+                                                    </SelectLabel>
+                                                    <SelectItem value="แบบประเมินตนเอง SAR">
+                                                        แบบประเมินตนเอง SAR
+                                                    </SelectItem>
+                                                    <SelectItem value="แผนยุทธศาสตร์ รพ.">
+                                                        แผนยุทธศาสตร์ รพ.
+                                                    </SelectItem>
+                                                </SelectGroup>
+                                            )}
+                                            <SelectGroup>
+                                                <SelectLabel>ทั่วไป / ทางคลินิก</SelectLabel>
+                                                <SelectItem value="Clinical">Clinical (คลินิก)</SelectItem>
+                                                <SelectItem value="Non-Clinical">Non-Clinical (ทั่วไป)</SelectItem>
+                                                <SelectItem value="HA-I-1">HA ตอนที่ 1</SelectItem>
+                                                <SelectItem value="HA-I-2">HA ตอนที่ 2</SelectItem>
+                                                <SelectItem value="HA-I-3">HA ตอนที่ 3</SelectItem>
+                                                <SelectItem value="HA-I-4">HA ตอนที่ 4</SelectItem>
+                                            </SelectGroup>
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -842,7 +1055,11 @@ export default function Index({ indicators, type, departments, teams, linkableIn
                                 ยกเลิก
                             </Button>
                             <Button type="submit" disabled={processing} className="rounded-xl bg-emerald-600 hover:bg-emerald-700">
-                                {editingIndicator ? 'บันทึกการแก้ไข' : 'บันทึก'}
+                                {editingIndicator
+                                    ? 'บันทึกการแก้ไข'
+                                    : copyingFrom
+                                    ? 'บันทึกเป็นตัวชี้วัดใหม่'
+                                    : 'บันทึก'}
                             </Button>
                         </DialogFooter>
                     </form>

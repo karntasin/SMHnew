@@ -96,6 +96,8 @@ class OrganizationChatApiController extends Controller
                     $request->input('sessionToken') ? (string) $request->input('sessionToken') : null
                 ),
 
+                'ai', 'askAi' => $this->handleAi($request),
+
                 default => throw new \InvalidArgumentException('Unknown action: '.$action),
             };
 
@@ -123,6 +125,24 @@ class OrganizationChatApiController extends Controller
             (string) $request->input('displayName', 'LINE User'),
             $request->input('pictureUrl') ? (string) $request->input('pictureUrl') : null,
         );
+    }
+
+    private function handleAi(Request $request): array
+    {
+        $message = (string) $request->input('message', $request->input('question', $request->input('text', '')));
+        if (trim($message) === '') {
+            return [
+                'success' => false,
+                'error' => 'กรุณาระบุคำถามหรือข้อความ',
+            ];
+        }
+
+        $history = $request->input('history');
+        if (! is_array($history)) {
+            $history = null;
+        }
+
+        return $this->chat->askCustomLlm($message, $history);
     }
 
     private function json(array $payload, int $status = 200): JsonResponse

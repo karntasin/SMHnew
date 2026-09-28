@@ -254,6 +254,9 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         
         Route::get('/', [App\Http\Controllers\Document\DocumentController::class, 'index'])->name('index');
         Route::get('/create', [App\Http\Controllers\Document\DocumentController::class, 'create'])->name('create');
+        Route::get('/ai-summarizer', [App\Http\Controllers\Document\DocumentController::class, 'aiSummarizer'])->name('ai_summarizer');
+        Route::post('/summarize-ai', [App\Http\Controllers\Document\DocumentController::class, 'summarizeAi'])->name('summarizeAi');
+        Route::post('/export-docx', [App\Http\Controllers\Document\DocumentController::class, 'exportDocx'])->name('exportDocx');
         Route::post('/', [App\Http\Controllers\Document\DocumentController::class, 'store'])->name('store');
         Route::get('/{document}', [App\Http\Controllers\Document\DocumentController::class, 'show'])->name('show');
         
@@ -269,6 +272,8 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::post('/action/{action}/acknowledge', [App\Http\Controllers\Document\DocumentController::class, 'acknowledgeDocument'])->name('acknowledgeDocument');
         Route::post('/action/{action}/implementation', [App\Http\Controllers\Document\DocumentController::class, 'updateImplementation'])->name('updateImplementation');
     });
+
+    Route::get('/admin-docs/ai-summarizer', [App\Http\Controllers\Document\DocumentController::class, 'aiSummarizer'])->name('admin-docs.ai_summarizer');
 
     // Maintenance System (ระบบแจ้งซ่อม)
     Route::prefix('maintenance')->name('maintenance.')->group(function () {
@@ -932,3 +937,4 @@ Route::middleware(['web', 'auth'])->group(function () {
         Route::delete('rooms/{room}', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'destroy'])->name('rooms.destroy');
     });
 });
+

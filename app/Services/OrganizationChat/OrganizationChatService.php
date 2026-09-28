@@ -7,6 +7,8 @@ use App\Models\ChatMessage;
 use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class OrganizationChatService
@@ -536,4 +538,144 @@ class OrganizationChatService
     {
         return 'org_chat_session:'.$token;
     }
+
+    /**
+     * ส่งคำถามไปยัง Custom LLM ผ่าน Http::post
+     *
+     * @param  string  $message
+     * @param  array<int, mixed>|null  $history
+     * @return array<string, mixed>
+     */
+    public function askCustomLlm(string $message, ?array $history = null): array
+    {
+        $cleanMessage = trim($message);
+
+        // กฎ PDPA: ห้ามตอบชื่อและนามสกุลของผู้ป่วยรายบุคคลเท่านั้น (ตามคำสั่งผู้ใช้)
+        if (preg_match('/(ชื่อ\s*(ผู้ป่วย|คนไข้)|คนไข้\s*ชื่อ|ผู้ป่วย\s*ชื่อ|รายชื่อ\s*(ผู้ป่วย|คนไข้)|คนไข้ชื่อ|ผู้ป่วยชื่อ)/iu', $cleanMessage)) {
+            return [
+                'success' => true,
+                'source' => 'custom_llm',
+                'answer' => 'ขออภัยครับ ระบบไม่สามารถเปิดเผยชื่อ-นามสกุลของผู้ป่วยได้ครับ แต่สามารถสอบถามยอดรวมหรือสถิติภาพรวมได้ครับ',
+            ];
+        }
+
+        $url = config('services.custom_llm.url', env('CUSTOM_LLM_URL', 'http://192.168.0.175:8000/api/chat'));
+        $timeout = (int) config('services.custom_llm.timeout', env('CUSTOM_LLM_TIMEOUT', 60));
+
+        // ตรวจสอบและดึงสถิติจริงจาก HOSxP (Read-Only) มาเป็นบริบทประกอบคำถาม
+        $outgoingMessage = $cleanMessage;
+        try {
+            $statsService = app(\App\Services\HosxpHospitalStatsService::class);
+            $extraContexts = [];
+
+            // 1. ถามเรื่องโรคที่พบบ่อย
+            if (preg_match('/(โรค|วินิจฉัย|diagnosis|disease)/iu', $cleanMessage)) {
+                $snapshot = $statsService->chatSnapshot();
+                $top5 = $snapshot['month']['top5_diseases_opd'] ?? [];
+                if (! empty($top5)) {
+                    $items = [];
+                    foreach ($top5 as $idx => $d) {
+                        $num = $idx + 1;
+                        $items[] = "{$num}. {$d['name']} ({$d['icd10']}) จำนวน {$d['total']} ราย";
+                    }
+                    $extraContexts[] = "สถิติ 5 โรคที่พบบ่อยสุดประจำเดือนนี้ของโรงพยาบาลค่ายสุรสิงหนาท:\n" . implode("\n", $items);
+                }
+            }
+
+            // 2. ถามเรื่องยาที่ใช้เยอะ
+            if (preg_match('/(ยาที่ใช้|ยาที่จ่าย|top.*drug|ยาเยอะ)/iu', $cleanMessage)) {
+                $snapshot = $statsService->chatSnapshot();
+                $topDrugs = array_slice($snapshot['month']['top_drugs'] ?? [], 0, 5);
+                if (! empty($topDrugs)) {
+                    $items = [];
+                    foreach ($topDrugs as $idx => $dr) {
+                        $num = $idx + 1;
+                        $items[] = "{$num}. {$dr['name']} จำนวน {$dr['qty']}";
+                    }
+                    $extraContexts[] = "สถิติยาที่จ่ายมากที่สุดประจำเดือนนี้ของโรงพยาบาลค่ายสุรสิงหนาท:\n" . implode("\n", $items);
+                }
+            }
+
+            // 3. ถามเรื่องยอดผู้ป่วย หรือ สถิติตัวเลข
+            if (preg_match('/(ยอด|สถิติ|จำนวน).*(ผู้ป่วย|คนไข้|visit|opd|er)|ผู้ป่วย.*(วันนี้|นอก|ใน)|คนไข้.*(วันนี้|กี่คน)|ยอดวันนี้/iu', $cleanMessage)) {
+                $today = now()->toDateString();
+                $conn = \Illuminate\Support\Facades\DB::connection('hosxp');
+                $opdCount = $conn->table('ovst')->whereDate('vstdate', $today)->count();
+                $erCount = $conn->table('ovst')->whereDate('vstdate', $today)->where('cur_dep', '003')->count();
+                $extraContexts[] = "สถิติจำนวนผู้ป่วยของโรงพยาบาลค่ายสุรสิงหนาท ณ วันนี้ ({$today}): ผู้ป่วยนอก (OPD) ทั้งหมด {$opdCount} ราย, ผู้ป่วยห้องฉุกเฉิน (ER) ทั้งหมด {$erCount} ราย";
+            }
+
+            if (! empty($extraContexts)) {
+                $contextBlock = implode("\n\n", $extraContexts);
+                $outgoingMessage = "[ข้อมูลจริงจากระบบโรงพยาบาลค่ายสุรสิงหนาท:\n{$contextBlock}]\nคำถามจากผู้ใช้: {$cleanMessage}";
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Failed to query hospital stats for LLM context', ['error' => $e->getMessage()]);
+        }
+
+        try {
+            $payload = [
+                'message' => $outgoingMessage,
+            ];
+            if (! empty($history)) {
+                $payload['history'] = $history;
+            }
+
+            $connectTimeout = (int) config('services.custom_llm.connect_timeout', env('CUSTOM_LLM_CONNECT_TIMEOUT', 4));
+
+            $response = Http::connectTimeout($connectTimeout)->timeout($timeout)->post($url, $payload);
+
+            if (! $response->successful()) {
+                Log::warning('Custom LLM API returned non-200 status', [
+                    'url' => $url,
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
+
+                return [
+                    'success' => false,
+                    'source' => 'custom_llm',
+                    'error' => 'Custom LLM error HTTP '.$response->status(),
+                ];
+            }
+
+            $data = $response->json();
+            $answer = '';
+
+            if (is_array($data)) {
+                $answer = $data['reply']
+                    ?? $data['response']
+                    ?? $data['answer']
+                    ?? $data['message']
+                    ?? (isset($data['choices'][0]['message']['content']) ? $data['choices'][0]['message']['content'] : '')
+                    ?? (isset($data['data']['reply']) ? $data['data']['reply'] : '')
+                    ?? (isset($data['data']['message']) ? $data['data']['message'] : '')
+                    ?? (isset($data['data']['answer']) ? $data['data']['answer'] : '')
+                    ?? '';
+            }
+
+            if ($answer === '' && is_string($response->body())) {
+                $answer = trim($response->body());
+            }
+
+            return [
+                'success' => true,
+                'source' => 'custom_llm',
+                'answer' => $answer ?: 'ไม่มีข้อความตอบกลับจากระบบ LLM',
+                'raw' => $data,
+            ];
+        } catch (\Throwable $e) {
+            Log::warning('Custom LLM request failed', [
+                'url' => $url,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [
+                'success' => false,
+                'source' => 'custom_llm',
+                'error' => 'ไม่สามารถเชื่อมต่อ Custom LLM ได้ ('.$e->getMessage().')',
+            ];
+        }
+    }
 }
+

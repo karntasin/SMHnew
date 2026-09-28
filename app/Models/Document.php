@@ -15,6 +15,8 @@ class Document extends Model
 
     protected $casts = [
         'document_date' => 'date',
+        'due_date' => 'datetime',
+        'escalated_at' => 'datetime',
         'director_signed_at' => 'datetime',
         'archived_at' => 'datetime',
     ];

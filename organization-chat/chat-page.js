@@ -2500,9 +2500,11 @@ function appendAiBubble(kind, text, source) {
   if (kind === 'bot' && source) {
     var tag = document.createElement('span');
     tag.className = 'ai-src';
-    tag.textContent = source === 'webapp'
-      ? 'แหล่งข้อมูล: เว็บแอปเท่านั้น'
-      : (source === 'web' ? 'แหล่งข้อมูล: เว็บสาธารณะ · ไม่ใช้ข้อมูลโรงพยาบาล' : '');
+    tag.textContent = source === 'custom_llm'
+      ? 'แหล่งข้อมูล: Custom LLM (โรงพยาบาล)'
+      : (source === 'webapp'
+        ? 'แหล่งข้อมูล: เว็บแอปเท่านั้น'
+        : (source === 'web' ? 'แหล่งข้อมูล: เว็บสาธารณะ · ไม่ใช้ข้อมูลโรงพยาบาล' : ''));
     if (tag.textContent) div.appendChild(tag);
   }
   log.appendChild(div);

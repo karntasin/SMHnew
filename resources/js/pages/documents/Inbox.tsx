@@ -113,6 +113,7 @@ export default function Inbox({ transfers, filters, stats }: Props) {
                             <TableHead>เรื่อง</TableHead>
                             <TableHead>จาก</TableHead>
                             <TableHead>ส่งเมื่อ</TableHead>
+                            <TableHead>กำหนดส่ง</TableHead>
                             <TableHead className="text-right">ดำเนินการ</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -137,6 +138,13 @@ export default function Inbox({ transfers, filters, stats }: Props) {
                                     <TableCell className="text-slate-500">{row.sender?.name || '-'}</TableCell>
                                     <TableCell className="text-slate-500">
                                         {new Date(row.created_at).toLocaleString('th-TH')}
+                                    </TableCell>
+                                    <TableCell>
+                                        {row.document?.due_date ? (
+                                            <span className={new Date(row.document.due_date) < new Date() ? 'text-red-500 font-semibold' : 'text-slate-500'}>
+                                                {new Date(row.document.due_date).toLocaleDateString('th-TH')}
+                                            </span>
+                                        ) : '-'}
                                     </TableCell>
                                     <TableCell className="space-x-2 text-right">
                                         {row.document?.id && (

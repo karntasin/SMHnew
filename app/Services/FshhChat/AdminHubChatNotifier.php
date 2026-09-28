@@ -46,15 +46,25 @@ class AdminHubChatNotifier
             'completed' => 'หนังสือดำเนินการเสร็จสิ้น',
         ];
 
+        $fields = [
+            'เลขที่' => $document->document_number ?: '-',
+            'เรื่อง' => $document->title,
+            'ผู้ดำเนินการ' => $actorName ?: 'ระบบ',
+            'แผนก' => $department->name,
+        ];
+
+        if ($document->due_date) {
+            try {
+                $fields['กำหนดส่ง'] = \Carbon\Carbon::parse($document->due_date)->format('d/m/Y H:i');
+            } catch (\Throwable) {
+                $fields['กำหนดส่ง'] = (string) $document->due_date;
+            }
+        }
+
         $this->chat->notifyCard(
             $department,
             $titles[$action] ?? 'แจ้งเตือนหนังสือ',
-            [
-                'เลขที่' => $document->document_number,
-                'เรื่อง' => $document->title,
-                'ผู้ดำเนินการ' => $actorName,
-                'แผนก' => $department->name,
-            ],
+            $fields,
             in_array($action, ['reject', 'return_origin'], true) ? '#EF4444' : '#8B5CF6',
             in_array($action, ['reject', 'return_origin'], true) ? 'เร่งด่วน' : '',
         );
