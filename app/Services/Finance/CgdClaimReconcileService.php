@@ -209,6 +209,100 @@ class CgdClaimReconcileService
     }
 
     /**
+     * เปรียบเทียบข้อมูลเรียกเก็บ STM กับ ชดเชยสุทธิ และ HOSxP ตามช่วงวันที่มารับบริการ (Visit Date)
+     * ไม่ต้องสนใจชุด ดึงเฉพาะข้อมูลที่ผู้ป่วยมารับบริการในช่วงวันที่ระบุเท่านั้น
+     */
+    public function reconcileByVisitDateRange(
+        string $startDate,
+        string $endDate,
+        string $pttypeLike = '12%',
+        array $excludeDeps = ['021'],
+    ): CgdReconciliation {
+        $this->prepareHeavyCompare();
+        [$startDate, $endDate] = $this->normalizeDateRange($startDate, $endDate);
+
+        $stmRows = $this->loadStmRowsForVisitDateRange($startDate, $endDate);
+        $built = $this->buildComparison($stmRows, $startDate, $endDate, $pttypeLike, $excludeDeps);
+
+        $repNos = $stmRows->pluck('rep_no')->filter()->unique()->values()->all();
+        $built = $this->enrichWithRepErrors($built, $repNos, null, null);
+
+        return DB::transaction(function () use ($startDate, $endDate, $pttypeLike, $excludeDeps, $built) {
+            CgdReconciliation::query()
+                ->where('scope', 'compare_range')
+                ->where('start_date', $startDate)
+                ->where('end_date', $endDate)
+                ->each(function (CgdReconciliation $old) {
+                    $old->items()->delete();
+                    $old->delete();
+                });
+
+            return $this->persistReconciliation(
+                batchId: null,
+                stmImportId: null,
+                claimSubmissionNo: null,
+                scope: 'compare_range',
+                startDate: $startDate,
+                endDate: $endDate,
+                pttypeLike: $pttypeLike,
+                excludeDeps: $excludeDeps,
+                built: $built,
+            );
+        });
+    }
+
+    /**
+     * ดึงแถว STM เฉพาะที่ผู้ป่วยมารับบริการในช่วงวันที่ระบุ (visit_date)
+     * ไม่ต้องสนใจชุด — รวมแถว STM เป็น Data Pool เดียวกัน
+     * หากมี SEQ / match_key เดียวกัน ให้ใช้ข้อมูลจากชุด/แถวที่นำเข้าล่าสุด
+     *
+     * @return Collection<int, StmDetailRow>
+     */
+    public function loadStmRowsForVisitDateRange(string $startDate, string $endDate): Collection
+    {
+        $map = [];
+        StmDetailRow::query()
+            ->select([
+                'id',
+                'import_id',
+                'claim_submission_no',
+                'rep_no',
+                'hn',
+                'pid',
+                'patient_name',
+                'visit_date',
+                'visit_at',
+                'amount_claim',
+                'amount_approved',
+                'amount_drug',
+                'amount_organ',
+                'amount_treat',
+                'seq_no',
+                'match_key',
+            ])
+            ->where(function ($q) use ($startDate, $endDate) {
+                $q->whereBetween('visit_date', [$startDate, $endDate])
+                    ->orWhere(function ($sub) use ($startDate, $endDate) {
+                        $sub->whereNull('visit_date')
+                            ->whereDate('visit_at', '>=', $startDate)
+                            ->whereDate('visit_at', '<=', $endDate);
+                    });
+            })
+            ->orderBy('id')
+            ->chunkById(1000, function (Collection $chunk) use (&$map) {
+                foreach ($chunk as $row) {
+                    $key = $row->match_key ?: CgdClaimMatchKey::make($row->hn, $row->pid, $row->seq_no);
+                    if ($key === '' || $key === '||') {
+                        continue;
+                    }
+                    $map[$key] = $row;
+                }
+            });
+
+        return collect(array_values($map));
+    }
+
+    /**
      * @return Collection<int, CgdStmRow>
      */
     public function loadAllUniqueRepRows(string $scheme = ClaimScheme::CGD): Collection
@@ -301,8 +395,10 @@ class CgdClaimReconcileService
      */
     public function allStmDateRange(): array
     {
-        $min = StmImport::query()->whereNotNull('visit_date_min')->min('visit_date_min');
-        $max = StmImport::query()->whereNotNull('visit_date_max')->max('visit_date_max');
+        $min = StmDetailRow::query()->whereNotNull('visit_date')->min('visit_date')
+            ?: StmImport::query()->whereNotNull('visit_date_min')->min('visit_date_min');
+        $max = StmDetailRow::query()->whereNotNull('visit_date')->max('visit_date')
+            ?: StmImport::query()->whereNotNull('visit_date_max')->max('visit_date_max');
 
         return [
             $min ? (string) $min : null,

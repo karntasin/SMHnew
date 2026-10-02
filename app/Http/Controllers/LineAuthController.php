@@ -236,7 +236,7 @@ class LineAuthController extends Controller
     private function syncFshhChat(User $user): void
     {
         try {
-            app(FshhChatSyncService::class)->syncUser($user->fresh(['departments']) ?? $user);
+            app(FshhChatSyncService::class)->syncUser($user->fresh(['departments', 'haTeams']) ?? $user);
         } catch (\Throwable $e) {
             Log::warning('FSHH Chat sync after LINE login failed: '.$e->getMessage());
         }

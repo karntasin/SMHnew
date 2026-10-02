@@ -124,59 +124,215 @@ class FinanceCgdClaimController extends Controller
 
     public function showSummary(Request $request): Response|\Illuminate\Http\RedirectResponse
     {
-        $reconciliation = CgdReconciliation::query()
-            ->where('scope', 'stm_all')
-            ->latest()
-            ->first();
+        return $this->compareIndex($request);
+    }
 
-        if (! $reconciliation) {
+    public function reconcileCompare(Request $request)
+    {
+        @ini_set('memory_limit', '512M');
+        @set_time_limit(300);
+
+        $data = $request->validate([
+            'start_date' => ['required', 'date'],
+            'end_date' => ['required', 'date', 'after_or_equal:start_date'],
+            'pttype_like' => ['nullable', 'string', 'max:32'],
+        ]);
+
+        try {
+            $reconciliation = $this->reconciler->reconcileByVisitDateRange(
+                $data['start_date'],
+                $data['end_date'],
+                $data['pttype_like'] ?? '12%',
+            );
+        } catch (\Throwable $e) {
+            report($e);
+
             return redirect()
-                ->route('finance.cgd.dashboard')
-                ->with('error', 'ยังไม่มีผลการเปรียบเทียบรวม — กรุณาเลือกช่วงวันที่แล้วกดเปรียบเทียบก่อน');
+                ->route('finance.cgd.compare', [
+                    'start_date' => $data['start_date'],
+                    'end_date' => $data['end_date'],
+                ])
+                ->with('error', $this->compareErrorMessage($e));
         }
 
+        $range = date('d/m/Y', strtotime($data['start_date'])).' - '.date('d/m/Y', strtotime($data['end_date']));
+
+        return redirect()
+            ->route('finance.cgd.compare', [
+                'start_date' => $data['start_date'],
+                'end_date' => $data['end_date'],
+            ])
+            ->with(
+                'success',
+                "เปรียบเทียบข้อมูลเรียกเก็บ STM กับชดเชยสุทธิและ HOSxP เรียบร้อยแล้ว · ช่วงวันที่รับบริการ {$range} · ยอดขาด ".number_format((float) $reconciliation->total_shortfall, 2).' บาท'
+            );
+    }
+
+    public function compareIndex(Request $request): Response
+    {
+        $startDate = $request->query('start_date');
+        $startDate = is_string($startDate) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $startDate) ? $startDate : null;
+        $endDate = $request->query('end_date');
+        $endDate = is_string($endDate) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $endDate) ? $endDate : null;
+
+        [$stmMin, $stmMax] = $this->reconciler->allStmDateRange();
+
+        $reconciliation = null;
+        if ($startDate && $endDate) {
+            $reconciliation = CgdReconciliation::query()
+                ->where('scope', 'compare_range')
+                ->where('start_date', $startDate)
+                ->where('end_date', $endDate)
+                ->latest()
+                ->first();
+
+            if (! $reconciliation && $this->hosxp->available()) {
+                try {
+                    $reconciliation = $this->reconciler->reconcileByVisitDateRange($startDate, $endDate);
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+            }
+        }
+
+        if (! $reconciliation) {
+            $reconciliation = CgdReconciliation::query()
+                ->whereIn('scope', ['compare_range', 'stm_all'])
+                ->latest()
+                ->first();
+            if ($reconciliation && ! $startDate && ! $endDate) {
+                $startDate = $reconciliation->start_date ? $reconciliation->start_date->toDateString() : null;
+                $endDate = $reconciliation->end_date ? $reconciliation->end_date->toDateString() : null;
+            }
+        }
+
+        $validStatuses = array_merge(
+            array_keys($this->statusLabels()),
+            ['pair_diff', 'pair_a', 'pair_b', 'pair_both']
+        );
         $status = $request->query('status');
-        $status = is_string($status) && isset($this->statusLabels()[$status]) ? $status : null;
+        $status = is_string($status) && in_array($status, $validStatuses, true) ? $status : null;
+        if (! $request->has('status')) {
+            $status = 'pair_diff';
+        }
         $search = trim((string) $request->query('q', ''));
         $month = $this->normalizeMonthFilter($request->query('month'));
         $errorCode = $this->normalizeErrorFilter($request->query('error_code'));
         $amount = $this->normalizeAmountFilter($request->query('amount'));
+        $validCompareKeys = ['hosxp_matched', 'hosxp_all', 'stm_matched', 'stm_all', 'matched_short', 'only_hosxp', 'hosxp_paid'];
+        $compareA = $request->query('compare_a', 'hosxp_all');
+        $compareB = $request->query('compare_b', 'stm_all');
+        if (! in_array($compareA, $validCompareKeys, true)) {
+            $compareA = 'hosxp_all';
+        }
+        if (! in_array($compareB, $validCompareKeys, true)) {
+            $compareB = 'stm_all';
+        }
 
-        $monthly = $this->monthlyBreakdown($reconciliation, $status, $search, null, $amount);
+        if (! $reconciliation) {
+            return Inertia::render('Finance/CgdClaim/Summary', [
+                'hosxpReady' => $this->hosxp->available(),
+                'reconciliation' => null,
+                'monthly' => [],
+                'items' => [
+                    'data' => [],
+                    'links' => [],
+                    'total' => 0,
+                    'from' => null,
+                    'to' => null,
+                    'current_page' => 1,
+                    'last_page' => 1,
+                    'per_page' => 0,
+                ],
+                'filterTotals' => null,
+                'statusCounts' => [
+                    'matched_ok' => 0,
+                    'matched_short' => 0,
+                    'matched_over' => 0,
+                    'only_hosxp' => 0,
+                    'only_stm' => 0,
+                    'stm_out_of_range' => 0,
+                    'mismatched' => 0,
+                    'amount_diff' => 0,
+                    'pair_diff' => 0,
+                ],
+                'repErrors' => [],
+                'errorOptions' => [],
+                'amountOptions' => [],
+                'errorCodeMeanings' => [],
+                'errorCodeSource' => EclaimErrorCodes::sourceUrl(),
+                'importCount' => StmImport::count(),
+                'stmRange' => [
+                    'min' => $stmMin,
+                    'max' => $stmMax,
+                    'row_count' => (int) StmImport::sum('detail_count'),
+                ],
+                'filters' => [
+                    'start_date' => $startDate ?: $stmMin,
+                    'end_date' => $endDate ?: $stmMax,
+                    'status' => $status,
+                    'q' => $search,
+                    'month' => $month,
+                    'error_code' => $errorCode,
+                    'amount' => $amount,
+                    'compare_a' => $compareA,
+                    'compare_b' => $compareB,
+                    'per_page' => $this->normalizePerPage($request->query('per_page')),
+                    'page' => max(1, (int) $request->query('page', 1)),
+                ],
+                'statusOptions' => $this->statusLabels(),
+                'amountLabels' => $this->amountFilterLabels(),
+                'isComparePage' => true,
+            ]);
+        }
+
+        $monthly = $this->monthlyBreakdown($reconciliation, $status, $search, null, $amount, $startDate, $endDate);
         if ($month && ! collect($monthly)->contains(fn ($row) => $row['month'] === $month)) {
             $month = null;
         }
 
-        $errorOptions = $this->errorCodeOptions($reconciliation, $status, $search, $month, $amount);
+        $errorOptions = $this->errorCodeOptions($reconciliation, $status, $search, $month, $amount, $startDate, $endDate);
         if ($errorCode && $errorCode !== '__has_error__' && $errorCode !== '__none__'
             && ! collect($errorOptions)->contains(fn ($opt) => $opt['value'] === $errorCode)) {
             $errorCode = null;
         }
 
         if ($errorCode) {
-            $monthly = $this->monthlyBreakdown($reconciliation, $status, $search, $errorCode, $amount);
+            $monthly = $this->monthlyBreakdown($reconciliation, $status, $search, $errorCode, $amount, $startDate, $endDate);
             if ($month && ! collect($monthly)->contains(fn ($row) => $row['month'] === $month)) {
                 $month = null;
-                $errorOptions = $this->errorCodeOptions($reconciliation, $status, $search, null, $amount);
+                $errorOptions = $this->errorCodeOptions($reconciliation, $status, $search, null, $amount, $startDate, $endDate);
             }
         }
 
-        $amountOptions = $this->amountFilterOptions($reconciliation, $status, $search, $month, $errorCode);
+        $amountScopeStatus = in_array($status, ['pair_a', 'pair_b'], true) ? $status : 'pair_both';
+        $amountOptions = $this->amountFilterOptions(
+            $reconciliation,
+            $amountScopeStatus,
+            $search,
+            $month,
+            $errorCode,
+            $startDate,
+            $endDate,
+            $compareA,
+            $compareB,
+        );
         if ($amount && ! collect($amountOptions)->contains(fn ($opt) => $opt['value'] === $amount)) {
             $amount = null;
         }
 
-        $filteredBase = $this->filteredReconcileItems($reconciliation, $status, $search, $month, $errorCode, $amount);
+        $filteredBase = $this->filteredReconcileItems($reconciliation, $status, $search, $month, $errorCode, $amount, $startDate, $endDate, $compareA, $compareB);
         $filterTotals = $this->aggregateFilterTotals($filteredBase);
-        $statusCounts = $this->statusCounts($reconciliation, $search, $month, $errorCode, $amount);
+        $statusCounts = $this->statusCounts($reconciliation, $search, $month, $errorCode, $amount, $startDate, $endDate, $compareA, $compareB);
         $query = (clone $filteredBase)
             ->orderByRaw("FIELD(status,'matched_short','only_hosxp','only_stm','stm_out_of_range','matched_over','matched_ok')");
-        if ($amount) {
+        if ($amount || $status === 'amount_diff' || $status === 'pair_diff') {
             $net = $this->hosxpNetSql();
             $query->orderByRaw("ABS(({$net}) - COALESCE(stm_claim, 0)) DESC");
         }
         $query
             ->orderByDesc('shortfall')
+            ->orderBy('visit_date')
             ->orderBy('hn')
             ->orderBy('seq_no');
         $items = $this->paginateReconcileItems($query, $request);
@@ -217,17 +373,27 @@ class FinanceCgdClaimController extends Controller
             'errorCodeMeanings' => EclaimErrorCodes::tooltipMap($usedErrorCodes),
             'errorCodeSource' => EclaimErrorCodes::sourceUrl(),
             'importCount' => StmImport::count(),
+            'stmRange' => [
+                'min' => $stmMin,
+                'max' => $stmMax,
+                'row_count' => (int) StmImport::sum('detail_count'),
+            ],
             'filters' => [
+                'start_date' => $startDate ?: optional($reconciliation->start_date)->toDateString() ?: $stmMin,
+                'end_date' => $endDate ?: optional($reconciliation->end_date)->toDateString() ?: $stmMax,
                 'status' => $status,
                 'q' => $search,
                 'month' => $month,
                 'error_code' => $errorCode,
                 'amount' => $amount,
+                'compare_a' => $compareA,
+                'compare_b' => $compareB,
                 'per_page' => $this->normalizePerPage($request->query('per_page')),
                 'page' => max(1, (int) $request->query('page', 1)),
             ],
             'statusOptions' => $this->statusLabels(),
             'amountLabels' => $this->amountFilterLabels(),
+            'isComparePage' => true,
         ]);
     }
 
@@ -303,18 +469,21 @@ class FinanceCgdClaimController extends Controller
         $data = $request->validate([
             'notes' => ['nullable', 'string', 'max:1000'],
             'auto_reconcile' => ['nullable', 'boolean'],
+            'skip_existing' => ['nullable', 'boolean'],
             // 0 = ดาวน์โหลดทุกไฟล์ในครั้งเดียว
             'batch_size' => ['nullable', 'integer', 'min:0', 'max:500'],
         ]);
 
         $batchSize = (int) ($data['batch_size'] ?? 5);
+        $skipExisting = $request->has('skip_existing') ? $request->boolean('skip_existing') : true;
         $this->extendNhsoRuntime($batchSize <= 0 ? 1800 : 600);
 
         try {
             $result = $this->nhsoPortal->downloadAndImport(
                 $this->importer,
                 $data['notes'] ?? null,
-                $batchSize
+                $batchSize,
+                $skipExisting
             );
         } catch (\Throwable $e) {
             throw ValidationException::withMessages([
@@ -342,12 +511,33 @@ class FinanceCgdClaimController extends Controller
 
         $created = collect($result['imported'])->where('updated', false)->count();
         $updated = collect($result['imported'])->where('updated', true)->count();
+        $flashMsg = $result['message'];
+        if ($created > 0 || $updated > 0) {
+            $flashMsg .= " · นำเข้าใหม่ {$created} · อัปเดต {$updated}";
+        }
 
         return redirect()
             ->route('finance.cgd.import')
-            ->with('success', $result['message']." · ใหม่ {$created} · อัปเดต {$updated}")
+            ->with('success', $flashMsg)
             ->with('import_failures', $result['failures'])
             ->with('nhso_status', 'done');
+    }
+
+    public function nhsoScan(Request $request)
+    {
+        $this->extendNhsoRuntime(120);
+
+        try {
+            $summary = $this->nhsoPortal->scanFiles();
+        } catch (\Throwable $e) {
+            throw ValidationException::withMessages([
+                'nhso' => 'ตรวจสอบรายการไฟล์ไม่สำเร็จ: '.$e->getMessage(),
+            ]);
+        }
+
+        return redirect()
+            ->route('finance.cgd.import')
+            ->with('success', "ตรวจสอบรายการไฟล์สำเร็จ: พบ {$summary['allowed_files']} ไฟล์ (ใหม่ {$summary['new_files']} ไฟล์, เคยดาวน์โหลดแล้ว {$summary['existing_files']} ไฟล์)");
     }
 
     public function nhsoClearSession()
@@ -1134,27 +1324,320 @@ class FinanceCgdClaimController extends Controller
 
     public function exportSummaryExcel(Request $request): StreamedResponse
     {
-        $reconciliation = CgdReconciliation::query()->where('scope', 'stm_all')->latest()->firstOrFail();
+        $startDate = $request->query('start_date');
+        $startDate = is_string($startDate) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $startDate) ? $startDate : null;
+        $endDate = $request->query('end_date');
+        $endDate = is_string($endDate) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $endDate) ? $endDate : null;
+
+        $reconciliation = null;
+        if ($startDate && $endDate) {
+            $reconciliation = CgdReconciliation::query()
+                ->where('scope', 'compare_range')
+                ->where('start_date', $startDate)
+                ->where('end_date', $endDate)
+                ->latest()
+                ->first();
+
+            if (! $reconciliation && $this->hosxp->available()) {
+                try {
+                    $reconciliation = $this->reconciler->reconcileByVisitDateRange($startDate, $endDate);
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+            }
+        }
+
+        if (! $reconciliation) {
+            $reconciliation = CgdReconciliation::query()
+                ->whereIn('scope', ['compare_range', 'stm_all'])
+                ->latest()
+                ->firstOrFail();
+        }
+
+        $docLabel = ($startDate && $endDate)
+            ? 'เปรียบเทียบ '.date('d/m/Y', strtotime($startDate)).' - '.date('d/m/Y', strtotime($endDate))
+            : 'เปรียบเทียบข้อมูล STM กับ HOSxP';
 
         return $this->streamCgdExcelReport(
             $request,
             $reconciliation,
-            'สรุปทุกชุด STM',
-            'สรุปเปรียบเทียบทุกชุด STM กับ HOSxP',
+            $docLabel,
+            'สรุปเปรียบเทียบข้อมูลเรียกเก็บ STM กับ ชดเชยสุทธิ และ HOSxP ตามวันที่มารับบริการ',
             null,
         );
     }
 
     public function exportSummaryPdf(Request $request)
     {
-        $reconciliation = CgdReconciliation::query()->where('scope', 'stm_all')->latest()->firstOrFail();
+        $startDate = $request->query('start_date');
+        $startDate = is_string($startDate) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $startDate) ? $startDate : null;
+        $endDate = $request->query('end_date');
+        $endDate = is_string($endDate) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $endDate) ? $endDate : null;
+
+        $reconciliation = null;
+        if ($startDate && $endDate) {
+            $reconciliation = CgdReconciliation::query()
+                ->where('scope', 'compare_range')
+                ->where('start_date', $startDate)
+                ->where('end_date', $endDate)
+                ->latest()
+                ->first();
+
+            if (! $reconciliation && $this->hosxp->available()) {
+                try {
+                    $reconciliation = $this->reconciler->reconcileByVisitDateRange($startDate, $endDate);
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+            }
+        }
+
+        if (! $reconciliation) {
+            $reconciliation = CgdReconciliation::query()
+                ->whereIn('scope', ['compare_range', 'stm_all'])
+                ->latest()
+                ->firstOrFail();
+        }
+
+        $docLabel = ($startDate && $endDate)
+            ? 'เปรียบเทียบ '.date('d/m/Y', strtotime($startDate)).' - '.date('d/m/Y', strtotime($endDate))
+            : 'เปรียบเทียบข้อมูล STM กับ HOSxP';
 
         return $this->downloadCgdPdfReport(
             $request,
             $reconciliation,
-            'สรุปทุกชุด STM',
+            $docLabel,
             null,
         );
+    }
+
+    public function exportPairwisePdf(Request $request)
+    {
+        @ini_set('memory_limit', '1024M');
+        @set_time_limit(300);
+
+        $startDate = $request->query('start_date');
+        $startDate = is_string($startDate) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $startDate) ? $startDate : null;
+        $endDate = $request->query('end_date');
+        $endDate = is_string($endDate) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $endDate) ? $endDate : null;
+
+        $compareA = $request->query('compare_a', 'hosxp_matched');
+        $compareB = $request->query('compare_b', 'stm_matched');
+
+        $labels = $this->statusLabels();
+        $validKeys = ['hosxp_matched', 'hosxp_all', 'stm_matched', 'stm_all', 'matched_short', 'only_hosxp', 'hosxp_paid'];
+        if (! in_array($compareA, $validKeys, true)) {
+            $compareA = 'hosxp_matched';
+        }
+        if (! in_array($compareB, $validKeys, true)) {
+            $compareB = 'stm_matched';
+        }
+
+        $reconciliation = null;
+        if ($startDate && $endDate) {
+            $reconciliation = CgdReconciliation::query()
+                ->where('scope', 'compare_range')
+                ->where('start_date', $startDate)
+                ->where('end_date', $endDate)
+                ->latest()
+                ->first();
+
+            if (! $reconciliation && $this->hosxp->available()) {
+                try {
+                    $reconciliation = $this->reconciler->reconcileByVisitDateRange($startDate, $endDate);
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+            }
+        }
+
+        if (! $reconciliation) {
+            $reconciliation = CgdReconciliation::query()
+                ->whereIn('scope', ['compare_range', 'stm_all'])
+                ->latest()
+                ->firstOrFail();
+        }
+
+        $allItems = $reconciliation->items()
+            ->when($startDate, fn ($q) => $q->whereDate('visit_date', '>=', $startDate))
+            ->when($endDate, fn ($q) => $q->whereDate('visit_date', '<=', $endDate))
+            ->get();
+
+        $summary = $this->summarizeExportItems($allItems);
+
+        $metricData = function (string $key) use ($summary, $labels) {
+            return match ($key) {
+                'hosxp_matched' => [
+                    'no' => 1,
+                    'key' => 'hosxp_matched',
+                    'label' => '1. HOSxP (SEQ ตรง) สิทธิจ่าย(12)',
+                    'short_label' => 'HOSxP (SEQ ตรง)',
+                    'count' => (int) ($summary['hosxp_matched_count'] ?? 0),
+                    'gross' => (float) ($summary['total_hosxp_net'] ?? 0),
+                    'net' => (float) ($summary['total_hosxp_net'] ?? 0),
+                    'sub_label' => 'ชำระเอง '.number_format((float) ($summary['total_hosxp_paid'] ?? 0), 2).' ฿ (ก่อนหัก '.number_format((float) ($summary['total_hosxp'] ?? 0), 2).' ฿)',
+                    'sub_value' => (float) ($summary['total_hosxp_paid'] ?? 0),
+                ],
+                'hosxp_all' => [
+                    'no' => 2,
+                    'key' => 'hosxp_all',
+                    'label' => '2. HOSxP ข้อมูลตามวันที่ผู้ป่วยมารับบริการ สิทธิจ่าย(12)',
+                    'short_label' => 'HOSxP วันที่รับบริการ',
+                    'count' => (int) ($summary['hosxp_all_count'] ?? 0),
+                    'gross' => (float) ($summary['total_hosxp_all_net'] ?? 0),
+                    'net' => (float) ($summary['total_hosxp_all_net'] ?? 0),
+                    'sub_label' => 'ชำระเอง '.number_format((float) ($summary['total_hosxp_all_paid'] ?? 0), 2).' ฿ (ก่อนหัก '.number_format((float) ($summary['total_hosxp_all'] ?? 0), 2).' ฿)',
+                    'sub_value' => (float) ($summary['total_hosxp_all_paid'] ?? 0),
+                ],
+                'stm_matched' => [
+                    'no' => 3,
+                    'key' => 'stm_matched',
+                    'label' => '3. STM (SEQ ตรง)',
+                    'short_label' => 'STM (SEQ ตรง)',
+                    'count' => (int) ($summary['stm_matched_count'] ?? 0),
+                    'gross' => (float) ($summary['total_stm_claim_matched'] ?? 0),
+                    'net' => (float) ($summary['total_stm_approved_matched'] ?? 0),
+                    'sub_label' => 'ชดเชยสุทธิ',
+                    'sub_value' => (float) ($summary['total_stm_approved_matched'] ?? 0),
+                ],
+                'stm_all' => [
+                    'no' => 4,
+                    'key' => 'stm_all',
+                    'label' => '4. STM ข้อมูลตามวันที่ผู้ป่วยมารับบริการ',
+                    'short_label' => 'STM วันที่รับบริการ',
+                    'count' => (int) ($summary['stm_all_count'] ?? 0),
+                    'gross' => (float) ($summary['total_claim'] ?? 0),
+                    'net' => (float) ($summary['total_approved'] ?? 0),
+                    'sub_label' => 'ชดเชยสุทธิ',
+                    'sub_value' => (float) ($summary['total_approved'] ?? 0),
+                ],
+                'matched_short' => [
+                    'no' => 5,
+                    'key' => 'matched_short',
+                    'label' => '5. ยอดขาด',
+                    'short_label' => 'ยอดขาด',
+                    'count' => (int) ($summary['shortfall_count'] ?? 0),
+                    'gross' => (float) ($summary['total_shortfall'] ?? 0),
+                    'net' => (float) ($summary['total_shortfall'] ?? 0),
+                    'sub_label' => 'เรียกเก็บ − ชดเชย',
+                    'sub_value' => (float) ($summary['total_shortfall'] ?? 0),
+                ],
+                'only_hosxp' => [
+                    'no' => 6,
+                    'key' => 'only_hosxp',
+                    'label' => '6. HOSxP ไม่มี SEQ ตรง หลังหัก Payment สิทธิจ่าย(12)',
+                    'short_label' => 'HOSxP ไม่มี SEQ ตรง',
+                    'count' => (int) ($summary['only_hosxp_count'] ?? 0),
+                    'gross' => (float) ($summary['total_hosxp_unmatched_net'] ?? 0),
+                    'net' => (float) ($summary['total_hosxp_unmatched_net'] ?? 0),
+                    'sub_label' => 'ชำระเอง '.number_format((float) ($summary['total_hosxp_unmatched_paid'] ?? 0), 2).' ฿ (ก่อนหัก '.number_format((float) ($summary['total_hosxp_unmatched'] ?? 0), 2).' ฿)',
+                    'sub_value' => (float) ($summary['total_hosxp_unmatched_paid'] ?? 0),
+                ],
+                'hosxp_paid' => [
+                    'no' => 7,
+                    'key' => 'hosxp_paid',
+                    'label' => '7. ยอดชำระเอง (Payment) ใน HOSxP สิทธิจ่าย(12)',
+                    'short_label' => 'ยอดชำระเอง (Payment)',
+                    'count' => (int) ($summary['hosxp_paid_count'] ?? 0),
+                    'gross' => (float) ($summary['total_hosxp_all_paid'] ?? 0),
+                    'net' => (float) ($summary['total_hosxp_all_paid'] ?? 0),
+                    'sub_label' => 'ผู้ป่วยชำระเงินเอง',
+                    'sub_value' => (float) ($summary['total_hosxp_all_paid'] ?? 0),
+                ],
+                default => [
+                    'no' => 0,
+                    'key' => $key,
+                    'label' => $labels[$key] ?? $key,
+                    'short_label' => $labels[$key] ?? $key,
+                    'count' => 0,
+                    'gross' => 0.0,
+                    'net' => 0.0,
+                    'sub_label' => '',
+                    'sub_value' => 0.0,
+                ],
+            };
+        };
+
+        $dataA = $metricData($compareA);
+        $dataB = $metricData($compareB);
+
+        $deltaCount = $dataA['count'] - $dataB['count'];
+        $deltaGross = round($dataA['gross'] - $dataB['gross'], 2);
+        $deltaNet = round($dataA['net'] - $dataB['net'], 2);
+
+        $detailItems = $this->resolvePairwiseDetailItems($reconciliation, $compareA, $compareB, $startDate, $endDate);
+
+        $setting = SettingApp::query()->first();
+        [$fontRegularUri, $fontBoldUri] = $this->pdf->fontUris();
+
+        $html = view('finance.cgd-claim-pair-report-pdf', [
+            'hospitalName' => $setting->nama_app ?? 'โรงพยาบาล',
+            'docLabel' => ($startDate && $endDate)
+                ? 'เปรียบเทียบ '.date('d/m/Y', strtotime($startDate)).' - '.date('d/m/Y', strtotime($endDate))
+                : 'เปรียบเทียบข้อมูล STM กับ HOSxP',
+            'reconciliation' => $reconciliation,
+            'compareA' => $dataA,
+            'compareB' => $dataB,
+            'deltaCount' => $deltaCount,
+            'deltaGross' => $deltaGross,
+            'deltaNet' => $deltaNet,
+            'items' => $detailItems,
+            'summary' => $summary,
+            'startDateFilter' => $startDate,
+            'endDateFilter' => $endDate,
+            'fontRegularUri' => $fontRegularUri,
+            'fontBoldUri' => $fontBoldUri,
+            'generatedAt' => now()->format('d/m/Y H:i'),
+        ])->render();
+
+        $binary = $this->pdf->render($html, 'landscape');
+        $filename = 'CGD_Pairwise_'.$compareA.'_VS_'.$compareB.'_'.now()->format('Ymd_His').'.pdf';
+
+        return response($binary, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+        ]);
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, \App\Models\Finance\CgdReconcileItem>
+     */
+    protected function resolvePairwiseDetailItems(
+        CgdReconciliation $reconciliation,
+        string $compareA,
+        string $compareB,
+        ?string $startDate,
+        ?string $endDate
+    ): Collection {
+        $query = $reconciliation->items();
+
+        if ($startDate) {
+            $query->whereDate('visit_date', '>=', $startDate);
+        }
+        if ($endDate) {
+            $query->whereDate('visit_date', '<=', $endDate);
+        }
+
+        if ($compareA === 'hosxp_paid' || $compareB === 'hosxp_paid') {
+            $query->where('status', '!=', 'only_stm')->where('hosxp_paid', '>', 0)->orderByDesc('hosxp_paid');
+        } elseif ($compareA === 'matched_short' || $compareB === 'matched_short') {
+            $query->where('status', 'matched_short')->orderByDesc('shortfall');
+        } elseif ($compareA === 'only_hosxp' || $compareB === 'only_hosxp') {
+            $query->where('status', 'only_hosxp')->orderByDesc('hosxp_total');
+        } elseif (($compareA === 'hosxp_matched' && $compareB === 'stm_matched') || ($compareA === 'stm_matched' && $compareB === 'hosxp_matched')) {
+            $query->whereIn('status', ['matched_short', 'matched_over', 'matched_ok'])
+                ->orderByRaw("CASE WHEN status = 'matched_short' THEN 1 WHEN status = 'matched_over' THEN 2 ELSE 3 END")
+                ->orderByDesc('shortfall');
+        } elseif (($compareA === 'hosxp_all' && $compareB === 'stm_all') || ($compareA === 'stm_all' && $compareB === 'hosxp_all')) {
+            $query->whereIn('status', ['only_hosxp', 'only_stm', 'matched_short', 'matched_over'])
+                ->orderByRaw("FIELD(status, 'matched_short', 'only_hosxp', 'only_stm', 'matched_over')")
+                ->orderByDesc('shortfall');
+        } else {
+            $query->orderByRaw("FIELD(status, 'matched_short', 'only_hosxp', 'only_stm', 'matched_over', 'matched_ok')")
+                ->orderByDesc('shortfall');
+        }
+
+        return $query->orderBy('visit_date')->take(100)->get();
     }
 
     public function exportStmCompareExcel(Request $request, StmImport $stm): StreamedResponse
@@ -1189,16 +1672,16 @@ class FinanceCgdClaimController extends Controller
         string $title,
         ?CgdStmBatch $batch,
     ): StreamedResponse {
-        [$status, $search, $statusLabel, $month, $monthLabel, $errorCode, $errorLabel, $amount, $amountLabel] = $this->resolveExportFilters($request);
+        [$status, $search, $statusLabel, $month, $monthLabel, $errorCode, $errorLabel, $amount, $amountLabel, $startDate, $endDate] = $this->resolveExportFilters($request);
 
-        $items = $this->filteredReconcileItems($reconciliation, $status, $search, $month, $errorCode, $amount)
+        $items = $this->filteredReconcileItems($reconciliation, $status, $search, $month, $errorCode, $amount, $startDate, $endDate)
             ->orderByRaw("FIELD(status,'matched_short','only_hosxp','only_stm','stm_out_of_range','matched_over','matched_ok')")
             ->orderBy('visit_date')
             ->orderByDesc('shortfall')
             ->get();
 
         $summary = $this->summarizeExportItems($items);
-        $monthly = $this->monthlyBreakdown($reconciliation, $status, $search, $errorCode, $amount);
+        $monthly = $this->monthlyBreakdown($reconciliation, $status, $search, $errorCode, $amount, $startDate, $endDate);
         if ($month) {
             $monthly = array_values(array_filter($monthly, fn ($row) => $row['month'] === $month));
         }
@@ -1366,16 +1849,19 @@ class FinanceCgdClaimController extends Controller
         string $docLabel,
         ?CgdStmBatch $batch,
     ) {
-        [$status, $search, $statusLabel, $month, $monthLabel, $errorCode, $errorLabel, $amount, $amountLabel] = $this->resolveExportFilters($request);
+        @ini_set('memory_limit', '1024M');
+        @set_time_limit(300);
 
-        $allFiltered = $this->filteredReconcileItems($reconciliation, $status, $search, $month, $errorCode, $amount)
+        [$status, $search, $statusLabel, $month, $monthLabel, $errorCode, $errorLabel, $amount, $amountLabel, $startDate, $endDate] = $this->resolveExportFilters($request);
+
+        $allFiltered = $this->filteredReconcileItems($reconciliation, $status, $search, $month, $errorCode, $amount, $startDate, $endDate)
             ->orderByRaw("FIELD(status,'matched_short','only_hosxp','only_stm','stm_out_of_range','matched_over','matched_ok')")
             ->orderBy('visit_date')
             ->orderByDesc('shortfall')
             ->get();
 
         $summary = $this->summarizeExportItems($allFiltered);
-        $monthly = $this->monthlyBreakdown($reconciliation, $status, $search, $errorCode, $amount);
+        $monthly = $this->monthlyBreakdown($reconciliation, $status, $search, $errorCode, $amount, $startDate, $endDate);
         if ($month) {
             $monthly = array_values(array_filter($monthly, fn ($row) => $row['month'] === $month));
         }
@@ -1387,7 +1873,7 @@ class FinanceCgdClaimController extends Controller
                 'matched_short', 'only_hosxp', 'only_stm', 'stm_out_of_range', 'matched_over',
             ])->values();
         }
-        $items = $detailQuery->take(500);
+        $items = $detailQuery->take(100);
 
         $setting = SettingApp::query()->first();
         [$fontRegularUri, $fontBoldUri] = $this->pdf->fontUris();
@@ -1405,6 +1891,8 @@ class FinanceCgdClaimController extends Controller
             'statusFilterLabel' => $statusLabel,
             'monthFilter' => $month,
             'monthFilterLabel' => $monthLabel,
+            'startDateFilter' => $startDate,
+            'endDateFilter' => $endDate,
             'errorFilter' => $errorCode,
             'errorFilterLabel' => $errorLabel,
             'amountFilter' => $amount,
@@ -1442,24 +1930,51 @@ class FinanceCgdClaimController extends Controller
     {
         $matched = $items->whereIn('status', ['matched_ok', 'matched_short', 'matched_over']);
         $unmatched = $items->where('status', 'only_hosxp');
+        $hosxpAll = $items->where('status', '!=', 'only_stm');
+        $stmAll = $items->where('status', '!=', 'only_hosxp');
 
         $gross = round((float) $matched->sum(fn ($i) => (float) ($i->hosxp_total ?? 0)), 2);
         $paid = round((float) $matched->sum(fn ($i) => (float) ($i->hosxp_paid ?? 0)), 2);
         $unmatchedGross = round((float) $unmatched->sum(fn ($i) => (float) ($i->hosxp_total ?? 0)), 2);
         $unmatchedPaid = round((float) $unmatched->sum(fn ($i) => (float) ($i->hosxp_paid ?? 0)), 2);
 
+        $hosxpAllGross = round((float) $hosxpAll->sum(fn ($i) => (float) ($i->hosxp_total ?? 0)), 2);
+        $hosxpAllPaid = round((float) $hosxpAll->sum(fn ($i) => (float) ($i->hosxp_paid ?? 0)), 2);
+
+        $matchedClaim = round((float) $matched->sum(fn ($i) => (float) ($i->stm_claim ?? 0)), 2);
+        $matchedApproved = round((float) $matched->sum(fn ($i) => (float) ($i->stm_approved ?? 0)), 2);
+
         return [
             'item_count' => $items->count(),
+            // 1. HOSxP (SEQ ตรง) สิทธิจ่าย(12)
+            'hosxp_matched_count' => $matched->count(),
             'total_hosxp' => $gross,
             'total_hosxp_paid' => $paid,
             'total_hosxp_net' => round(max(0, $gross - $paid), 2),
+            // 2. HOSxP ข้อมูลตามวันที่ผู้ป่วยมารับบริการ สิทธิจ่าย(12)
+            'hosxp_all_count' => $hosxpAll->count(),
+            'total_hosxp_all' => $hosxpAllGross,
+            'total_hosxp_all_net' => round(max(0, $hosxpAllGross - $hosxpAllPaid), 2),
+            // 3. STM (SEQ ตรง)
+            'stm_matched_count' => $matched->count(),
+            'total_stm_claim_matched' => $matchedClaim,
+            'total_stm_approved_matched' => $matchedApproved,
+            // 4. STM ข้อมูลตามวันที่ผู้ป่วยมารับบริการ
+            'stm_all_count' => $stmAll->count(),
+            'total_claim' => round((float) $stmAll->sum(fn ($i) => (float) ($i->stm_claim ?? 0)), 2),
+            'total_approved' => round((float) $stmAll->sum(fn ($i) => (float) ($i->stm_approved ?? 0)), 2),
+            // 5. ยอดขาด
+            'shortfall_count' => $items->where('status', 'matched_short')->count(),
+            'total_shortfall' => round((float) $items->sum(fn ($i) => (float) ($i->shortfall ?? 0)), 2),
+            // 6. HOSxP ไม่มี SEQ ตรง หลังหัก Payment สิทธิจ่าย(12)
+            'only_hosxp_count' => $unmatched->count(),
             'total_hosxp_unmatched' => $unmatchedGross,
             'total_hosxp_unmatched_paid' => $unmatchedPaid,
             'total_hosxp_unmatched_net' => round(max(0, $unmatchedGross - $unmatchedPaid), 2),
-            'only_hosxp_count' => $unmatched->count(),
-            'total_claim' => round((float) $items->sum(fn ($i) => (float) ($i->stm_claim ?? 0)), 2),
-            'total_approved' => round((float) $items->sum(fn ($i) => (float) ($i->stm_approved ?? 0)), 2),
-            'total_shortfall' => round((float) $items->sum(fn ($i) => (float) ($i->shortfall ?? 0)), 2),
+            // 7. ยอดชำระเอง (Payment) ใน HOSxP สิทธิจ่าย(12)
+            'hosxp_paid_count' => $hosxpAll->filter(fn ($i) => (float) ($i->hosxp_paid ?? 0) > 0)->count(),
+            'total_hosxp_all_paid' => $hosxpAllPaid,
+
             'total_over' => round((float) $items->sum(function ($i) {
                 $diff = (float) ($i->diff_approved ?? 0);
 
@@ -1571,7 +2086,7 @@ class FinanceCgdClaimController extends Controller
     }
 
     /**
-     * @return array{0:?string,1:string,2:string,3:?string,4:string,5:?string,6:string,7:?string,8:string}
+     * @return array{0:?string,1:string,2:string,3:?string,4:string,5:?string,6:string,7:?string,8:string,9:?string,10:?string}
      */
     protected function resolveExportFilters(Request $request): array
     {
@@ -1582,6 +2097,11 @@ class FinanceCgdClaimController extends Controller
         $month = $this->normalizeMonthFilter($request->query('month'));
         $errorCode = $this->normalizeErrorFilter($request->query('error_code'));
         $amount = $this->normalizeAmountFilter($request->query('amount'));
+        $startDate = $request->query('start_date');
+        $startDate = is_string($startDate) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $startDate) ? $startDate : null;
+        $endDate = $request->query('end_date');
+        $endDate = is_string($endDate) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $endDate) ? $endDate : null;
+
         $statusLabel = $status ? ($labels[$status] ?? $status) : 'ทั้งหมด';
         $monthLabel = $month ? $this->thaiMonthLabel($month) : 'ทุกเดือน';
         $errorLabel = match ($errorCode) {
@@ -1594,7 +2114,132 @@ class FinanceCgdClaimController extends Controller
             ? ($this->amountFilterLabels()[$amount] ?? $amount)
             : 'ทุกยอดเงิน';
 
-        return [$status, $search, $statusLabel, $month, $monthLabel, $errorCode, $errorLabel, $amount, $amountLabel];
+        return [$status, $search, $statusLabel, $month, $monthLabel, $errorCode, $errorLabel, $amount, $amountLabel, $startDate, $endDate];
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<\App\Models\Finance\CgdReconcileItem>|\Illuminate\Database\Query\Builder  $query
+     */
+    protected function applySingleMetricFilter($query, string $key): void
+    {
+        switch ($key) {
+            case 'hosxp_matched':
+                $query->whereIn('status', ['matched_ok', 'matched_short', 'matched_over']);
+                break;
+            case 'hosxp_all':
+                $query->where('status', '!=', 'only_stm');
+                break;
+            case 'stm_matched':
+                $query->whereIn('status', ['matched_ok', 'matched_short', 'matched_over']);
+                break;
+            case 'stm_all':
+                $query->where('status', '!=', 'only_hosxp');
+                break;
+            case 'matched_short':
+                $query->where('status', 'matched_short');
+                break;
+            case 'only_hosxp':
+                $query->where('status', 'only_hosxp');
+                break;
+            case 'hosxp_paid':
+                $query->where('status', '!=', 'only_stm')->where('hosxp_paid', '>', 0);
+                break;
+        }
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<\App\Models\Finance\CgdReconcileItem>|\Illuminate\Database\Query\Builder  $query
+     */
+    protected function applyPairDiffFilter($query, ?string $compareA, ?string $compareB): void
+    {
+        $a = $compareA ?: 'hosxp_all';
+        $b = $compareB ?: 'stm_all';
+        $pair = [$a, $b];
+        sort($pair);
+        $pairKey = $pair[0].':'.$pair[1];
+
+        $net = $this->hosxpNetSql();
+
+        switch ($pairKey) {
+            case 'hosxp_matched:stm_matched':
+                // ทั้งสองกลุ่มคือ SEQ ตรงกัน รายการผลต่างคือรายการที่ยอดเงินไม่ตรงกัน
+                $query->whereIn('status', ['matched_short', 'matched_over', 'matched_ok'])
+                    ->where(function ($q) use ($net) {
+                        $q->whereIn('status', ['matched_short', 'matched_over'])
+                            ->orWhereRaw('ABS(COALESCE(diff_claim, 0)) >= 0.01')
+                            ->orWhereRaw("ABS(({$net}) - COALESCE(stm_claim, 0)) >= 0.01")
+                            ->orWhereRaw("ABS(({$net}) - COALESCE(stm_approved, 0)) >= 0.01");
+                    });
+                break;
+
+            case 'hosxp_all:stm_all':
+                // ผลต่างระหว่าง HOSxP ทั้งหมด กับ STM ทั้งหมด
+                $query->where(function ($q) use ($net) {
+                    $q->whereIn('status', ['only_hosxp', 'only_stm', 'matched_short', 'matched_over'])
+                        ->orWhereRaw('ABS(COALESCE(diff_claim, 0)) >= 0.01')
+                        ->orWhereRaw("ABS(({$net}) - COALESCE(stm_claim, 0)) >= 0.01");
+                });
+                break;
+
+            case 'hosxp_all:hosxp_matched':
+                // HOSxP ทั้งหมด เทียบกับ HOSxP ที่มี SEQ ตรง -> ผลต่างคือ HOSxP ที่ไม่มี SEQ ตรง
+                $query->where('status', 'only_hosxp');
+                break;
+
+            case 'stm_all:stm_matched':
+                // STM ทั้งหมด เทียบกับ STM ที่มี SEQ ตรง -> ผลต่างคือ STM ที่ไม่มี SEQ ตรง
+                $query->where('status', 'only_stm');
+                break;
+
+            case 'hosxp_all:only_hosxp':
+                // HOSxP ทั้งหมด เทียบกับ HOSxP ไม่มี SEQ -> ผลต่างคือ HOSxP ที่มี SEQ ตรง
+                $query->whereIn('status', ['matched_ok', 'matched_short', 'matched_over']);
+                break;
+
+            case 'matched_short:only_hosxp':
+                $query->whereIn('status', ['matched_short', 'only_hosxp']);
+                break;
+
+            case 'hosxp_matched:matched_short':
+            case 'matched_short:stm_matched':
+                // ผลต่างแสดงรายการยอดขาด
+                $query->where('status', 'matched_short');
+                break;
+
+            case 'hosxp_all:matched_short':
+                $query->whereIn('status', ['only_hosxp', 'matched_short']);
+                break;
+
+            case 'matched_short:stm_all':
+                $query->whereIn('status', ['only_stm', 'matched_short']);
+                break;
+
+            case 'only_hosxp:stm_matched':
+                $query->whereIn('status', ['only_hosxp', 'matched_short', 'matched_over']);
+                break;
+
+            case 'only_hosxp:stm_all':
+                $query->whereIn('status', ['only_hosxp', 'only_stm']);
+                break;
+
+            case 'hosxp_all:hosxp_paid':
+            case 'hosxp_matched:hosxp_paid':
+            case 'hosxp_paid:matched_short':
+            case 'hosxp_paid:only_hosxp':
+            case 'hosxp_paid:stm_all':
+            case 'hosxp_paid:stm_matched':
+                $query->where('status', '!=', 'only_stm')->where('hosxp_paid', '>', 0);
+                break;
+
+            default:
+                // กรณีคู่อื่นๆ กรองรายการที่ไม่ตรงกันทั้งหมด
+                $query->where(function ($q) use ($net) {
+                    $q->whereIn('status', ['matched_short', 'only_hosxp', 'only_stm', 'matched_over'])
+                        ->orWhereRaw('ABS(COALESCE(diff_claim, 0)) >= 0.01')
+                        ->orWhereRaw("ABS(({$net}) - COALESCE(stm_claim, 0)) >= 0.01");
+                });
+                break;
+        }
     }
 
     protected function filteredReconcileItems(
@@ -1604,20 +2249,79 @@ class FinanceCgdClaimController extends Controller
         ?string $month = null,
         ?string $errorCode = null,
         ?string $amount = null,
+        ?string $startDate = null,
+        ?string $endDate = null,
+        ?string $compareA = null,
+        ?string $compareB = null,
     ) {
         $query = $reconciliation->items();
 
-        if ($status) {
+        if ($status === 'mismatched') {
+            $query->where(function ($q) {
+                $q->where('status', '!=', 'matched_ok')
+                    ->orWhereRaw('ABS(COALESCE(diff_claim, 0)) >= 0.01');
+            });
+        } elseif ($status === 'amount_diff') {
+            $net = $this->hosxpNetSql();
+            $query->where(function ($q) use ($net) {
+                $q->whereIn('status', ['matched_short', 'matched_over'])
+                    ->orWhereRaw('ABS(COALESCE(diff_claim, 0)) >= 0.01')
+                    ->orWhereRaw("ABS(({$net}) - COALESCE(stm_claim, 0)) >= 0.01");
+            });
+        } elseif ($status === 'claim_diff') {
+            $net = $this->hosxpNetSql();
+            $query->where(function ($q) use ($net) {
+                $q->whereRaw('ABS(COALESCE(diff_claim, 0)) >= 0.01')
+                    ->orWhereRaw("ABS(({$net}) - COALESCE(stm_claim, 0)) >= 0.01");
+            });
+        } elseif ($status === 'pair_diff') {
+            if ($amount) {
+                $compA = $compareA ?: 'hosxp_all';
+                $compB = $compareB ?: 'stm_all';
+                $query->where(function ($sub) use ($compA, $compB) {
+                    $sub->where(function ($q1) use ($compA) {
+                        $this->applySingleMetricFilter($q1, $compA);
+                    })->orWhere(function ($q2) use ($compB) {
+                        $this->applySingleMetricFilter($q2, $compB);
+                    });
+                });
+            } else {
+                $this->applyPairDiffFilter($query, $compareA, $compareB);
+            }
+        } elseif ($status === 'pair_a') {
+            $this->applySingleMetricFilter($query, $compareA ?: 'hosxp_all');
+        } elseif ($status === 'pair_b') {
+            $this->applySingleMetricFilter($query, $compareB ?: 'stm_all');
+        } elseif ($status === 'pair_both') {
+            $compA = $compareA ?: 'hosxp_all';
+            $compB = $compareB ?: 'stm_all';
+            $query->where(function ($sub) use ($compA, $compB) {
+                $sub->where(function ($q1) use ($compA) {
+                    $this->applySingleMetricFilter($q1, $compA);
+                })->orWhere(function ($q2) use ($compB) {
+                    $this->applySingleMetricFilter($q2, $compB);
+                });
+            });
+        } elseif (in_array($status, ['hosxp_matched', 'hosxp_all', 'stm_matched', 'stm_all', 'matched_short', 'only_hosxp', 'hosxp_paid'], true)) {
+            $this->applySingleMetricFilter($query, $status);
+        } elseif ($status) {
             $query->where('status', $status);
+        }
+
+        if ($startDate) {
+            $query->whereDate('visit_date', '>=', $startDate);
+        }
+        if ($endDate) {
+            $query->whereDate('visit_date', '<=', $endDate);
         }
 
         if ($month) {
             $query->whereRaw("DATE_FORMAT(visit_date, '%Y-%m') = ?", [$month]);
         }
 
-        if ($errorCode === '__has_error__') {
+        if ($errorCode === '__has_error__' || $errorCode === 'has_error') {
             $query->whereNotNull('error_code')->where('error_code', '!=', '');
-        } elseif ($errorCode === '__none__') {
+        } elseif ($errorCode === '__none__' || $errorCode === 'none') {
             $query->where(function ($q) {
                 $q->whereNull('error_code')->orWhere('error_code', '');
             });
@@ -1726,10 +2430,7 @@ class FinanceCgdClaimController extends Controller
         }
 
         $net = $this->hosxpNetSql();
-        $matched = ['matched_ok', 'matched_short', 'matched_over'];
         $serviceGap = '(COALESCE(hosxp_service, 0) - COALESCE(stm_treat, 0))';
-
-        $query->whereIn('status', $matched);
 
         if ($amount === 'hosxp_ne_claim') {
             $query->whereRaw("ABS(({$net}) - COALESCE(stm_claim, 0)) >= 0.01");
@@ -1761,6 +2462,10 @@ class FinanceCgdClaimController extends Controller
         string $search = '',
         ?string $month = null,
         ?string $errorCode = null,
+        ?string $startDate = null,
+        ?string $endDate = null,
+        ?string $compareA = null,
+        ?string $compareB = null,
     ): array {
         $options = [];
         foreach ($this->amountFilterLabels() as $value => $label) {
@@ -1771,6 +2476,10 @@ class FinanceCgdClaimController extends Controller
                 $month,
                 $errorCode,
                 $value,
+                $startDate,
+                $endDate,
+                $compareA,
+                $compareB,
             )->count();
             $options[] = [
                 'value' => $value,
@@ -1882,8 +2591,12 @@ class FinanceCgdClaimController extends Controller
         ?string $month = null,
         ?string $errorCode = null,
         ?string $amount = null,
+        ?string $startDate = null,
+        ?string $endDate = null,
+        ?string $compareA = null,
+        ?string $compareB = null,
     ): array {
-        $base = $this->filteredReconcileItems($reconciliation, null, $search, $month, $errorCode, $amount)
+        $base = $this->filteredReconcileItems($reconciliation, null, $search, $month, $errorCode, $amount, $startDate, $endDate, $compareA, $compareB)
             ->toBase()
             ->reorder();
         $base->columns = null;
@@ -1891,7 +2604,7 @@ class FinanceCgdClaimController extends Controller
             $base->bindings['select'] = [];
         }
 
-        $rows = $base
+        $rows = (clone $base)
             ->selectRaw('status')
             ->selectRaw('COUNT(*) as total')
             ->groupBy('status')
@@ -1901,6 +2614,59 @@ class FinanceCgdClaimController extends Controller
         foreach (array_keys($this->statusLabels()) as $key) {
             $counts[$key] = (int) ($rows[$key] ?? 0);
         }
+
+        $matchedCount = (int) ($rows['matched_ok'] ?? 0) + (int) ($rows['matched_short'] ?? 0) + (int) ($rows['matched_over'] ?? 0);
+        $onlyHosxpCount = (int) ($rows['only_hosxp'] ?? 0);
+        $onlyStmCount = (int) ($rows['only_stm'] ?? 0);
+
+        $counts['hosxp_matched'] = $matchedCount;
+        $counts['hosxp_all'] = $matchedCount + $onlyHosxpCount;
+        $counts['stm_matched'] = $matchedCount;
+        $counts['stm_all'] = $matchedCount + $onlyStmCount;
+        $counts['matched_short'] = (int) ($rows['matched_short'] ?? 0);
+        $counts['only_hosxp'] = $onlyHosxpCount;
+        $counts['hosxp_paid'] = (clone $base)->where('status', '!=', 'only_stm')->where('hosxp_paid', '>', 0)->count();
+
+        $net = $this->hosxpNetSql();
+        $counts['mismatched'] = (clone $base)->where(function ($q) {
+            $q->where('status', '!=', 'matched_ok')
+                ->orWhereRaw('ABS(COALESCE(diff_claim, 0)) >= 0.01');
+        })->count();
+
+        $counts['amount_diff'] = (clone $base)->where(function ($q) use ($net) {
+            $q->whereIn('status', ['matched_short', 'matched_over'])
+                ->orWhereRaw('ABS(COALESCE(diff_claim, 0)) >= 0.01')
+                ->orWhereRaw("ABS(({$net}) - COALESCE(stm_claim, 0)) >= 0.01");
+        })->count();
+
+        $counts['claim_diff'] = (clone $base)->where(function ($q) use ($net) {
+            $q->whereRaw('ABS(COALESCE(diff_claim, 0)) >= 0.01')
+                ->orWhereRaw("ABS(({$net}) - COALESCE(stm_claim, 0)) >= 0.01");
+        })->count();
+
+        $pairQuery = clone $base;
+        $this->applyPairDiffFilter($pairQuery, $compareA, $compareB);
+        $counts['pair_diff'] = $pairQuery->count();
+
+        $pairAQuery = clone $base;
+        $this->applySingleMetricFilter($pairAQuery, $compareA ?: 'hosxp_all');
+        $counts['pair_a'] = $pairAQuery->count();
+
+        $pairBQuery = clone $base;
+        $this->applySingleMetricFilter($pairBQuery, $compareB ?: 'stm_all');
+        $counts['pair_b'] = $pairBQuery->count();
+
+        $pairBothQuery = clone $base;
+        $compA = $compareA ?: 'hosxp_all';
+        $compB = $compareB ?: 'stm_all';
+        $pairBothQuery->where(function ($sub) use ($compA, $compB) {
+            $sub->where(function ($q1) use ($compA) {
+                $this->applySingleMetricFilter($q1, $compA);
+            })->orWhere(function ($q2) use ($compB) {
+                $this->applySingleMetricFilter($q2, $compB);
+            });
+        });
+        $counts['pair_both'] = $pairBothQuery->count();
 
         return $counts;
     }
@@ -1914,8 +2680,10 @@ class FinanceCgdClaimController extends Controller
         string $search = '',
         ?string $month = null,
         ?string $amount = null,
+        ?string $startDate = null,
+        ?string $endDate = null,
     ): array {
-        $base = $this->filteredReconcileItems($reconciliation, $status, $search, $month, null, $amount);
+        $base = $this->filteredReconcileItems($reconciliation, $status, $search, $month, null, $amount, $startDate, $endDate);
 
         $countQuery = (clone $base)->toBase()->reorder();
         $countQuery->columns = null;
@@ -1980,8 +2748,10 @@ class FinanceCgdClaimController extends Controller
         string $search = '',
         ?string $errorCode = null,
         ?string $amount = null,
+        ?string $startDate = null,
+        ?string $endDate = null,
     ): array {
-        $base = $this->filteredReconcileItems($reconciliation, $status, $search, null, $errorCode, $amount)
+        $base = $this->filteredReconcileItems($reconciliation, $status, $search, null, $errorCode, $amount, $startDate, $endDate)
             ->toBase()
             ->reorder();
         $base->columns = null;
@@ -2166,8 +2936,19 @@ class FinanceCgdClaimController extends Controller
         $unmatchedPaid = (float) $r->items()->where('status', 'only_hosxp')->sum('hosxp_paid');
         $unmatchedNet = round(max(0, $unmatchedGross - $unmatchedPaid), 2);
 
+        $totalHosxpAllGross = (float) $r->items()->where('status', '!=', 'only_stm')->sum('hosxp_total');
+        $totalHosxpAllPaid = (float) $r->items()->where('status', '!=', 'only_stm')->sum('hosxp_paid');
+        $totalHosxpAllNet = round(max(0, $totalHosxpAllGross - $totalHosxpAllPaid), 2);
+        $hosxpPaidCount = (int) $r->items()->where('status', '!=', 'only_stm')->where('hosxp_paid', '>', 0)->count();
+        $hosxpAllCount = (int) $r->items()->where('status', '!=', 'only_stm')->count();
+
         $matchedCount = (int) $r->items()->whereIn('status', $matchedStatuses)->count();
         $totalTreat = (float) $r->items()->sum('stm_treat');
+        $totalStmClaimMatched = (float) $r->items()->whereIn('status', $matchedStatuses)->sum('stm_claim');
+        $totalStmApprovedMatched = (float) $r->items()->whereIn('status', $matchedStatuses)->sum('stm_approved');
+        $stmAllCount = (int) $r->items()->where('status', '!=', 'only_hosxp')->count();
+        $totalStmAllClaim = (float) $r->items()->where('status', '!=', 'only_hosxp')->sum('stm_claim');
+        $totalStmAllApproved = (float) $r->items()->where('status', '!=', 'only_hosxp')->sum('stm_approved');
 
         return [
             'id' => $r->id,
@@ -2180,22 +2961,35 @@ class FinanceCgdClaimController extends Controller
             'pttype_like' => $r->pttype_like,
             'exclude_deps' => $r->exclude_deps,
             'hosxp_count' => $r->hosxp_count,
+            'hosxp_all_count' => $hosxpAllCount,
             'matched_hosxp_count' => $matchedCount,
             'stm_count' => $r->stm_count,
+            'stm_matched_count' => $matchedCount,
+            'stm_all_count' => $stmAllCount,
             'matched_ok' => $r->matched_ok,
             'matched_short' => $r->matched_short,
+            'shortfall_count' => $r->matched_short,
             'matched_over' => $r->matched_over,
             'only_hosxp' => $r->only_hosxp,
+            'only_hosxp_count' => $r->only_hosxp,
             'only_stm' => $r->only_stm,
             'stm_out_of_range' => $r->stm_out_of_range,
             'total_hosxp' => $totalGross,
             'total_hosxp_paid' => $totalPaid,
             'total_hosxp_net' => $totalNet,
+            'total_hosxp_all' => $totalHosxpAllGross,
+            'total_hosxp_all_paid' => $totalHosxpAllPaid,
+            'total_hosxp_all_net' => $totalHosxpAllNet,
+            'hosxp_paid_count' => $hosxpPaidCount,
             'total_hosxp_unmatched' => $unmatchedGross,
             'total_hosxp_unmatched_paid' => $unmatchedPaid,
             'total_hosxp_unmatched_net' => $unmatchedNet,
-            'total_stm_claim' => (float) $r->total_stm_claim,
-            'total_stm_approved' => (float) $r->total_stm_approved,
+            'total_stm_claim_matched' => $totalStmClaimMatched,
+            'total_stm_approved_matched' => $totalStmApprovedMatched,
+            'total_stm_all_claim' => $totalStmAllClaim,
+            'total_stm_all_approved' => $totalStmAllApproved,
+            'total_stm_claim' => $totalStmAllClaim ?: (float) $r->total_stm_claim,
+            'total_stm_approved' => $totalStmAllApproved ?: (float) $r->total_stm_approved,
             'total_stm_treat' => $totalTreat,
             'total_shortfall' => (float) $r->total_shortfall,
             'total_claim_diff' => (float) $r->total_claim_diff,
@@ -2309,16 +3103,25 @@ class FinanceCgdClaimController extends Controller
 
         $row = $base
             ->selectRaw('COUNT(*) as item_count')
+            ->selectRaw("SUM(CASE WHEN {$matchedCase} THEN 1 ELSE 0 END) as hosxp_matched_count")
             ->selectRaw("SUM(CASE WHEN {$matchedCase} THEN COALESCE(hosxp_total, 0) ELSE 0 END) as total_hosxp")
             ->selectRaw("SUM(CASE WHEN {$matchedCase} THEN COALESCE(hosxp_paid, 0) ELSE 0 END) as total_hosxp_paid")
             ->selectRaw("SUM(CASE WHEN {$matchedCase} THEN ({$netSql}) ELSE 0 END) as total_hosxp_net_matched")
+            ->selectRaw("SUM(CASE WHEN status != 'only_stm' THEN 1 ELSE 0 END) as hosxp_all_count")
+            ->selectRaw("SUM(CASE WHEN status != 'only_stm' THEN COALESCE(hosxp_total, 0) ELSE 0 END) as total_hosxp_all")
+            ->selectRaw("SUM(CASE WHEN status != 'only_stm' THEN COALESCE(hosxp_paid, 0) ELSE 0 END) as total_hosxp_all_paid")
+            ->selectRaw("SUM(CASE WHEN status != 'only_stm' THEN ({$netSql}) ELSE 0 END) as total_hosxp_all_net")
+            ->selectRaw("SUM(CASE WHEN status != 'only_stm' AND COALESCE(hosxp_paid, 0) > 0 THEN 1 ELSE 0 END) as hosxp_paid_count")
+            ->selectRaw("SUM(CASE WHEN {$matchedCase} THEN COALESCE(stm_claim, 0) ELSE 0 END) as total_stm_claim_matched")
+            ->selectRaw("SUM(CASE WHEN {$matchedCase} THEN COALESCE(stm_approved, 0) ELSE 0 END) as total_stm_approved_matched")
+            ->selectRaw("SUM(CASE WHEN status != 'only_hosxp' THEN 1 ELSE 0 END) as stm_all_count")
+            ->selectRaw("SUM(CASE WHEN status != 'only_hosxp' THEN COALESCE(stm_claim, 0) ELSE 0 END) as total_claim")
+            ->selectRaw("SUM(CASE WHEN status != 'only_hosxp' THEN COALESCE(stm_approved, 0) ELSE 0 END) as total_approved")
             ->selectRaw("SUM(CASE WHEN status = 'only_hosxp' THEN COALESCE(hosxp_total, 0) ELSE 0 END) as total_hosxp_unmatched")
             ->selectRaw("SUM(CASE WHEN status = 'only_hosxp' THEN COALESCE(hosxp_paid, 0) ELSE 0 END) as total_hosxp_unmatched_paid")
             ->selectRaw("SUM(CASE WHEN status = 'only_hosxp' THEN 1 ELSE 0 END) as only_hosxp_count")
-            ->selectRaw('SUM(COALESCE(stm_claim, 0)) as total_claim')
-            ->selectRaw('SUM(COALESCE(stm_approved, 0)) as total_approved')
-            ->selectRaw('SUM(COALESCE(stm_treat, 0)) as total_treat')
             ->selectRaw('SUM(COALESCE(shortfall, 0)) as total_shortfall')
+            ->selectRaw("SUM(CASE WHEN status = 'matched_short' THEN 1 ELSE 0 END) as shortfall_count")
             ->selectRaw('SUM(CASE WHEN COALESCE(diff_approved, 0) < -0.009 THEN ABS(diff_approved) ELSE 0 END) as total_over')
             ->selectRaw('SUM(COALESCE(diff_approved, 0)) as total_diff')
             ->selectRaw("SUM(({$netSql}) - COALESCE(stm_claim, 0)) as total_claim_gap")
@@ -2333,17 +3136,36 @@ class FinanceCgdClaimController extends Controller
 
         return [
             'item_count' => (int) ($row->item_count ?? 0),
+            // 1. HOSxP (SEQ ตรง) สิทธิจ่าย(12)
+            'hosxp_matched_count' => (int) ($row->hosxp_matched_count ?? 0),
             'total_hosxp' => $gross,
             'total_hosxp_paid' => $paid,
             'total_hosxp_net' => round(max(0, $gross - $paid), 2),
+            // 2. HOSxP ข้อมูลตามวันที่ผู้ป่วยมารับบริการ สิทธิจ่าย(12)
+            'hosxp_all_count' => (int) ($row->hosxp_all_count ?? 0),
+            'total_hosxp_all' => (float) ($row->total_hosxp_all ?? 0),
+            'total_hosxp_all_net' => (float) ($row->total_hosxp_all_net ?? 0),
+            // 3. STM (SEQ ตรง)
+            'stm_matched_count' => (int) ($row->hosxp_matched_count ?? 0),
+            'total_stm_claim_matched' => (float) ($row->total_stm_claim_matched ?? 0),
+            'total_stm_approved_matched' => (float) ($row->total_stm_approved_matched ?? 0),
+            // 4. STM ข้อมูลตามวันที่ผู้ป่วยมารับบริการ
+            'stm_all_count' => (int) ($row->stm_all_count ?? 0),
+            'total_claim' => $totalClaim,
+            'total_approved' => (float) ($row->total_approved ?? 0),
+            // 5. ยอดขาด
+            'shortfall_count' => (int) ($row->shortfall_count ?? 0),
+            'total_shortfall' => (float) ($row->total_shortfall ?? 0),
+            // 6. HOSxP ไม่มี SEQ ตรง หลังหัก Payment สิทธิจ่าย(12)
+            'only_hosxp_count' => (int) ($row->only_hosxp_count ?? 0),
             'total_hosxp_unmatched' => $unmatchedGross,
             'total_hosxp_unmatched_paid' => $unmatchedPaid,
             'total_hosxp_unmatched_net' => round(max(0, $unmatchedGross - $unmatchedPaid), 2),
-            'only_hosxp_count' => (int) ($row->only_hosxp_count ?? 0),
-            'total_claim' => $totalClaim,
-            'total_approved' => (float) ($row->total_approved ?? 0),
+            // 7. ยอดชำระเอง (Payment) ใน HOSxP สิทธิจ่าย(12)
+            'hosxp_paid_count' => (int) ($row->hosxp_paid_count ?? 0),
+            'total_hosxp_all_paid' => (float) ($row->total_hosxp_all_paid ?? 0),
+
             'total_treat' => (float) ($row->total_treat ?? 0),
-            'total_shortfall' => (float) ($row->total_shortfall ?? 0),
             'total_over' => (float) ($row->total_over ?? 0),
             'total_diff' => (float) ($row->total_diff ?? 0),
             'total_claim_gap' => round((float) ($row->total_claim_gap ?? ($netMatched - $totalClaim)), 2),
@@ -2354,12 +3176,23 @@ class FinanceCgdClaimController extends Controller
     protected function statusLabels(): array
     {
         return [
-            'matched_ok' => 'ตรงกัน',
-            'matched_short' => 'ขาดเงิน (เรียกเก็บ > ชดเชย)',
+            'hosxp_matched' => 'HOSxP (SEQ ตรง) สิทธิจ่าย(12)',
+            'hosxp_all' => 'HOSxP ข้อมูลตามวันที่ผู้ป่วยมารับบริการ สิทธิจ่าย(12)',
+            'stm_matched' => 'STM (SEQ ตรง)',
+            'stm_all' => 'STM ข้อมูลตามวันที่ผู้ป่วยมารับบริการ',
+            'matched_short' => 'ยอดขาด (เรียกเก็บ > ชดเชย)',
+            'only_hosxp' => 'HOSxP ไม่มี SEQ ตรง หลังหัก Payment สิทธิจ่าย(12)',
+            'hosxp_paid' => 'ยอดชำระเอง (Payment) ใน HOSxP สิทธิจ่าย(12)',
+            'mismatched' => 'ข้อมูลที่ไม่ตรงกันทั้งหมด',
+            'amount_diff' => 'เฉพาะยอดเงินต่างกัน',
+            'claim_diff' => 'ยอดเรียกเก็บไม่ตรงกัน (HOSxP ≠ STM)',
             'matched_over' => 'ชดเชยเกินเรียกเก็บ',
-            'only_hosxp' => 'HOSxP ไม่มี SEQ ตรงกับ STM',
             'only_stm' => 'STM ไม่มี SEQ ตรงกับ HOSxP',
-            'stm_out_of_range' => 'STM นอกช่วงวันที่ HOSxP',
+            'matched_ok' => 'ตรงกันสมบูรณ์',
+            'pair_diff' => 'ผลต่างเปรียบเทียบ (A − B)',
+            'pair_a' => 'รายการฝั่ง A',
+            'pair_b' => 'รายการฝั่ง B',
+            'pair_both' => 'ทั้งหมดในคู่นี้ (A + B)',
         ];
     }
 

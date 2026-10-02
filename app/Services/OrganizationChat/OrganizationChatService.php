@@ -562,11 +562,23 @@ class OrganizationChatService
         $url = config('services.custom_llm.url', env('CUSTOM_LLM_URL', 'http://192.168.0.175:8000/api/chat'));
         $timeout = (int) config('services.custom_llm.timeout', env('CUSTOM_LLM_TIMEOUT', 60));
 
-        // ตรวจสอบและดึงสถิติจริงจาก HOSxP (Read-Only) มาเป็นบริบทประกอบคำถาม
+        // ตรวจสอบและดึงสถิติจริงจาก HOSxP (Read-Only) และคลังความรู้การแพทย์/เอกสาร มาเป็นบริบทประกอบคำถาม
         $outgoingMessage = $cleanMessage;
         try {
-            $statsService = app(\App\Services\HosxpHospitalStatsService::class);
             $extraContexts = [];
+
+            // ตรวจสอบบริบทความรู้การแพทย์ และเทมเพลตเอกสารโรงพยาบาล
+            try {
+                $medDocService = app(\App\Services\OrganizationChat\MedicalDocumentKnowledgeService::class);
+                $enrichedMedDoc = $medDocService->getEnrichedContext($cleanMessage);
+                if (! empty($enrichedMedDoc)) {
+                    $extraContexts = array_merge($extraContexts, $enrichedMedDoc);
+                }
+            } catch (\Throwable $medEx) {
+                Log::warning('Failed to enrich medical/document context for LLM', ['error' => $medEx->getMessage()]);
+            }
+
+            $statsService = app(\App\Services\HosxpHospitalStatsService::class);
 
             // 1. ถามเรื่องโรคที่พบบ่อย
             if (preg_match('/(โรค|วินิจฉัย|diagnosis|disease)/iu', $cleanMessage)) {
@@ -607,10 +619,10 @@ class OrganizationChatService
 
             if (! empty($extraContexts)) {
                 $contextBlock = implode("\n\n", $extraContexts);
-                $outgoingMessage = "[ข้อมูลจริงจากระบบโรงพยาบาลค่ายสุรสิงหนาท:\n{$contextBlock}]\nคำถามจากผู้ใช้: {$cleanMessage}";
+                $outgoingMessage = "[บริบทและแนวปฏิบัติประกอบคำตอบ:\n{$contextBlock}]\nคำถาม/คำขอจากผู้ใช้: {$cleanMessage}";
             }
         } catch (\Throwable $e) {
-            Log::warning('Failed to query hospital stats for LLM context', ['error' => $e->getMessage()]);
+            Log::warning('Failed to query hospital stats or knowledge for LLM context', ['error' => $e->getMessage()]);
         }
 
         try {
@@ -665,10 +677,35 @@ class OrganizationChatService
                 'raw' => $data,
             ];
         } catch (\Throwable $e) {
-            Log::warning('Custom LLM request failed', [
+            Log::warning('Custom LLM request failed, attempting direct Ollama fallback', [
                 'url' => $url,
                 'error' => $e->getMessage(),
             ]);
+
+            // Fallback ไปที่ Ollama port 11434 โดยตรง (รองรับ fshh-pro-7b:latest / deepseek-r1:8b / fshh-assistant:latest)
+            try {
+                $model = (string) config('services.custom_llm.model', env('OLLAMA_MODEL', 'fshh-pro-7b:latest'));
+                $ollamaHost = parse_url($url, PHP_URL_HOST) ?: '192.168.0.175';
+                $ollamaUrl = "http://{$ollamaHost}:11434/api/generate";
+                $ollamaRes = Http::connectTimeout(4)->timeout($timeout)->post($ollamaUrl, [
+                    'model' => $model,
+                    'prompt' => $outgoingMessage,
+                    'stream' => false,
+                ]);
+
+                if ($ollamaRes->successful()) {
+                    $ollamaData = $ollamaRes->json();
+                    return [
+                        'success' => true,
+                        'source' => 'ollama_direct',
+                        'model' => $model,
+                        'answer' => $ollamaData['response'] ?? '',
+                        'raw' => $ollamaData,
+                    ];
+                }
+            } catch (\Throwable $ollamaEx) {
+                Log::warning('Direct Ollama fallback also failed', ['error' => $ollamaEx->getMessage()]);
+            }
 
             return [
                 'success' => false,

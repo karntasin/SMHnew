@@ -13,6 +13,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import InputError from '@/components/input-error';
+import HaTeamPicker, { type HaTeamOption } from '@/components/ha-team-picker';
 import {
     Camera,
     User,
@@ -82,17 +83,19 @@ interface Props {
     user: UserData;
     rosterMatch?: StaffRosterLookupResult | null;
     departments: Department[];
+    haTeams?: HaTeamOption[];
     positionOptions: string[];
     addFriendUrl?: string | null;
 }
 
-export default function CompleteProfile({ user, rosterMatch, departments, positionOptions, addFriendUrl }: Props) {
+export default function CompleteProfile({ user, rosterMatch, departments, haTeams = [], positionOptions, addFriendUrl }: Props) {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const split = splitThaiName(user.name || '');
     const [previewUrl, setPreviewUrl] = useState<string | null>(user.avatar || user.line_picture_url);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
     const [primaryId, setPrimaryId] = useState<number | null>(null);
+    const [selectedHaTeamIds, setSelectedHaTeamIds] = useState<number[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState<string | null>(null);
     const { result, loading, lookup } = useStaffRosterLookup('profile.roster-lookup');
@@ -189,6 +192,16 @@ export default function CompleteProfile({ user, rosterMatch, departments, positi
         }
     };
 
+    const toggleHaTeam = (id: number) => {
+        setSelectedHaTeamIds((prev) =>
+            prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
+        );
+    };
+
+    const removeHaTeam = (id: number) => {
+        setSelectedHaTeamIds((prev) => prev.filter((item) => item !== id));
+    };
+
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
         if (!result?.matched) {
@@ -220,6 +233,10 @@ export default function CompleteProfile({ user, rosterMatch, departments, positi
         if (primaryId) {
             formData.append('primary_department_id', primaryId.toString());
         }
+
+        selectedHaTeamIds.forEach((id) => {
+            formData.append('ha_team_ids[]', id.toString());
+        });
 
         if (form.avatar) {
             formData.append('avatar', form.avatar);
@@ -519,6 +536,14 @@ export default function CompleteProfile({ user, rosterMatch, departments, positi
                                     <p className="text-sm text-red-500">กรุณาเลือกแผนกอย่างน้อย 1 แผนก</p>
                                 )}
                             </div>
+
+                            <HaTeamPicker
+                                teams={haTeams}
+                                selectedIds={selectedHaTeamIds}
+                                onToggle={toggleHaTeam}
+                                onRemove={removeHaTeam}
+                                error={errors.ha_team_ids}
+                            />
 
                             {submitError && (
                                 <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">

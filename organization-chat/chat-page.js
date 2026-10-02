@@ -21,7 +21,7 @@ export function buildChatPage(origin, config) {
   <meta name="apple-mobile-web-app-title" content="FSHH Chat">
   <title>FSHH Chat</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="icon" href="/favicon.png" type="image/png">
+  <link id="dynamicFavicon" rel="icon" href="/favicon.png" type="image/png">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -205,11 +205,41 @@ export function buildChatPage(origin, config) {
     .header-actions {
       display: flex; align-items: center; gap: 8px; flex-shrink: 0;
     }
+    .btn-sound {
+      border: 1px solid rgba(34, 211, 238, 0.35);
+      background: rgba(34, 211, 238, 0.1);
+      color: var(--cyan);
+      border-radius: 999px;
+      padding: 5px 9px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex; align-items: center; gap: 4px;
+      white-space: nowrap;
+      transition: all .15s ease;
+    }
+    .btn-sound:hover {
+      background: rgba(34, 211, 238, 0.22);
+      border-color: var(--cyan);
+    }
     .badge {
       min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px;
       background: #f43f5e; color: #fff; font-size: 11px; font-weight: 700;
       display: inline-flex; align-items: center; justify-content: center;
       box-shadow: 0 0 12px rgba(244, 63, 94, 0.45);
+    }
+    .tab-badge {
+      min-width: 17px; height: 17px; padding: 0 4px; border-radius: 999px;
+      background: #f43f5e; color: #fff; font-size: 10px; font-weight: 800;
+      display: inline-flex; align-items: center; justify-content: center;
+      line-height: 1;
+      box-shadow: 0 0 8px rgba(244, 63, 94, 0.6);
+      animation: pulse-dot 2s infinite;
+    }
+    .tab-badge.hidden { display: none !important; }
+    @keyframes pulse-dot {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.12); }
     }
     .app-body {
       flex: 1; display: flex; min-height: 0; overflow: hidden;
@@ -275,6 +305,8 @@ export function buildChatPage(origin, config) {
       background: rgba(15, 30, 50, 0.8); color: var(--muted);
       border-radius: 10px; padding: 7px 4px; font-weight: 700; cursor: pointer;
       font-size: 0.82rem;
+      display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+      position: relative;
     }
     .avatar.group-av {
       background: linear-gradient(145deg, #134e4a, #0e7490);
@@ -768,6 +800,7 @@ export function buildChatPage(origin, config) {
       </div>
     </div>
     <div class="header-actions">
+      <button type="button" class="btn-sound" id="btnTestSound" onclick="testNotificationSound()" title="ทดสอบเสียงแจ้งเตือน">🔊 ทดสอบเสียง</button>
       <button type="button" class="btn-notify hidden" id="btnEnableNotify" onclick="enableNotifications()" title="เปิดการแจ้งเตือน">🔔 เปิดแจ้งเตือน</button>
       <span id="unreadBadge" class="badge hidden">0</span>
       <button type="button" class="btn btn-logout" onclick="logoutLINE()" title="ออกจากระบบ" aria-label="ออกจากระบบ">
@@ -787,9 +820,15 @@ export function buildChatPage(origin, config) {
       <div class="panel-head">
         <input type="search" class="search-box" id="searchInput" placeholder="ค้นหาแชท..." oninput="onSearch()">
         <div class="tabs">
-          <button class="tab active" id="tabChats" onclick="switchTab('chats')">แชท</button>
+          <button class="tab active" id="tabChats" onclick="switchTab('chats')">
+            <span>แชท</span>
+            <span id="tabChatsBadge" class="tab-badge hidden">0</span>
+          </button>
           <button class="tab" id="tabFriends" onclick="switchTab('friends')">เพื่อน</button>
-          <button class="tab" id="tabGroups" onclick="switchTab('groups')">กลุ่ม</button>
+          <button class="tab" id="tabGroups" onclick="switchTab('groups')">
+            <span>กลุ่ม</span>
+            <span id="tabGroupsBadge" class="tab-badge hidden">0</span>
+          </button>
         </div>
       </div>
       <div class="list-scroll" id="listContainer"></div>
@@ -1196,13 +1235,21 @@ function showToast(title, body, onClick) {
   setTimeout(function() { if (el.parentNode) el.remove(); }, 6000);
 }
 
+var _originalDocTitle = 'FSHH Chat';
+var _titleBlinkTimer = null;
+var _originalFaviconHref = '/favicon.png';
+
 function unlockAudio() {
-  if (state.audioReady) return;
-  state.audioReady = true;
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    state._audioCtx = ctx;
-    ctx.resume().then(function() { /* keep for later beeps */ });
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    if (!state._audioCtx || state._audioCtx.state === 'closed') {
+      state._audioCtx = new Ctx();
+    }
+    if (state._audioCtx && state._audioCtx.state === 'suspended') {
+      state._audioCtx.resume().catch(function() {});
+    }
+    state.audioReady = true;
   } catch (e) { /* ignore */ }
 }
 
@@ -1210,36 +1257,151 @@ function playNotifySound() {
   try {
     unlockAudio();
     const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
     const ctx = state._audioCtx && state._audioCtx.state !== 'closed'
       ? state._audioCtx
       : new Ctx();
     state._audioCtx = ctx;
-    if (ctx.state === 'suspended') ctx.resume();
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.type = 'sine';
-    o.frequency.value = 880;
-    g.gain.value = 0.1;
-    o.connect(g); g.connect(ctx.destination);
-    o.start();
-    setTimeout(function() { o.frequency.value = 1175; }, 90);
-    setTimeout(function() {
-      try { o.stop(); } catch (e) {}
-    }, 240);
-    if (navigator.vibrate) {
-      try { navigator.vibrate([80, 40, 80]); } catch (e) {}
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(function() {});
     }
-  } catch (e) { /* ignore */ }
+
+    const now = ctx.currentTime;
+    // Tone 1: A5 -> E6 chime
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(880, now);
+    osc1.frequency.exponentialRampToValueAtTime(1318.5, now + 0.08);
+    gain1.gain.setValueAtTime(0.001, now);
+    gain1.gain.linearRampToValueAtTime(0.35, now + 0.02);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.start(now);
+    osc1.stop(now + 0.36);
+
+    // Tone 2: A6 bell harmonic slightly offset
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(1760, now + 0.11);
+    gain2.gain.setValueAtTime(0.001, now + 0.11);
+    gain2.gain.linearRampToValueAtTime(0.3, now + 0.13);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.52);
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.start(now + 0.11);
+    osc2.stop(now + 0.53);
+
+    if (navigator.vibrate) {
+      try { navigator.vibrate([100, 50, 100]); } catch (e) {}
+    }
+  } catch (e) {
+    console.warn('playNotifySound error:', e);
+  }
+}
+
+function testNotificationSound() {
+  unlockAudio();
+  playNotifySound();
+  showToast('🔊 ทดสอบเสียง', 'ระบบเสียงแจ้งเตือนพร้อมทำงาน');
+}
+
+function updateFaviconBadge(count) {
+  var link = document.getElementById('dynamicFavicon') || document.querySelector("link[rel*='icon']");
+  if (!link) return;
+  if (!count || count <= 0) {
+    link.href = _originalFaviconHref;
+    return;
+  }
+  try {
+    var canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    var ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    var img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = function() {
+      ctx.clearRect(0, 0, 64, 64);
+      ctx.drawImage(img, 0, 0, 64, 64);
+      // Outer border circle
+      ctx.beginPath();
+      ctx.arc(46, 18, 16, 0, Math.PI * 2);
+      ctx.fillStyle = '#06101c';
+      ctx.fill();
+      // Inner vibrant red circle
+      ctx.beginPath();
+      ctx.arc(46, 18, 14, 0, Math.PI * 2);
+      ctx.fillStyle = '#f43f5e';
+      ctx.fill();
+      // Text
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 16px "Noto Sans Thai", Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      var text = count > 99 ? '99+' : String(count);
+      if (text.length > 2) ctx.font = 'bold 12px Arial';
+      ctx.fillText(text, 46, 19);
+      link.href = canvas.toDataURL('image/png');
+    };
+    img.onerror = function() {
+      ctx.clearRect(0, 0, 64, 64);
+      ctx.beginPath();
+      ctx.arc(32, 32, 28, 0, Math.PI * 2);
+      ctx.fillStyle = '#f43f5e';
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 22px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(count > 9 ? '9+' : String(count), 32, 32);
+      link.href = canvas.toDataURL('image/png');
+    };
+    img.src = _originalFaviconHref;
+  } catch (e) {
+    /* fallback ignore */
+  }
+}
+
+function updateTitleBadge(count, alertText) {
+  if (_titleBlinkTimer) {
+    clearInterval(_titleBlinkTimer);
+    _titleBlinkTimer = null;
+  }
+  if (!count || count <= 0) {
+    document.title = _originalDocTitle;
+    return;
+  }
+  var baseTitle = '(' + (count > 99 ? '99+' : count) + ') 🔴 ' + _originalDocTitle;
+  document.title = baseTitle;
+
+  if (alertText && document.visibilityState === 'hidden') {
+    var toggle = false;
+    var blinks = 0;
+    _titleBlinkTimer = setInterval(function() {
+      blinks++;
+      toggle = !toggle;
+      document.title = toggle ? ('💬 ' + alertText.slice(0, 22)) : baseTitle;
+      if (blinks >= 10 || document.visibilityState === 'visible') {
+        clearInterval(_titleBlinkTimer);
+        _titleBlinkTimer = null;
+        document.title = baseTitle;
+      }
+    }, 1200);
+  }
 }
 
 function alertNewMessage(senderLabel, preview, conversationId, senderUser) {
   playNotifySound();
   showToast(senderLabel, preview, function() {
     if (conversationId) {
-      openChat(conversationId, senderUser.userId, senderUser);
+      openChat(conversationId, senderUser && senderUser.userId, senderUser);
     }
   });
   browserNotify(senderLabel, preview, conversationId);
+  updateTitleBadge(state.lastUnread || 1, senderLabel + ': ' + preview);
 }
 
 function updateNotifyUi() {
@@ -2446,20 +2608,58 @@ async function leaveCurrentGroup() {
 }
 
 function setUnreadBadge(n) {
+  n = Number(n) || 0;
   const badge = document.getElementById('unreadBadge');
-  if (n > 0) {
-    badge.textContent = n > 99 ? '99+' : String(n);
-    badge.classList.remove('hidden');
-  } else {
-    badge.classList.add('hidden');
+  if (badge) {
+    if (n > 0) {
+      badge.textContent = n > 99 ? '99+' : String(n);
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
   }
 
-  // App icon badge (Android Chrome PWA / some desktop)
+  // Update In-App Tab badges (Direct Chats vs Groups)
+  var directUnread = 0;
+  var groupUnread = 0;
+  (state.conversations || []).forEach(function(c) {
+    var cnt = c.unreadCount || 0;
+    if (isGroupConv(c)) groupUnread += cnt;
+    else directUnread += cnt;
+  });
+
+  var tabChatsBadge = document.getElementById('tabChatsBadge');
+  if (tabChatsBadge) {
+    if (directUnread > 0) {
+      tabChatsBadge.textContent = directUnread > 99 ? '99+' : String(directUnread);
+      tabChatsBadge.classList.remove('hidden');
+    } else {
+      tabChatsBadge.classList.add('hidden');
+    }
+  }
+
+  var tabGroupsBadge = document.getElementById('tabGroupsBadge');
+  if (tabGroupsBadge) {
+    if (groupUnread > 0) {
+      tabGroupsBadge.textContent = groupUnread > 99 ? '99+' : String(groupUnread);
+      tabGroupsBadge.classList.remove('hidden');
+    } else {
+      tabGroupsBadge.classList.add('hidden');
+    }
+  }
+
+  // Dynamic Favicon Red Dot & Badge
+  updateFaviconBadge(n);
+
+  // Document Title Badge
+  updateTitleBadge(n);
+
+  // App icon badge (Chrome PWA on Windows Taskbar / Android)
   try {
     if (n > 0 && navigator.setAppBadge) {
-      navigator.setAppBadge(n);
+      navigator.setAppBadge(n).catch(function() {});
     } else if (navigator.clearAppBadge) {
-      navigator.clearAppBadge();
+      navigator.clearAppBadge().catch(function() {});
     }
   } catch (e) { /* ignore */ }
 
@@ -2552,6 +2752,7 @@ async function submitAiAsk(ev) {
 
 document.addEventListener('visibilitychange', function() {
   if (document.visibilityState === 'visible' && state.sessionToken) {
+    unlockAudio();
     pollInbox(false);
     restartPolling();
   } else if (state.sessionToken) {
@@ -2559,8 +2760,15 @@ document.addEventListener('visibilitychange', function() {
   }
 });
 
-document.addEventListener('click', unlockAudio, { once: true });
-document.addEventListener('touchstart', unlockAudio, { once: true });
+['click', 'touchstart', 'keydown', 'pointerdown', 'focus'].forEach(function(evt) {
+  window.addEventListener(evt, unlockAudio, { passive: true });
+});
+window.addEventListener('focus', function() {
+  unlockAudio();
+  if (state.sessionToken) {
+    pollInbox(false);
+  }
+});
 document.addEventListener('DOMContentLoaded', function() {
   registerChatServiceWorker();
   updateNotifyUi();

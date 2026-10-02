@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Department;
+use App\Models\TeamHa;
 use App\Models\User;
 use App\Services\Auth\UserLineAccountMergeService;
 use App\Services\FshhChat\FshhChatSyncService;
@@ -62,6 +63,7 @@ class CompleteProfileController extends Controller
             ],
             'rosterMatch' => $rosterMatch,
             'departments' => $departments,
+            'haTeams' => TeamHa::orderBy('abbreviation')->get(['id', 'abbreviation', 'name_th']),
             'positionOptions' => $this->rosterService->positionOptions(),
             'addFriendUrl' => config('services.line.add_friend_url'),
         ]);
@@ -114,6 +116,8 @@ class CompleteProfileController extends Controller
             'department_ids' => 'required|array|min:1',
             'department_ids.*' => 'exists:departments,id',
             'primary_department_id' => 'required|exists:departments,id',
+            'ha_team_ids' => 'nullable|array',
+            'ha_team_ids.*' => 'exists:teamha,id',
             'avatar' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
         ], [
             'prefix.required' => 'กรุณากรอกคำนำหน้า',
@@ -191,7 +195,11 @@ class CompleteProfileController extends Controller
         }
         $user->departments()->sync($departmentData);
 
-        $this->fshhChat->syncUser($user->fresh(['departments']));
+        if (array_key_exists('ha_team_ids', $validated)) {
+            $user->haTeams()->sync($validated['ha_team_ids'] ?? []);
+        }
+
+        $this->fshhChat->syncUser($user->fresh(['departments', 'haTeams']));
 
         $push = ['ok' => false, 'message' => ''];
         if ($user->line_id) {

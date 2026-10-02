@@ -26,9 +26,12 @@ export type ClaimModuleMeta = {
         nhso_start: string;
         nhso_otp: string;
         nhso_download: string;
+        nhso_scan?: string;
         nhso_clear: string;
         show: string;
         precheck?: string;
+        compare_page?: string;
+        compare_reconcile?: string;
     };
 };
 
@@ -57,9 +60,12 @@ const CGD_FALLBACK: ClaimModuleMeta = {
         summary: 'finance.cgd.summary',
         reconcile_all: 'finance.cgd.reconcile-all',
         compare: 'finance.cgd.stm.compare',
+        compare_page: 'finance.cgd.compare',
+        compare_reconcile: 'finance.cgd.compare.reconcile',
         nhso_start: 'finance.cgd.nhso.start',
         nhso_otp: 'finance.cgd.nhso.otp',
         nhso_download: 'finance.cgd.nhso.download',
+        nhso_scan: 'finance.cgd.nhso.scan',
         nhso_clear: 'finance.cgd.nhso.clear',
         show: 'finance.cgd.show',
         precheck: 'finance.cgd.precheck',
@@ -73,7 +79,7 @@ export function resolveClaimModule(module?: ClaimModuleMeta | null): ClaimModule
 /** Ziggy route helper ผูกกับ module */
 export function claimRoute(
     module: ClaimModuleMeta | null | undefined,
-    name: keyof ClaimModuleMeta['routes'] | 'destroy' | 'reconcile' | 'export' | 'export_pdf' | 'summary_export' | 'summary_export_pdf' | 'appeal_mark' | 'stm_index' | 'stm_reconcile' | 'compare_export' | 'compare_export_pdf' | 'precheck',
+    name: keyof ClaimModuleMeta['routes'] | 'destroy' | 'reconcile' | 'export' | 'export_pdf' | 'summary_export' | 'summary_export_pdf' | 'appeal_mark' | 'stm_index' | 'stm_reconcile' | 'compare_export' | 'compare_export_pdf' | 'compare_pair_pdf' | 'compare_page' | 'compare_reconcile' | 'precheck',
     params?: unknown,
 ): string {
     const m = resolveClaimModule(module);
@@ -92,6 +98,9 @@ export function claimRoute(
         stm_reconcile: 'finance.cgd.stm.reconcile',
         compare_export: 'finance.cgd.stm.compare.export',
         compare_export_pdf: 'finance.cgd.stm.compare.export-pdf',
+        compare_pair_pdf: `${prefix}compare.export-pair-pdf`,
+        compare_page: `${prefix}compare`,
+        compare_reconcile: `${prefix}compare.reconcile`,
         precheck: `${prefix}precheck`,
     };
 

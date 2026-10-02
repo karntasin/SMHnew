@@ -162,6 +162,7 @@ export default function CDenyPrecheck({
                     <DataHubSubNav active="finance.cgd.dashboard" />
                     <ClaimModuleSubNav
                         dashboardUrl={claimRoute(mod, 'dashboard')}
+                        compareUrl={claimRoute(mod, 'compare_page')}
                         importUrl={claimRoute(mod, 'import')}
                         stmUrl={mod.has_stm ? claimRoute(mod, 'stm_index') : undefined}
                         precheckUrl={claimRoute(mod, 'precheck')}

@@ -68,6 +68,11 @@ class RoomBookingNotification extends Notification
                 'message' => "การจองห้อง {$roomName} ถูกยกเลิก\nหัวข้อ: {$booking->title}\nวันที่: {$startTime} - {$endTime}",
                 'action_text' => 'ดูรายละเอียด',
             ],
+            'booking_updated' => [
+                'title' => '✏️ มีการแก้ไขข้อมูลการจองห้องประชุม',
+                'message' => "คำขอจองห้อง {$roomName} มีการแก้ไขข้อมูล\nหัวข้อ: {$booking->title}\nวันที่: {$startTime} - {$endTime}",
+                'action_text' => 'ดูรายละเอียด',
+            ],
         ];
 
         $msg = $messages[$this->actionType] ?? $messages['new_booking'];

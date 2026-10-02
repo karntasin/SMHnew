@@ -37,6 +37,8 @@ class ProfileUpdateRequest extends FormRequest
             'department_ids' => ['sometimes', 'array', 'min:1'],
             'department_ids.*' => ['integer', 'exists:departments,id'],
             'primary_department_id' => ['required_with:department_ids', 'integer', 'exists:departments,id'],
+            'ha_team_ids' => ['nullable', 'array'],
+            'ha_team_ids.*' => ['integer', 'exists:teamha,id'],
         ];
     }
 

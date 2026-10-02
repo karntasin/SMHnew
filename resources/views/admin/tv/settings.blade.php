@@ -588,6 +588,160 @@
         </div>
         @endif
 
+        @if(!$isDrug && !$isEr)
+        <!-- ─── ส่วนพิเศษ: ปรับแต่งหน้าจอผู้ป่วยรอผล LAB & X-RAY (OPD) ─── -->
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-indigo-200" x-data="{
+            enabled: {{ ($setting->lab_xray_enabled ?? true) ? 'true' : 'false' }},
+            rotateSec: {{ (int)($setting->lab_xray_rotate_seconds ?? 60) }},
+            title: '{{ addslashes($setting->lab_xray_title ?: "ผู้ป่วยรอผลตรวจ LAB & X-RAY") }}',
+            subtitle: '{{ addslashes($setting->lab_xray_subtitle ?: "รายชื่อจะหายไปโดยอัตโนมัติเมื่อผลการตรวจออกครบทุกรายการ และสามารถเข้าตรวจต่อได้ทันที") }}',
+            showConfirmed: {{ ($setting->lab_xray_show_confirmed ?? true) ? 'true' : 'false' }},
+            showOrderTime: {{ ($setting->lab_xray_show_order_time ?? true) ? 'true' : 'false' }}
+        }">
+            <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 flex-wrap gap-3">
+                <div>
+                    <h2 class="text-lg font-black text-slate-900 flex items-center gap-2">
+                        <span class="p-1.5 bg-indigo-100 text-indigo-700 rounded-lg">🔬</span>
+                        หน้าจอผู้ป่วยรอผลตรวจ LAB & X-RAY (OPD Auto-Rotation)
+                    </h2>
+                    <p class="text-xs text-slate-500 mt-1">สลับหน้าจอทีวีอัตโนมัติระหว่างคิวห้องตรวจกับรายชื่อผู้ป่วยที่สั่งตรวจ LAB/X-RAY เพื่อให้คนไข้ทราบสถานะ</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <a href="{{ route('admin.tv.lab_xray.index', $boardKey ?? ($setting->board_key ?? 'default')) }}"
+                       class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-all shadow-xs">
+                        <span>📊 เปิดหน้ามอนิเตอร์และตั้งค่าแบบละเอียด</span>
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    </a>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <label class="flex items-start gap-3 p-4 rounded-xl border cursor-pointer transition-colors"
+                       :class="enabled ? 'border-indigo-300 bg-indigo-50/50' : 'border-slate-200 bg-slate-50'">
+                    <input type="checkbox" name="lab_xray_enabled" value="1" x-model="enabled"
+                           class="w-4 h-4 mt-0.5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500">
+                    <div>
+                        <span class="text-sm font-bold text-slate-800">🔄 เปิดใช้งานการสลับหน้าจอรอผล LAB & X-RAY</span>
+                        <p class="text-xs text-slate-500 mt-0.5">เปิดให้ทีวีสลับไปแสดงรายชื่อผู้ป่วยรอผลตรวจอัตโนมัติ (และมีปุ่มกดสลับหน้าบนหัวจอทีวี)</p>
+                    </div>
+                </label>
+
+                <div class="p-4 rounded-xl border border-slate-200 bg-slate-50/50 flex flex-col justify-center">
+                    <label class="block text-xs font-bold text-slate-700 mb-1">⏱️ ระยะเวลาสลับหน้าจอ (วินาที)</label>
+                    <div class="flex items-center gap-2">
+                        <input type="number" name="lab_xray_rotate_seconds" x-model.number="rotateSec"
+                               min="10" max="600" class="w-28 border border-slate-300 rounded-lg p-2 text-sm font-bold text-center bg-white focus:ring-2 focus:ring-indigo-500">
+                        <span class="text-xs text-slate-600 font-medium">วินาที (ค่าเริ่มต้น 60 วินาที = 1 นาที)</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">ข้อความหัวเรื่องบนจอ (Title)</label>
+                    <input type="text" name="lab_xray_title" x-model="title"
+                           class="w-full border border-slate-300 rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500"
+                           placeholder="ผู้ป่วยรอผลตรวจ LAB & X-RAY">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">ข้อความคำอธิบายย่อย (Subtitle)</label>
+                    <input type="text" name="lab_xray_subtitle" x-model="subtitle"
+                           class="w-full border border-slate-300 rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500"
+                           placeholder="รายชื่อจะหายไปโดยอัตโนมัติเมื่อผลการตรวจออกครบทุกรายการ...">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label class="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 bg-white cursor-pointer hover:bg-slate-50">
+                    <input type="checkbox" name="lab_xray_show_confirmed" value="1" x-model="showConfirmed"
+                           class="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500">
+                    <span class="text-xs font-bold text-slate-700">✅ แสดงรายการที่ผลออกแล้ว (Confirmed Badge)</span>
+                </label>
+                <label class="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 bg-white cursor-pointer hover:bg-slate-50">
+                    <input type="checkbox" name="lab_xray_show_order_time" value="1" x-model="showOrderTime"
+                           class="w-4 h-4 text-amber-600 border-slate-300 rounded focus:ring-amber-500">
+                    <span class="text-xs font-bold text-slate-700">⏱️ แสดงเวลาที่สั่งตรวจและเวลารอคอย (Order Time & Wait Min)</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- ─── ส่วนพิเศษ: ปรับแต่งหน้าจอผู้ป่วยรอซักประวัติ (002) (OPD) ─── -->
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-indigo-200" x-data="{
+            enabled: {{ ($setting->screening_enabled ?? true) ? 'true' : 'false' }},
+            rotateSec: {{ (int)($setting->screening_rotate_seconds ?? 60) }},
+            title: '{{ addslashes($setting->screening_title ?: "ผู้ป่วยรอซักประวัติ / คัดกรอง") }}',
+            subtitle: '{{ addslashes($setting->screening_subtitle ?: "จุดคัดกรองห้องตรวจโรคภายนอก (002)") }}',
+            showAppointment: {{ ($setting->screening_show_appointment ?? true) ? 'true' : 'false' }},
+            showOrderTime: {{ ($setting->screening_show_order_time ?? true) ? 'true' : 'false' }}
+        }">
+            <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 flex-wrap gap-3">
+                <div>
+                    <h2 class="text-lg font-black text-slate-900 flex items-center gap-2">
+                        <span class="p-1.5 bg-indigo-100 text-indigo-700 rounded-lg">📋</span>
+                        หน้าจอผู้ป่วยรอซักประวัติ (002) (OPD Auto-Rotation)
+                    </h2>
+                    <p class="text-xs text-slate-500 mt-1">สลับหน้าจอทีวีอัตโนมัติเพื่อแสดงรายชื่อผู้ป่วยรอซักประวัติ ณ จุดคัดกรอง (002) พร้อมแสดงสถานะนัดและตรวจแล็บ-เอกซเรย์</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <a href="{{ route('admin.tv.screening.index', $boardKey ?? ($setting->board_key ?? 'default')) }}"
+                       class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-all shadow-xs">
+                        <span>📊 เปิดหน้ามอนิเตอร์และตั้งค่าแบบละเอียด</span>
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    </a>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <label class="flex items-start gap-3 p-4 rounded-xl border cursor-pointer transition-colors"
+                       :class="enabled ? 'border-indigo-300 bg-indigo-50/50' : 'border-slate-200 bg-slate-50'">
+                    <input type="checkbox" name="screening_enabled" value="1" x-model="enabled"
+                           class="w-4 h-4 mt-0.5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500">
+                    <div>
+                        <span class="text-sm font-bold text-slate-800">🔄 เปิดใช้งานการสลับหน้าจอรอซักประวัติ (002)</span>
+                        <p class="text-xs text-slate-500 mt-0.5">เปิดให้ทีวีสลับไปแสดงรายชื่อผู้ป่วยรอซักประวัติอัตโนมัติ (และมีปุ่มกดสลับหน้าบนหัวจอทีวี)</p>
+                    </div>
+                </label>
+
+                <div class="p-4 rounded-xl border border-slate-200 bg-slate-50/50 flex flex-col justify-center">
+                    <label class="block text-xs font-bold text-slate-700 mb-1">⏱️ ระยะเวลาสลับหน้าจอ (วินาที)</label>
+                    <div class="flex items-center gap-2">
+                        <input type="number" name="screening_rotate_seconds" x-model.number="rotateSec"
+                               min="10" max="600" class="w-28 border border-slate-300 rounded-lg p-2 text-sm font-bold text-center bg-white focus:ring-2 focus:ring-indigo-500">
+                        <span class="text-xs text-slate-600 font-medium">วินาที (ค่าเริ่มต้น 60 วินาที = 1 นาที)</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">ข้อความหัวเรื่องบนจอ (Title)</label>
+                    <input type="text" name="screening_title" x-model="title"
+                           class="w-full border border-slate-300 rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500"
+                           placeholder="ผู้ป่วยรอซักประวัติ / คัดกรอง">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">ข้อความคำอธิบายย่อย (Subtitle)</label>
+                    <input type="text" name="screening_subtitle" x-model="subtitle"
+                           class="w-full border border-slate-300 rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500"
+                           placeholder="จุดคัดกรองห้องตรวจโรคภายนอก (002)">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label class="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 bg-white cursor-pointer hover:bg-slate-50">
+                    <input type="checkbox" name="screening_show_appointment" value="1" x-model="showAppointment"
+                           class="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500">
+                    <span class="text-xs font-bold text-slate-700">🏷️ แสดงสถานะ นัด/ไม่ได้นัด และแท็กตรวจ LAB/X-RAY</span>
+                </label>
+                <label class="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 bg-white cursor-pointer hover:bg-slate-50">
+                    <input type="checkbox" name="screening_show_order_time" value="1" x-model="showOrderTime"
+                           class="w-4 h-4 text-amber-600 border-slate-300 rounded focus:ring-amber-500">
+                    <span class="text-xs font-bold text-slate-700">⏱️ แสดงเวลาที่มาถึงและเวลารอคอย (Arrival Time & Wait Min)</span>
+                </label>
+            </div>
+        </div>
+        @endif
+
         <!-- ─── ส่วนที่ 2: ขนาดตัวอักษร ─── -->
         <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200" x-data="{
             fonts: {
@@ -596,6 +750,10 @@
                 calling_name: '{{ $setting->font_calling_name ?? "auto" }}',
                 waiting_no: '{{ $setting->font_waiting_no ?? "auto" }}',
                 waiting_name: '{{ $setting->font_waiting_name ?? "auto" }}',
+                screening_oqueue: '{{ $setting->font_screening_oqueue ?? "auto" }}',
+                screening_name: '{{ $setting->font_screening_name ?? "auto" }}',
+                lab_oqueue: '{{ $setting->font_lab_oqueue ?? "auto" }}',
+                lab_name: '{{ $setting->font_lab_name ?? "auto" }}',
             },
             previewSize(val) {
                 return val === 'auto' ? '' : val + 'px';
@@ -635,6 +793,13 @@
                     ['name' => 'font_waiting_no',   'label' => '⏳ เลขคิวรอ',                    'preview' => '043'],
                     ['name' => 'font_waiting_name', 'label' => '👥 ชื่อคนไข้ที่รอ',              'preview' => 'นางสมหญิง ตัวอ***'],
                 ];
+
+                if (!$isDrug && !$isEr) {
+                    $fontFields[] = ['name' => 'font_screening_oqueue', 'label' => '📋 เลขคิว รอซักประวัติ (002)', 'preview' => '125'];
+                    $fontFields[] = ['name' => 'font_screening_name',   'label' => '📋 ชื่อคนไข้ รอซักประวัติ (002)', 'preview' => 'นางกัณฑ์มณี ศรีป***'];
+                    $fontFields[] = ['name' => 'font_lab_oqueue', 'label' => '🔬 เลขคิว LAB & X-RAY', 'preview' => '045'];
+                    $fontFields[] = ['name' => 'font_lab_name',   'label' => '🔬 ชื่อคนไข้ LAB & X-RAY', 'preview' => 'นายวิชัย ใจดี***'];
+                }
             @endphp
 
             <div class="space-y-4">

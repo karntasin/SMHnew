@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Link, router, useForm, usePage } from '@inertiajs/react';
-import { FileSpreadsheet, Upload, RefreshCw, AlertTriangle, Info, X, KeyRound, CloudDownload, Shield } from 'lucide-react';
+import { FileSpreadsheet, Upload, RefreshCw, AlertTriangle, Info, X, KeyRound, CloudDownload, Shield, CheckCircle2, FileCheck, Layers, ChevronDown, ChevronUp } from 'lucide-react';
 import { QualityPage, Panel, StatusPill } from '@/components/quality/quality-ui';
 import DataHubSubNav, { dataHubBreadcrumbs } from '../DataHub/DataHubSubNav';
 import ClaimModuleSubNav from '../DataHub/ClaimModuleSubNav';
@@ -33,6 +33,30 @@ interface BatchRow {
     latest_reconciliation: { total_shortfall: number } | null;
 }
 
+export interface ScannedFileItem {
+    filename: string;
+    base_name: string;
+    url: string;
+    already_downloaded: boolean;
+    batch?: {
+        id: number;
+        document_no?: string | null;
+        row_count: number;
+        total_approved: number;
+        created_at: string;
+    } | null;
+}
+
+export interface ScanSummary {
+    total_files: number;
+    allowed_files: number;
+    new_files: number;
+    existing_files: number;
+    skipped_wrong_name: number;
+    scanned_at?: string;
+    files: ScannedFileItem[];
+}
+
 interface NhsoPortal {
     configured: boolean;
     session: {
@@ -44,6 +68,7 @@ interface NhsoPortal {
         pending_downloads?: number;
         download_done?: number;
         download_total?: number;
+        scan_summary?: ScanSummary | null;
     } | null;
     validation_url: string;
     username_hint?: string | null;
@@ -141,13 +166,34 @@ export default function CgdClaimImport({ hosxpReady, batches, nhsoPortal, filena
     });
     const startForm = useForm({ year: Number(year), month: Number(month) });
     const otpForm = useForm({ otp: '' });
-    const downloadForm = useForm({ notes: '', auto_reconcile: false, batch_size: 5 });
+    const scanForm = useForm({});
+    const [showFileList, setShowFileList] = useState(false);
+    const downloadForm = useForm<{
+        notes: string;
+        auto_reconcile: boolean;
+        batch_size: number;
+        skip_existing: boolean;
+    }>({
+        notes: '',
+        auto_reconcile: false,
+        batch_size: 5,
+        skip_existing: true,
+    });
     const pendingDownloads = nhsoPortal?.session?.pending_downloads || 0;
     const downloadDone = nhsoPortal?.session?.download_done || 0;
     const downloadTotal = nhsoPortal?.session?.download_total || 0;
+    const scanSummary = nhsoPortal?.session?.scan_summary;
 
-    const postDownload = (batchSize: number) => {
-        downloadForm.transform((data) => ({ ...data, batch_size: batchSize }));
+    const handleScan = () => {
+        scanForm.post(claimRoute(mod, 'nhso_scan'));
+    };
+
+    const postDownload = (batchSize: number, customSkipExisting?: boolean) => {
+        downloadForm.transform((data) => ({
+            ...data,
+            batch_size: batchSize,
+            skip_existing: customSkipExisting !== undefined ? customSkipExisting : data.skip_existing,
+        }));
         downloadForm.post(claimRoute(mod, 'nhso_download'), {
             onFinish: () => {
                 downloadForm.transform((data) => data);
@@ -210,6 +256,7 @@ export default function CgdClaimImport({ hosxpReady, batches, nhsoPortal, filena
         >
             <ClaimModuleSubNav
                 dashboardUrl={claimRoute(mod, 'dashboard')}
+                compareUrl={claimRoute(mod, 'compare_page')}
                 importUrl={claimRoute(mod, 'import')}
                 stmUrl={mod.has_stm ? claimRoute(mod, 'stm_index') : undefined}
                 precheckUrl={mod.key === 'cgd' ? claimRoute(mod, 'precheck') : undefined}
@@ -424,23 +471,156 @@ export default function CgdClaimImport({ hosxpReady, batches, nhsoPortal, filena
                         )}
 
                         {phase === 'authenticated' && (
-                            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
-                                <div className="text-sm font-semibold text-emerald-950">
-                                    3) ดาวน์โหลด Excel จากคอลัมน์ Excel File
+                            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 space-y-4">
+                                <div>
+                                    <div className="text-sm font-semibold text-emerald-950">
+                                        3) ตรวจสอบและดาวน์โหลดไฟล์จาก e-Claim NHSO
+                                    </div>
+                                    <div className="mt-1 text-xs text-emerald-900/80">
+                                        ระบบจะดึงเฉพาะลิงก์ <code className="rounded bg-white/80 px-1">download excel</code> และตรวจสอบความซ้ำซ้อนกับไฟล์ที่เคยนำเข้าแล้วโดยอัตโนมัติ
+                                    </div>
                                 </div>
-                                <div className="mt-1 text-xs text-emerald-900/80">
-                                    ใช้เฉพาะลิงก์ <code className="rounded bg-white/80 px-1">download excel</code> —
-                                    ไม่ดึงตัวเลขผ่าน/ไม่ผ่าน และไม่ดึงไฟล์ .ecd
-                                    <br />
-                                    กด <strong>ดาวน์โหลดทุกไฟล์</strong> เพื่อนำเข้าครบในครั้งเดียว หรือเลือกทีละชุดถ้า timeout
-                                </div>
+
+                                {scanSummary ? (
+                                    <div className="rounded-xl border border-emerald-300 bg-white p-3.5 shadow-sm space-y-3">
+                                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+                                            <div className="flex items-center gap-2">
+                                                <Layers className="h-4 w-4 text-emerald-600" />
+                                                <span className="text-sm font-semibold text-slate-800">
+                                                    สรุปรายการไฟล์บน e-Claim ({scanSummary.allowed_files} ไฟล์)
+                                                </span>
+                                            </div>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-8 rounded-lg text-xs text-slate-600 hover:text-emerald-700 hover:bg-emerald-50"
+                                                disabled={scanForm.processing}
+                                                onClick={handleScan}
+                                            >
+                                                <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${scanForm.processing ? 'animate-spin' : ''}`} />
+                                                {scanForm.processing ? 'กำลังตรวจสอบ...' : 'ตรวจไฟล์ใหม่'}
+                                            </Button>
+                                        </div>
+
+                                        <div className="grid grid-cols-3 gap-2.5 text-xs">
+                                            <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-2 text-center">
+                                                <div className="text-slate-500 font-medium">ไฟล์ทั้งหมด</div>
+                                                <div className="text-base font-bold text-slate-800">{scanSummary.allowed_files}</div>
+                                            </div>
+                                            <div className="rounded-lg border border-sky-200 bg-sky-50/80 p-2 text-center">
+                                                <div className="text-sky-700 font-medium">ไฟล์ใหม่ (ยังไม่โหลด)</div>
+                                                <div className="text-base font-bold text-sky-800">{scanSummary.new_files}</div>
+                                            </div>
+                                            <div className="rounded-lg border border-emerald-200 bg-emerald-50/80 p-2 text-center">
+                                                <div className="text-emerald-700 font-medium">เคยดาวน์โหลดแล้ว</div>
+                                                <div className="text-base font-bold text-emerald-800">{scanSummary.existing_files}</div>
+                                            </div>
+                                        </div>
+
+                                        <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-2.5">
+                                            <label className="flex items-start gap-2.5 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    className="mt-0.5 h-4 w-4 rounded border-emerald-400 text-emerald-600 focus:ring-emerald-500"
+                                                    checked={downloadForm.data.skip_existing}
+                                                    onChange={(e) => downloadForm.setData('skip_existing', e.target.checked)}
+                                                />
+                                                <div className="text-xs">
+                                                    <span className="font-semibold text-emerald-950">
+                                                        ข้ามไฟล์ที่เคยดาวน์โหลดและนำเข้าแล้ว ({scanSummary.existing_files} ไฟล์)
+                                                    </span>
+                                                    <span className="ml-1.5 inline-block rounded bg-emerald-200/60 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-900">แนะนำ</span>
+                                                    <p className="mt-0.5 text-emerald-800/80">
+                                                        {downloadForm.data.skip_existing
+                                                            ? `ระบบจะดาวน์โหลดเฉพาะไฟล์ใหม่ (${scanSummary.new_files} ไฟล์) ช่วยประหยัดเวลาและป้องกัน timeout`
+                                                            : 'ปิดการข้าม: ระบบจะดาวน์โหลดและอัปเดตทับไฟล์เดิมทั้งหมดในเดือนนี้'}
+                                                    </p>
+                                                </div>
+                                            </label>
+                                        </div>
+
+                                        {scanSummary.files && scanSummary.files.length > 0 && (
+                                            <div className="pt-1">
+                                                <button
+                                                    type="button"
+                                                    className="flex items-center gap-1 text-xs font-medium text-emerald-800 hover:text-emerald-950"
+                                                    onClick={() => setShowFileList(!showFileList)}
+                                                >
+                                                    {showFileList ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                                                    <span>{showFileList ? 'ซ่อนรายชื่อไฟล์' : `ดูรายละเอียดรายชื่อไฟล์ (${scanSummary.files.length} รายการ)`}</span>
+                                                </button>
+
+                                                {showFileList && (
+                                                    <div className="mt-2 max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-inner">
+                                                        <table className="w-full text-left text-xs">
+                                                            <thead className="bg-slate-50 text-slate-600 sticky top-0 border-b border-slate-200">
+                                                                <tr>
+                                                                    <th className="px-3 py-2 font-medium">ชื่อไฟล์</th>
+                                                                    <th className="px-3 py-2 font-medium">สถานะในระบบ</th>
+                                                                    <th className="px-3 py-2 text-right font-medium">ข้อมูลที่นำเข้า</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody className="divide-y divide-slate-100">
+                                                                {scanSummary.files.map((f, i) => (
+                                                                    <tr key={i} className={f.already_downloaded ? 'bg-slate-50/50 text-slate-600' : 'bg-white font-medium text-slate-900'}>
+                                                                        <td className="px-3 py-2 font-mono text-[11px] truncate max-w-xs" title={f.filename}>
+                                                                            {f.filename}
+                                                                        </td>
+                                                                        <td className="px-3 py-2 whitespace-nowrap">
+                                                                            {f.already_downloaded ? (
+                                                                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
+                                                                                    <CheckCircle2 className="h-3 w-3 text-emerald-600" /> โหลดแล้ว
+                                                                                </span>
+                                                                            ) : (
+                                                                                <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-800">
+                                                                                    <FileCheck className="h-3 w-3 text-sky-600" /> ไฟล์ใหม่
+                                                                                </span>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="px-3 py-2 text-right text-[11px] text-slate-500 whitespace-nowrap">
+                                                                            {f.batch ? (
+                                                                                <span>{f.batch.row_count?.toLocaleString()} แถว · {money(f.batch.total_approved)} บ.</span>
+                                                                            ) : (
+                                                                                <span className="text-slate-400">—</span>
+                                                                            )}
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3">
+                                        <div className="text-xs text-slate-600">
+                                            ยังไม่มีข้อมูลรายการไฟล์ของเดือนนี้ — กดตรวจสอบเพื่อสแกนรายการไฟล์
+                                        </div>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            className="rounded-lg text-xs"
+                                            disabled={scanForm.processing}
+                                            onClick={handleScan}
+                                        >
+                                            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${scanForm.processing ? 'animate-spin' : ''}`} />
+                                            {scanForm.processing ? 'กำลังตรวจสอบ...' : 'ตรวจสอบรายการไฟล์'}
+                                        </Button>
+                                    </div>
+                                )}
+
                                 {(pendingDownloads > 0 || downloadTotal > 0) && (
-                                    <div className="mt-2 text-sm font-medium text-emerald-900">
-                                        ความคืบหน้า: {downloadDone}/{downloadTotal || '?'}
+                                    <div className="text-sm font-medium text-emerald-900">
+                                        ความคืบหน้าการดาวน์โหลด: {downloadDone}/{downloadTotal || '?'}
                                         {pendingDownloads > 0 ? ` · เหลือ ${pendingDownloads} ไฟล์` : ' · ครบแล้ว'}
                                     </div>
                                 )}
-                                <div className="mt-3 flex flex-wrap items-end gap-3">
+
+                                <div className="flex flex-wrap items-end gap-3 pt-1">
                                     <div className="space-y-1">
                                         <Label>จำนวนไฟล์ต่อครั้ง</Label>
                                         <Select
@@ -470,36 +650,55 @@ export default function CgdClaimImport({ hosxpReady, batches, nhsoPortal, filena
                                         เปรียบเทียบทันทีหลังนำเข้า
                                     </label>
                                 </div>
-                                <div className="mt-3 flex flex-wrap gap-2">
-                                    <Button
-                                        type="button"
-                                        className="rounded-xl bg-emerald-700 hover:bg-emerald-800"
-                                        disabled={downloadForm.processing}
-                                        onClick={() => postDownload(0)}
-                                    >
-                                        <CloudDownload className="mr-2 h-4 w-4" />
-                                        {downloadForm.processing
-                                            ? 'กำลังดาวน์โหลดทุกไฟล์...'
-                                            : pendingDownloads > 0
-                                              ? `ดาวน์โหลดที่เหลือทั้งหมด (${pendingDownloads} ไฟล์)`
-                                              : 'ดาวน์โหลดทุกไฟล์ + นำเข้า'}
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        className="rounded-xl"
-                                        disabled={downloadForm.processing || downloadForm.data.batch_size === 0}
-                                        onClick={() =>
-                                            postDownload(
-                                                downloadForm.data.batch_size > 0 ? downloadForm.data.batch_size : 5,
-                                            )
-                                        }
-                                    >
-                                        {pendingDownloads > 0
-                                            ? `ชุดถัดไป (${downloadForm.data.batch_size || 5} ไฟล์)`
-                                            : `เริ่มแบบทีละชุด (${downloadForm.data.batch_size || 5})`}
-                                    </Button>
-                                </div>
+
+                                {scanSummary && downloadForm.data.skip_existing && scanSummary.new_files === 0 && scanSummary.allowed_files > 0 ? (
+                                    <div className="rounded-xl border border-emerald-300 bg-emerald-100/60 p-3 text-xs text-emerald-950 flex items-start gap-2">
+                                        <CheckCircle2 className="h-4 w-4 text-emerald-700 shrink-0 mt-0.5" />
+                                        <div>
+                                            <span className="font-semibold">ไฟล์ทั้งหมด {scanSummary.allowed_files} ไฟล์ในเดือนนี้ถูกดาวน์โหลดและนำเข้าครบถ้วนแล้ว</span>
+                                            <p className="mt-0.5 text-emerald-800">
+                                                ไม่มีไฟล์ใหม่ที่ต้องดาวน์โหลด · หากต้องการนำเข้าซ้ำ ให้เอาเครื่องหมายถูกออกจาก <em>'ข้ามไฟล์ที่เคยดาวน์โหลดแล้ว'</em> ด้านบน
+                                            </p>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-wrap gap-2 pt-1">
+                                        <Button
+                                            type="button"
+                                            className="rounded-xl bg-emerald-700 hover:bg-emerald-800"
+                                            disabled={downloadForm.processing}
+                                            onClick={() => postDownload(0)}
+                                        >
+                                            <CloudDownload className="mr-2 h-4 w-4" />
+                                            {downloadForm.processing
+                                                ? 'กำลังดาวน์โหลด...'
+                                                : scanSummary && downloadForm.data.skip_existing
+                                                  ? scanSummary.new_files > 0
+                                                      ? `ดาวน์โหลดเฉพาะไฟล์ใหม่ (${scanSummary.new_files} ไฟล์)`
+                                                      : 'ดาวน์โหลดไฟล์'
+                                                  : pendingDownloads > 0
+                                                    ? `ดาวน์โหลดที่เหลือทั้งหมด (${pendingDownloads} ไฟล์)`
+                                                    : !downloadForm.data.skip_existing
+                                                      ? `ดาวน์โหลดซ้ำทั้งหมด (${scanSummary?.allowed_files || 'ทุก'} ไฟล์)`
+                                                      : 'ดาวน์โหลดทุกไฟล์ + นำเข้า'}
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            className="rounded-xl"
+                                            disabled={downloadForm.processing || downloadForm.data.batch_size === 0}
+                                            onClick={() =>
+                                                postDownload(
+                                                    downloadForm.data.batch_size > 0 ? downloadForm.data.batch_size : 5,
+                                                )
+                                            }
+                                        >
+                                            {pendingDownloads > 0
+                                                ? `ชุดถัดไป (${downloadForm.data.batch_size || 5} ไฟล์)`
+                                                : `เริ่มแบบทีละชุด (${downloadForm.data.batch_size || 5})`}
+                                        </Button>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>

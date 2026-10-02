@@ -3,6 +3,7 @@
 namespace App\Services\FshhChat;
 
 use App\Models\Department;
+use App\Models\TeamHa;
 use App\Models\User;
 use Illuminate\Support\Facades\Log;
 
@@ -58,12 +59,22 @@ class FshhChatSyncService
      */
     private function userPayload(User $user): array
     {
-        $user->loadMissing('departments');
+        $user->loadMissing(['departments', 'haTeams']);
         $departments = $user->departments
             ->map(fn ($dept) => [
                 'id' => $dept->id,
                 'name' => $dept->name,
                 'code' => $dept->code,
+            ])
+            ->values()
+            ->all();
+
+        $haTeams = $user->haTeams
+            ->map(fn ($team) => [
+                'id' => $team->id,
+                'abbreviation' => $team->abbreviation,
+                'name' => $team->abbreviation ? "{$team->abbreviation} ({$team->name_th})" : $team->name_th,
+                'name_th' => $team->name_th,
             ])
             ->values()
             ->all();
@@ -80,6 +91,7 @@ class FshhChatSyncService
             'email' => (string) ($user->email ?? ''),
             'avatar' => $avatar,
             'departments' => $departments,
+            'haTeams' => $haTeams,
         ];
     }
 
@@ -192,6 +204,76 @@ class FshhChatSyncService
         }
 
         $this->notifyDepartment($department, [
+            'title' => $title,
+            'message' => implode("\n", $lines),
+            'fields' => $fields,
+            'color' => $color,
+            'priority' => $priority,
+        ]);
+    }
+
+    /**
+     * ส่งข้อความ/การแจ้งเตือนเข้ากลุ่มทีม HA ใน FSHH Chat
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public function notifyHaTeam(?TeamHa $team, array $data): void
+    {
+        if (! $team || ! $this->client->isConfigured()) {
+            return;
+        }
+
+        $teamDisplayName = $team->abbreviation ? "{$team->abbreviation} ({$team->name_th})" : $team->name_th;
+        $title = trim((string) ($data['title'] ?? 'แจ้งเตือนทีม HA'));
+        $message = trim((string) ($data['message'] ?? ''));
+        $text = trim($title.($message !== '' ? "\n\n".$message : ''));
+        if ($text === '') {
+            return;
+        }
+
+        $fields = $this->normalizeChatFields($data['fields'] ?? []);
+        $color = $this->sanitizeColor((string) ($data['color'] ?? ''));
+        $priority = trim((string) ($data['priority'] ?? ''));
+        $payload = [
+            'teamId' => $team->id,
+            'teamName' => $teamDisplayName,
+            'title' => $title,
+            'message' => $text,
+        ];
+        if ($fields !== [] || $color !== '' || $priority !== '') {
+            $payload['messageType'] = 'card';
+            $payload['fields'] = $fields;
+            $payload['color'] = $color ?: '#2563EB';
+            $payload['priority'] = $priority;
+        }
+
+        $result = $this->client->call('notifyHaTeam', $payload);
+
+        if (($result['success'] ?? false) !== true) {
+            Log::info('FSHH Chat HA team notify skipped', [
+                'team_id' => $team->id,
+                'error' => $result['error'] ?? 'unknown',
+            ]);
+        }
+    }
+
+    /**
+     * ส่งการแจ้งเตือนแบบการ์ดเข้ากลุ่มทีม HA ใน FSHH Chat
+     *
+     * @param  array<string, mixed>  $fields
+     */
+    public function notifyCardToHaTeam(?TeamHa $team, string $title, array $fields, string $color = '#2563EB', string $priority = ''): void
+    {
+        $lines = [];
+        foreach ($fields as $label => $value) {
+            $value = trim((string) $value);
+            if ($value === '') {
+                continue;
+            }
+            $lines[] = $label.': '.$value;
+        }
+
+        $this->notifyHaTeam($team, [
             'title' => $title,
             'message' => implode("\n", $lines),
             'fields' => $fields,

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class TeamHa extends Model
@@ -21,5 +22,11 @@ class TeamHa extends Model
             ->orderByRaw("FIELD(role, 'chair', 'vice_chair', 'committee', 'secretary', 'assistant_secretary')")
             ->orderBy('sort_order')
             ->orderBy('name');
+    }
+
+    public function users(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'teamha_user', 'teamha_id', 'user_id')
+            ->withTimestamps();
     }
 }

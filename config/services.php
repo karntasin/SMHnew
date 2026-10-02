@@ -55,6 +55,7 @@ return [
     'custom_llm' => [
         'url' => env('CUSTOM_LLM_URL', 'http://192.168.0.175:8000/api/chat'),
         'timeout' => (int) env('CUSTOM_LLM_TIMEOUT', 60),
+        'model' => env('OLLAMA_MODEL', 'fshh-pro-7b:latest'),
     ],
 
     'telegram' => [

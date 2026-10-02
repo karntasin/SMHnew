@@ -99,6 +99,7 @@ export default function StmShow({ import: batch, summaries, details }: Props) {
         >
             <ClaimModuleSubNav
                 dashboardUrl={route('finance.cgd.dashboard')}
+                compareUrl={route('finance.cgd.compare')}
                 importUrl={route('finance.cgd.import')}
                 stmUrl={route('finance.cgd.stm.index')}
                 precheckUrl={route('finance.cgd.precheck')}
