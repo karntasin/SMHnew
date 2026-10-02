@@ -37,9 +37,9 @@
     <table class="hero">
         <tr>
             <td class="hero-left">
-                <div class="eyebrow">รายงานสรุปผลการตรวจสอบเวชระเบียน</div>
+                <div class="eyebrow">รายงานสรุปผลการตรวจสอบเวชระเบียน{{ !empty($targetLabel) ? ' · ' . $targetLabel : '' }}</div>
                 <h1>รายงานสรุป MRA</h1>
-                <div class="hero-sub">{{ $channelLabel }} · {{ $fromDateLabel }} – {{ $toDateLabel }}</div>
+                <div class="hero-sub">{{ $channelLabel }} · {{ $dateTypeLabel ?? 'ช่วงวันที่' }}: {{ $fromDateLabel }} – {{ $toDateLabel }}</div>
             </td>
             <td class="hero-right">
                 <div class="report-date">{{ $generatedAtDate }}</div>

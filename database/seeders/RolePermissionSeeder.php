@@ -10,9 +10,10 @@ class RolePermissionSeeder extends Seeder
 {
     public function run(): void
     {
-        // Buat role admin dan user jika belum ada
+        // Buat role admin, user, hroom jika belum ada
         $admin = Role::firstOrCreate(['name' => 'admin']);
         $user = Role::firstOrCreate(['name' => 'user']);
+        $hroom = Role::firstOrCreate(['name' => 'hroom']);
 
         // Daftar permission berdasarkan menu structure
         $permissions = [

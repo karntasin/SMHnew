@@ -17,7 +17,7 @@ class SyncFshhChatUsers extends Command
         $users = User::query()
             ->whereNotNull('line_id')
             ->where('line_id', '!=', '')
-            ->with('departments')
+            ->with(['departments', 'haTeams'])
             ->get();
 
         $this->info('Syncing '.$users->count().' LINE users to FSHH Chat...');
@@ -25,7 +25,7 @@ class SyncFshhChatUsers extends Command
         foreach ($users as $user) {
             $sync->syncUser($user);
             $ok++;
-            $this->line(' - '.$user->display_name.' ('.$user->departments->count().' แผนก)');
+            $this->line(' - '.$user->display_name.' ('.$user->departments->count().' แผนก, '.$user->haTeams->count().' ทีม HA)');
         }
         $this->info('Done: '.$ok);
 

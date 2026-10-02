@@ -2,6 +2,7 @@
 
 namespace App\Services\Finance;
 
+use App\Models\Finance\CgdStmBatch;
 use GuzzleHttp\Client;
 use GuzzleHttp\Cookie\CookieJar;
 use GuzzleHttp\Cookie\SetCookie;
@@ -215,8 +216,11 @@ class CgdEclaimNhsoPortalService
 
         if ($this->looksLoggedIn($res['body'], $res['url']) || $this->canOpenValidation($client)) {
             // ยืนยันอีกครั้งว่าเข้าหน้า Validation OFC ได้จริงหลัง login
+            $year = isset($state['year']) ? (int) $state['year'] : null;
+            $month = isset($state['month']) ? (int) $state['month'] : null;
+
             try {
-                $validationPage = $this->openValidationOfcPage($client);
+                $validationPage = $this->openValidationOfcPage($client, $year, $month);
                 $state['validation_url'] = $validationPage['url'];
                 $state['cookies'] = $this->exportCookies($jar);
             } catch (RuntimeException $e) {
@@ -227,11 +231,66 @@ class CgdEclaimNhsoPortalService
 
             $state['phase'] = 'authenticated';
             unset($state['otp_action'], $state['otp_fields'], $state['totp_secret']);
+
+            // Auto-scan ไฟล์ของเดือนเป้าหมายเพื่อเช็คไฟล์ที่เคยดาวน์โหลดแล้ว
+            try {
+                $allLinks = $this->extractExcelExportLinks($validationPage['body'], $validationPage['url']);
+                [$allowedLinks, $skippedWrongName] = $this->partitionAllowedRepLinks($allLinks);
+                $lookup = $this->loadExistingBatchLookup();
+                $files = [];
+                $existingCount = 0;
+                $newCount = 0;
+
+                foreach ($allowedLinks as $link) {
+                    $fname = $link['filename'];
+                    $existing = $this->matchExistingBatch($fname, $lookup);
+                    $isExisting = $existing !== null;
+
+                    if ($isExisting) {
+                        $existingCount++;
+                    } else {
+                        $newCount++;
+                    }
+
+                    $files[] = [
+                        'filename' => $fname,
+                        'base_name' => pathinfo($fname, PATHINFO_FILENAME),
+                        'url' => $link['url'],
+                        'already_downloaded' => $isExisting,
+                        'batch' => $existing ? [
+                            'id' => (int) $existing->id,
+                            'document_no' => $existing->document_no,
+                            'row_count' => (int) $existing->row_count,
+                            'total_approved' => (float) $existing->total_approved,
+                            'created_at' => optional($existing->created_at)->toIso8601String() ?? '',
+                        ] : null,
+                    ];
+                }
+
+                $state['scanned_summary'] = [
+                    'total_files' => count($allLinks),
+                    'allowed_files' => count($allowedLinks),
+                    'new_files' => $newCount,
+                    'existing_files' => $existingCount,
+                    'skipped_wrong_name' => $skippedWrongName,
+                    'files' => $files,
+                    'scanned_at' => now()->toIso8601String(),
+                ];
+            } catch (\Throwable $scanErr) {
+                Log::warning('CGD NHSO auto-scan after login failed: '.$scanErr->getMessage());
+            }
+
             $this->storeSession($state);
+
+            $scanInfo = '';
+            if (isset($state['scanned_summary'])) {
+                $s = $state['scanned_summary'];
+                $scanInfo = " · พบ {$s['allowed_files']} ไฟล์ (ใหม่ {$s['new_files']}, เคยโหลดแล้ว {$s['existing_files']})";
+            }
 
             return [
                 'status' => 'authenticated',
-                'message' => 'เข้าสู่ระบบสำเร็จ และเปิดหน้า Validation OFC ได้แล้ว — กดดาวน์โหลด REP ของเดือนที่เลือกได้',
+                'message' => 'เข้าสู่ระบบสำเร็จ และเปิดหน้า Validation OFC ได้แล้ว'.$scanInfo.' — ตรวจสอบและกดดาวน์โหลดได้',
                 'session' => $this->publicSession($state),
             ];
         }
@@ -267,11 +326,17 @@ class CgdEclaimNhsoPortalService
      *   imported:list<array{filename:string,document_no:?string,updated:bool,batch_id:int}>,
      *   failures:list<string>,
      *   pending:int,
+     *   skipped_existing:int,
+     *   skipped_name:int,
      *   message:string
      * }
      */
-    public function downloadAndImport(CgdStmImportService $importer, ?string $notes = null, int $batchSize = 5): array
-    {
+    public function downloadAndImport(
+        CgdStmImportService $importer,
+        ?string $notes = null,
+        int $batchSize = 5,
+        bool $skipExisting = true,
+    ): array {
         // batchSize = 0 หมายถึงดาวน์โหลดทุกไฟล์ที่เหลือในครั้งเดียว
         $downloadAll = $batchSize <= 0;
         $timeLimit = $downloadAll ? 1800 : 600;
@@ -298,6 +363,7 @@ class CgdEclaimNhsoPortalService
         $baseUrl = (string) ($state['validation_url'] ?? $this->validationUrl());
         $dir = (string) ($state['download_dir'] ?? '');
         $skippedWrongName = (int) ($state['download_skipped_name'] ?? 0);
+        $skippedExistingCount = (int) ($state['download_skipped_existing'] ?? 0);
 
         // ถ้ายังไม่มีคิวไฟล์ — เปิดหน้า Validation แล้วเก็บเฉพาะลิงก์ Excel File
         if (! is_array($pending) || $pending === []) {
@@ -314,10 +380,39 @@ class CgdEclaimNhsoPortalService
             ]);
 
             $allLinks = $this->extractExcelExportLinks($html, $baseUrl);
-            [$pending, $skippedNow] = $this->partitionAllowedRepLinks($allLinks);
+            [$allowedLinks, $skippedNow] = $this->partitionAllowedRepLinks($allLinks);
             $skippedWrongName = $skippedNow;
 
+            $lookup = $this->loadExistingBatchLookup();
+            $pending = [];
+            $skippedExistingInInit = 0;
+
+            foreach ($allowedLinks as $link) {
+                $fname = $link['filename'];
+                $existing = $this->matchExistingBatch($fname, $lookup);
+                if ($skipExisting && $existing !== null) {
+                    $skippedExistingInInit++;
+                    continue;
+                }
+                $pending[] = $link;
+            }
+
+            $skippedExistingCount += $skippedExistingInInit;
+
             if ($pending === []) {
+                if ($skippedExistingInInit > 0) {
+                    $msg = "ไฟล์ทั้งหมด {$skippedExistingInInit} รายการในเดือนนี้ เคยดาวน์โหลดและนำเข้าสู่ระบบแล้ว (ข้ามการดาวน์โหลดทั้งหมด) · หากต้องการนำเข้าใหม่ ให้เอาเครื่องหมายถูกออกจาก 'ข้ามไฟล์ที่เคยดาวน์โหลดแล้ว'";
+
+                    return [
+                        'downloaded' => [],
+                        'imported' => [],
+                        'failures' => [],
+                        'pending' => 0,
+                        'skipped_existing' => $skippedExistingCount,
+                        'skipped_name' => $skippedWrongName,
+                        'message' => $msg,
+                    ];
+                }
                 if ($allLinks !== []) {
                     throw new RuntimeException(
                         'พบไฟล์ Excel '.$skippedWrongName.' รายการ แต่ไม่มีชื่อขึ้นต้นด้วย '
@@ -343,14 +438,31 @@ class CgdEclaimNhsoPortalService
             $state['download_total'] = count($pending);
             $state['download_done'] = 0;
             $state['download_skipped_name'] = $skippedWrongName;
+            $state['download_skipped_existing'] = $skippedExistingCount;
         } else {
-            // กรองซ้ำกรณีคิวเก่าที่ยังไม่ได้เช็คชื่อไฟล์
+            // กรองซ้ำกรณีคิวเก่าที่ยังไม่ได้เช็คชื่อไฟล์ หรือเช็คไฟล์ซ้ำ
             [$pending, $extraSkipped] = $this->partitionAllowedRepLinks($pending);
             $skippedWrongName += $extraSkipped;
             $state['download_skipped_name'] = $skippedWrongName;
-            if ($extraSkipped > 0) {
-                $state['pending_excel_links'] = $pending;
-                $state['download_total'] = max(0, (int) ($state['download_total'] ?? 0) - $extraSkipped);
+
+            if ($skipExisting) {
+                $lookup = $this->loadExistingBatchLookup();
+                $stillPending = [];
+                $alreadyCount = 0;
+                foreach ($pending as $link) {
+                    if ($this->matchExistingBatch($link['filename'], $lookup) !== null) {
+                        $alreadyCount++;
+                    } else {
+                        $stillPending[] = $link;
+                    }
+                }
+                $pending = $stillPending;
+                $skippedExistingCount += $alreadyCount;
+                $state['download_skipped_existing'] = $skippedExistingCount;
+                if ($alreadyCount > 0) {
+                    $state['pending_excel_links'] = $pending;
+                    $state['download_total'] = max(0, (int) ($state['download_total'] ?? 0) - $alreadyCount);
+                }
             }
         }
 
@@ -366,6 +478,7 @@ class CgdEclaimNhsoPortalService
         $downloaded = [];
         $imported = [];
         $failures = [];
+        $lookupForChunk = $this->loadExistingBatchLookup();
 
         foreach ($chunk as $link) {
             $filename = $link['filename'];
@@ -373,6 +486,12 @@ class CgdEclaimNhsoPortalService
             // ข้ามดาวน์โหลดถ้าชื่อไม่ตรง prefix (กันคิวเก่า / ชื่อเปลี่ยนตอนดาวน์โหลด)
             if (! CgdClaimFilenameGuard::isAllowedRep($filename, $this->scheme)) {
                 $skippedWrongName++;
+                continue;
+            }
+
+            // ข้ามดาวน์โหลดถ้าเคยนำเข้าแล้ว
+            if ($skipExisting && $this->matchExistingBatch($filename, $lookupForChunk) !== null) {
+                $skippedExistingCount++;
                 continue;
             }
 
@@ -431,13 +550,31 @@ class CgdEclaimNhsoPortalService
         $state['pending_excel_links'] = array_values($pending);
         $state['download_done'] = (int) ($state['download_done'] ?? 0) + count($chunk);
         $state['download_skipped_name'] = $skippedWrongName;
+        $state['download_skipped_existing'] = $skippedExistingCount;
         $total = (int) ($state['download_total'] ?? ($state['download_done'] + count($pending)));
         $state['download_total'] = $total;
+
+        // อัปเดต scanned_summary ให้รายการไฟล์ที่เพิ่งดาวน์โหลดมีสถานะ already_downloaded = true
+        if (isset($state['scanned_summary']['files']) && is_array($state['scanned_summary']['files'])) {
+            $importedNames = collect($imported)->pluck('filename')->map(fn ($n) => $this->normalizeReportToken($n))->all();
+            foreach ($state['scanned_summary']['files'] as &$scFile) {
+                if (in_array($this->normalizeReportToken($scFile['filename']), $importedNames, true)) {
+                    $scFile['already_downloaded'] = true;
+                }
+            }
+            unset($scFile);
+            $state['scanned_summary']['existing_files'] = collect($state['scanned_summary']['files'])->where('already_downloaded', true)->count();
+            $state['scanned_summary']['new_files'] = count($state['scanned_summary']['files']) - $state['scanned_summary']['existing_files'];
+        }
+
         $this->storeSession($state);
 
         $remaining = count($pending);
         $msg = 'นำเข้า Excel จากคอลัมน์ Excel File · ชุดนี้ '.count($imported).'/'.count($chunk).' ไฟล์';
         $msg .= ' · รวมแล้ว '.$state['download_done'].'/'.$total;
+        if ($skippedExistingCount > 0) {
+            $msg .= ' · ข้ามไฟล์ที่เคยนำเข้าแล้ว '.$skippedExistingCount.' ไฟล์';
+        }
         if ($skippedWrongName > 0) {
             $msg .= ' · ข้ามชื่อไม่ตรง '.CgdClaimFilenameGuard::repPrefixHint($this->scheme).' '.$skippedWrongName.' ไฟล์';
         }
@@ -445,7 +582,7 @@ class CgdEclaimNhsoPortalService
             $msg .= " · เหลือ {$remaining} ไฟล์ กดดาวน์โหลดอีกครั้งเพื่อทำต่อ";
         } else {
             $msg .= ' · ครบทุกไฟล์แล้ว';
-            unset($state['pending_excel_links'], $state['download_dir'], $state['download_skipped_name']);
+            unset($state['pending_excel_links'], $state['download_dir'], $state['download_skipped_name'], $state['download_skipped_existing']);
             $this->storeSession($state);
         }
         if ($failures !== []) {
@@ -457,6 +594,7 @@ class CgdEclaimNhsoPortalService
             'imported' => $imported,
             'failures' => $failures,
             'pending' => $remaining,
+            'skipped_existing' => $skippedExistingCount,
             'skipped_name' => $skippedWrongName,
             'message' => $msg,
         ];
@@ -804,6 +942,161 @@ class CgdEclaimNhsoPortalService
         }
 
         return [$allowed, $skipped];
+    }
+
+    /**
+     * แปลง Token ชื่อไฟล์/เลขเอกสาร สำหรับเปรียบเทียบความซ้ำซ้อนกับตาราง finance_cgd_stm_batches
+     * ตัด extension (.ecd, .xls, .xlsx, .csv) และ prefix 'rep_' ออก พร้อมแปลงเป็นพิมพ์เล็ก
+     */
+    public function normalizeReportToken(string $name): string
+    {
+        $base = basename(str_replace('\\', '/', $name));
+        $clean = preg_replace('/\.(xls|xlsx|csv|ecd)$/i', '', trim($base));
+        $clean = preg_replace('/^rep_/i', '', (string) $clean);
+
+        return mb_strtolower((string) $clean);
+    }
+
+    /**
+     * โหลดรายการ batch ที่มีอยู่แล้วของ scheme นี้มาทำ lookup map ในหน่วยความจำ (Single Query)
+     *
+     * @return array<string, CgdStmBatch>
+     */
+    public function loadExistingBatchLookup(): array
+    {
+        $batches = CgdStmBatch::query()
+            ->forScheme($this->scheme)
+            ->select(['id', 'filename', 'document_no', 'row_count', 'total_approved', 'total_claim', 'created_at', 'status'])
+            ->get();
+
+        $lookup = [];
+        foreach ($batches as $b) {
+            if ($b->filename) {
+                $token = $this->normalizeReportToken($b->filename);
+                if ($token !== '') {
+                    $lookup[$token] = $b;
+                }
+            }
+            if ($b->document_no) {
+                $docToken = $this->normalizeReportToken($b->document_no);
+                if ($docToken !== '') {
+                    $lookup[$docToken] = $b;
+                }
+            }
+            if (preg_match('/(\d{8}_\d+)/', (string) ($b->filename ?: $b->document_no), $m)) {
+                $lookup['run_'.$m[1]] = $b;
+            }
+        }
+
+        return $lookup;
+    }
+
+    /**
+     * ค้นหาว่าชื่อไฟล์หรือ Token นี้มี batch เดิมในระบบแล้วหรือไม่
+     *
+     * @param  array<string, CgdStmBatch>  $lookup
+     */
+    public function matchExistingBatch(string $filename, array $lookup): ?CgdStmBatch
+    {
+        $token = $this->normalizeReportToken($filename);
+        if (isset($lookup[$token])) {
+            return $lookup[$token];
+        }
+
+        if (preg_match('/(\d{8}_\d+)/', $filename, $m)) {
+            if (isset($lookup['run_'.$m[1]])) {
+                return $lookup['run_'.$m[1]];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * ตรวจสอบรายการไฟล์บนหน้า Validation OFC ของเดือนเป้าหมาย และจับคู่กับฐานข้อมูล
+     *
+     * @return array{
+     *   total_files: int,
+     *   allowed_files: int,
+     *   new_files: int,
+     *   existing_files: int,
+     *   skipped_wrong_name: int,
+     *   scanned_at: string,
+     *   files: list<array{
+     *     filename: string,
+     *     base_name: string,
+     *     url: string,
+     *     already_downloaded: bool,
+     *     batch: ?array{id: int, document_no: ?string, row_count: int, total_approved: float, created_at: string}
+     *   }>
+     * }
+     */
+    public function scanFiles(?int $year = null, ?int $month = null): array
+    {
+        $state = $this->loadSession();
+        if (($state['phase'] ?? null) !== 'authenticated') {
+            throw new RuntimeException('ยังไม่ได้ login สำเร็จ — เริ่มเข้าสู่ระบบและกรอก OTP ก่อน');
+        }
+
+        $year = $year ?: (int) ($state['year'] ?? date('Y'));
+        $month = $month ?: (int) ($state['month'] ?? date('n'));
+        $jar = $this->importCookies($state['cookies'] ?? []);
+        $client = $this->client($jar);
+
+        $page = $this->openValidationOfcPage($client, $year, $month);
+        $html = $page['body'];
+        $baseUrl = $page['url'];
+
+        $allLinks = $this->extractExcelExportLinks($html, $baseUrl);
+        [$allowedLinks, $skippedWrongName] = $this->partitionAllowedRepLinks($allLinks);
+
+        $lookup = $this->loadExistingBatchLookup();
+        $files = [];
+        $existingCount = 0;
+        $newCount = 0;
+
+        foreach ($allowedLinks as $link) {
+            $fname = $link['filename'];
+            $existing = $this->matchExistingBatch($fname, $lookup);
+            $isExisting = $existing !== null;
+
+            if ($isExisting) {
+                $existingCount++;
+            } else {
+                $newCount++;
+            }
+
+            $files[] = [
+                'filename' => $fname,
+                'base_name' => pathinfo($fname, PATHINFO_FILENAME),
+                'url' => $link['url'],
+                'already_downloaded' => $isExisting,
+                'batch' => $existing ? [
+                    'id' => (int) $existing->id,
+                    'document_no' => $existing->document_no,
+                    'row_count' => (int) $existing->row_count,
+                    'total_approved' => (float) $existing->total_approved,
+                    'created_at' => optional($existing->created_at)->toIso8601String() ?? '',
+                ] : null,
+            ];
+        }
+
+        $summary = [
+            'total_files' => count($allLinks),
+            'allowed_files' => count($allowedLinks),
+            'new_files' => $newCount,
+            'existing_files' => $existingCount,
+            'skipped_wrong_name' => $skippedWrongName,
+            'files' => $files,
+            'scanned_at' => now()->toIso8601String(),
+        ];
+
+        $state['scanned_summary'] = $summary;
+        $state['cookies'] = $this->exportCookies($jar);
+        $state['validation_url'] = $baseUrl;
+        $this->storeSession($state);
+
+        return $summary;
     }
 
     /**
@@ -1750,6 +2043,10 @@ class CgdEclaimNhsoPortalService
 
         if (($state['phase'] ?? null) === 'configure_totp' && ! empty($state['totp_secret'])) {
             $public['totp_secret'] = $state['totp_secret'];
+        }
+
+        if (isset($state['scanned_summary'])) {
+            $public['scan_summary'] = $state['scanned_summary'];
         }
 
         return $public;

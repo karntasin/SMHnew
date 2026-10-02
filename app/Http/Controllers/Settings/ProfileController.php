@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Settings;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\ProfileUpdateRequest;
 use App\Models\Department;
+use App\Models\TeamHa;
 use App\Services\FshhChat\FshhChatSyncService;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
@@ -31,13 +32,14 @@ class ProfileController extends Controller
             return redirect()->route('login');
         }
 
-        $user->load(['positions', 'departments']);
+        $user->load(['positions', 'departments', 'haTeams']);
         $primary = $user->departments->first(fn ($dept) => (bool) $dept->pivot->is_primary);
 
         return Inertia::render('settings/profile', [
             'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail,
             'status' => $request->session()->get('status'),
             'departments' => Department::query()->orderBy('name')->get(['id', 'name']),
+            'ha_teams' => TeamHa::query()->orderBy('abbreviation')->get(['id', 'abbreviation', 'name_th']),
             'chatLiffUrl' => (string) config('services.fshh_chat.liff_url'),
             'addFriendUrl' => (string) config('services.line.add_friend_url'),
             'auth' => [
@@ -52,6 +54,7 @@ class ProfileController extends Controller
                     'avatar' => $user->avatar_url,
                     'department_ids' => $user->departments->pluck('id')->values()->all(),
                     'primary_department_id' => $primary?->id ?? $user->department_id,
+                    'ha_team_ids' => $user->haTeams->pluck('id')->values()->all(),
                     'positions' => $user->positions->map(function ($pos) {
                         return [
                             'id' => $pos->id,
@@ -93,6 +96,10 @@ class ProfileController extends Controller
             }
             $user->departments()->sync($departmentData);
             $user->update(['department_id' => $primaryId]);
+        }
+
+        if (array_key_exists('ha_team_ids', $validated)) {
+            $user->haTeams()->sync($validated['ha_team_ids'] ?? []);
         }
 
         $this->syncChat($user);
@@ -160,7 +167,7 @@ class ProfileController extends Controller
     private function syncChat(\App\Models\User $user): void
     {
         try {
-            $this->fshhChat->syncUser($user->fresh(['departments']) ?? $user);
+            $this->fshhChat->syncUser($user->fresh(['departments', 'haTeams']) ?? $user);
         } catch (\Throwable $e) {
             Log::warning('FSHH Chat sync after profile update failed: '.$e->getMessage());
         }

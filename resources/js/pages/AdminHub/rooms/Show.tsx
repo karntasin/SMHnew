@@ -1,28 +1,46 @@
-import React from 'react';
+import React, { useState } from 'react';
 import AppLayout from '@/layouts/app-layout';
 import { Head, Link, router } from '@inertiajs/react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Calendar, Clock, Users, MapPin, CheckCircle, XCircle, ArrowLeft, User, FileText } from 'lucide-react';
+import { Calendar, Clock, Users, MapPin, CheckCircle, XCircle, ArrowLeft, User, FileText, Edit } from 'lucide-react';
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
+import EditModal from './EditModal';
+
+interface Room {
+    id: number;
+    name: string;
+    capacity: number;
+    location?: string | null;
+    color: string;
+    image_url?: string | null;
+}
 
 interface Booking {
     id: number;
+    user_id?: number;
+    room_id?: number;
     title: string;
     description: string;
     start_time: string;
     end_time: string;
+    booking_date?: string;
+    start_time_hi?: string;
+    end_time_hi?: string;
     status: string;
     attendees_count: number;
     created_at: string;
+    can_edit?: boolean;
     room: {
         id: number;
         name: string;
         location: string;
         color: string;
+        capacity?: number;
+        image_url?: string | null;
     };
     user: {
         id: number;
@@ -34,9 +52,12 @@ interface Booking {
 
 interface Props {
     booking: Booking;
+    rooms?: Room[];
+    can_edit?: boolean;
 }
 
-export default function Show({ booking }: Props) {
+export default function Show({ booking, rooms = [] }: Props) {
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const getStatusBadge = (status: string) => {
         switch (status) {
             case 'approved':
@@ -157,13 +178,13 @@ export default function Show({ booking }: Props) {
                                     <div>
                                         <p className="text-sm text-muted-foreground mb-1">เวลาเริ่ม</p>
                                         <p className="text-xl font-bold text-blue-700 dark:text-blue-400">
-                                            {format(new Date(booking.start_time), 'HH:mm')}
+                                            {format(new Date(booking.start_time), 'HH:mm')} น.
                                         </p>
                                     </div>
                                     <div>
                                         <p className="text-sm text-muted-foreground mb-1">เวลาสิ้นสุด</p>
                                         <p className="text-xl font-bold text-blue-700 dark:text-blue-400">
-                                            {format(new Date(booking.end_time), 'HH:mm')}
+                                            {format(new Date(booking.end_time), 'HH:mm')} น.
                                         </p>
                                     </div>
                                 </div>
@@ -193,14 +214,28 @@ export default function Show({ booking }: Props) {
                                         ยกเลิกการจอง
                                     </Button>
                                 )}
-                                <Button variant="ghost" className="w-full">
-                                    แก้ไขข้อมูล
-                                </Button>
+                                {booking.can_edit && (
+                                    <Button
+                                        variant="outline"
+                                        className="w-full border-sky-300 text-sky-700 hover:bg-sky-50 dark:border-sky-700 dark:text-sky-300"
+                                        onClick={() => setIsEditModalOpen(true)}
+                                    >
+                                        <Edit className="mr-2 h-4 w-4" />
+                                        แก้ไขข้อมูล
+                                    </Button>
+                                )}
                             </CardContent>
                         </Card>
                     </div>
                 </div>
             </div>
+
+            <EditModal
+                open={isEditModalOpen}
+                onOpenChange={setIsEditModalOpen}
+                rooms={rooms}
+                booking={booking}
+            />
         </AppLayout>
     );
 }

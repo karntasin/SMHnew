@@ -45,6 +45,15 @@ class User extends Authenticatable implements HasMedia
     {
         return $this->departments()->wherePivot('is_primary', true)->first();
     }
+
+    /**
+     * Many-to-many relationship: User HA teams (สามารถสังกัดได้หลายทีม HA หรือไม่ระบุก็ได้)
+     */
+    public function haTeams()
+    {
+        return $this->belongsToMany(TeamHa::class, 'teamha_user', 'user_id', 'teamha_id')
+                    ->withTimestamps();
+    }
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable, HasRoles, InteractsWithMedia;
 

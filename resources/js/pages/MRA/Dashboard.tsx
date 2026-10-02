@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils';
 import { maskPatientName } from '@/lib/pii';
 import { QualityPage, StatCard, Panel, StatusPill, EmptyState } from '@/components/quality/quality-ui';
 import MraSubNav, { mraBreadcrumbs } from './MraSubNav';
+import CriteriaErrorReportModal from './CriteriaErrorReportModal';
 
 interface CategoryStat {
   id: number;
@@ -37,6 +38,7 @@ interface MonthlyTrend {
 }
 
 interface TopError {
+  criteria_id?: number;
   criteria_code: string;
   criteria_name: string;
   category_name: string;
@@ -80,6 +82,12 @@ export default function MraDashboard({
   topErrors = [],
   recentAudits = [],
 }: Props) {
+  const [selectedErrorCriteria, setSelectedErrorCriteria] = useState<{
+    id?: number;
+    code?: string;
+    name?: string;
+  } | null>(null);
+
   const accuracyTrend = stats?.this_month_accuracy - stats?.last_month_accuracy;
 
   const getStatusBadge = (status: string) => {
@@ -168,16 +176,44 @@ export default function MraDashboard({
               </div>
           </Panel>
 
-          <Panel title="ข้อผิดพลาดที่พบบ่อย" description="รายการที่มักพบปัญหาจากการตรวจสอบ">
+          <Panel title="ข้อผิดพลาดที่พบบ่อย" description="รายการที่มักพบปัญหาจากการตรวจสอบ (คลิกดูรายงานเชิงลึก)">
               <div className="space-y-3">
                 {topErrors.length > 0 ? (
                   topErrors.slice(0, 5).map((error, index) => (
-                    <div key={index} className="flex items-start gap-3 rounded-xl border border-rose-100 bg-rose-50/50 p-3">
-                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-rose-500 text-sm font-bold text-white">
+                    <div
+                      key={index}
+                      onClick={() =>
+                        setSelectedErrorCriteria({
+                          id: error.criteria_id,
+                          code: error.criteria_code,
+                          name: error.criteria_name,
+                        })
+                      }
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          setSelectedErrorCriteria({
+                            id: error.criteria_id,
+                            code: error.criteria_code,
+                            name: error.criteria_name,
+                          });
+                        }
+                      }}
+                      className="group flex items-start gap-3 rounded-xl border border-rose-100 bg-rose-50/50 p-3 hover:border-rose-300 hover:bg-rose-100/70 hover:shadow-xs transition-all cursor-pointer text-left"
+                    >
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-rose-500 text-sm font-bold text-white group-hover:scale-105 transition-transform">
                         {index + 1}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-slate-800">{error.criteria_name}</p>
+                        <div className="flex items-center justify-between gap-1">
+                          <p className="truncate text-sm font-medium text-slate-800 group-hover:text-rose-950">
+                            {error.criteria_name}
+                          </p>
+                          <span className="shrink-0 text-[11px] font-semibold text-rose-600 opacity-70 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+                            ดูเจาะลึก <ChevronRight className="w-3.5 h-3.5 inline" />
+                          </span>
+                        </div>
                         <p className="mt-1 text-xs text-slate-500">
                           {error.category_name} • ไม่ผ่าน <span className="font-semibold text-rose-600">{error.fail_count}</span> ครั้ง ({Number(error.percentage || 0).toFixed(1)}%)
                         </p>
@@ -298,6 +334,14 @@ export default function MraDashboard({
               </Link>
             </div>
         </Panel>
+
+      <CriteriaErrorReportModal
+        open={Boolean(selectedErrorCriteria)}
+        onOpenChange={(open) => !open && setSelectedErrorCriteria(null)}
+        criteriaId={selectedErrorCriteria?.id}
+        criteriaCode={selectedErrorCriteria?.code}
+        criteriaName={selectedErrorCriteria?.name}
+      />
     </QualityPage>
   );
 }

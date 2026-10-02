@@ -89,6 +89,43 @@ async function ensureDepartmentGroup(env, systemId, department) {
   return conv;
 }
 
+async function ensureHaTeamGroup(env, systemId, haTeam) {
+  const key = String(haTeam.id);
+  const name = String(haTeam.name || (haTeam.abbreviation ? `${haTeam.abbreviation} (${haTeam.name_th || ''})` : haTeam.name_th) || 'ทีม HA').trim();
+  const groupName = 'ทีม HA: ' + name;
+  let conv = await env.DB.prepare(
+    `SELECT * FROM conversations WHERE source = 'ha_team' AND source_key = ?`
+  )
+    .bind(key)
+    .first();
+  const ts = nowIso();
+  if (!conv) {
+    const result = await env.DB.prepare(
+      `INSERT INTO conversations
+       (type, name, created_by, user1_id, user2_id, source, source_key, created_at, updated_at)
+       VALUES ('group', ?, ?, ?, NULL, 'ha_team', ?, ?, ?)`
+    )
+      .bind(groupName, systemId, systemId, key, ts, ts)
+      .run();
+    conv = await env.DB.prepare('SELECT * FROM conversations WHERE id = ?')
+      .bind(result.meta.last_row_id)
+      .first();
+    await addMember(env, conv.id, systemId, 'admin', ts);
+    await env.DB.prepare(
+      `INSERT INTO messages (conversation_id, sender_id, receiver_id, message_type, message, is_read, created_at)
+       VALUES (?, ?, 0, 'system', ?, 1, ?)`
+    )
+      .bind(conv.id, systemId, 'กลุ่มทีม HA «' + name + '» จากเว็บแอป', ts)
+      .run();
+  } else if (conv.name !== groupName) {
+    await env.DB.prepare('UPDATE conversations SET name = ?, updated_at = ? WHERE id = ?')
+      .bind(groupName, ts, conv.id)
+      .run();
+    conv.name = groupName;
+  }
+  return conv;
+}
+
 async function loadOrCreateSyncedUser(env, params) {
   const laravelId = params.laravelUserId ? Number(params.laravelUserId) : 0;
   const lineUserId = String(params.lineUserId || '').trim();
@@ -184,6 +221,36 @@ async function syncUser(env, params) {
     )
       .bind(row.id, user.id)
       .run();
+  }
+
+  if (Array.isArray(params.haTeams) || Array.isArray(params.ha_teams)) {
+    const haTeams = Array.isArray(params.haTeams) ? params.haTeams : params.ha_teams;
+    const desiredHa = new Set(
+      haTeams.map((t) => String(t.id)).filter((id) => id && id !== 'undefined')
+    );
+    const { results: currentHa } = await env.DB.prepare(
+      `SELECT c.id, c.source_key FROM conversations c
+       INNER JOIN conversation_members m ON m.conversation_id = c.id
+       WHERE m.user_id = ? AND c.source = 'ha_team'`
+    )
+      .bind(user.id)
+      .all();
+    const haveHa = new Set((currentHa || []).map((row) => String(row.source_key)));
+    for (const team of haTeams) {
+      const conv = await ensureHaTeamGroup(env, system.id, team);
+      if (!haveHa.has(String(team.id))) {
+        await addMember(env, conv.id, user.id, 'member', ts);
+      }
+      joined.push({ conversationId: String(conv.id), name: conv.name, haTeamId: String(team.id) });
+    }
+    for (const row of currentHa || []) {
+      if (desiredHa.has(String(row.source_key))) continue;
+      await env.DB.prepare(
+        'DELETE FROM conversation_members WHERE conversation_id = ? AND user_id = ?'
+      )
+        .bind(row.id, user.id)
+        .run();
+    }
   }
 
   return {
@@ -317,6 +384,52 @@ async function notifyDepartment(env, params) {
   return { success: true, conversationId: String(conv.id), messageId: 'M' + result.meta.last_row_id };
 }
 
+async function notifyHaTeam(env, params) {
+  const key = String(params.teamId || params.haTeamId || params.sourceKey || '').trim();
+  if (!key) throw new Error('ต้องมี teamId');
+  const title = String(params.title || '').trim();
+  const text = String(params.message || title || '').trim();
+  if (!text) throw new Error('ข้อความว่าง');
+  const fields = cardFields(params.fields);
+  const priority = String(params.priority || '').trim();
+  const color = sanitizeCardColor(params.color);
+  const useCard =
+    String(params.messageType || '').toLowerCase() === 'card' ||
+    Boolean(color) ||
+    Boolean(priority) ||
+    fields.length > 0;
+  const stored = useCard
+    ? JSON.stringify({
+        title: title || 'แจ้งเตือนทีม HA',
+        body: text,
+        color: color || '#2563EB',
+        priority,
+        fields,
+      })
+    : text;
+  const system = await ensureSystemUser(env);
+  const conv = await ensureHaTeamGroup(env, system.id, {
+    id: key,
+    name: String(params.teamName || params.name || '').trim() || ('ทีม HA ' + key),
+  });
+  const ts = nowIso();
+  const result = await env.DB.prepare(
+    `INSERT INTO messages (conversation_id, sender_id, receiver_id, message_type, message, is_read, created_at)
+     VALUES (?, ?, 0, ?, ?, 0, ?)`
+  )
+    .bind(conv.id, system.id, useCard ? 'card' : 'text', stored, ts)
+    .run();
+  await recordOutboundMessage(env, {
+    conversationId: conv.id,
+    messageId: result.meta.last_row_id,
+    senderId: system.id,
+    messageType: useCard ? 'card' : 'text',
+    message: stored,
+    createdAt: ts,
+  });
+  return { success: true, conversationId: String(conv.id), messageId: 'M' + result.meta.last_row_id };
+}
+
 export async function handleInternal(request, env) {
   if (request.method === 'OPTIONS') {
     return jsonResponse({ ok: true }, 204);
@@ -343,6 +456,7 @@ export async function handleInternal(request, env) {
     if (action === 'createWebSession') return jsonResponse(await createWebSession(env, body));
     if (action === 'notifyUser') return jsonResponse(await notifyUser(env, body));
     if (action === 'notifyDepartment') return jsonResponse(await notifyDepartment(env, body));
+    if (action === 'notifyHaTeam') return jsonResponse(await notifyHaTeam(env, body));
     if (action === 'syncAiContext') {
       if (!body.payload || typeof body.payload !== 'object') {
         return jsonResponse({ success: false, error: 'ต้องมี payload' }, 400);

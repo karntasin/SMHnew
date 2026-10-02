@@ -412,17 +412,20 @@ class FinanceLgoClaimController extends FinanceCgdClaimController
         $data = $request->validate([
             'notes' => ['nullable', 'string', 'max:1000'],
             'auto_reconcile' => ['nullable', 'boolean'],
+            'skip_existing' => ['nullable', 'boolean'],
             'batch_size' => ['nullable', 'integer', 'min:0', 'max:500'],
         ]);
 
         $batchSize = (int) ($data['batch_size'] ?? 5);
+        $skipExisting = $request->has('skip_existing') ? $request->boolean('skip_existing') : true;
         $this->extendNhsoRuntime($batchSize <= 0 ? 1800 : 600);
 
         try {
             $result = $this->nhso()->downloadAndImport(
                 $this->importer,
                 $data['notes'] ?? null,
-                $batchSize
+                $batchSize,
+                $skipExisting
             );
         } catch (\Throwable $e) {
             throw ValidationException::withMessages([
@@ -455,12 +458,33 @@ class FinanceLgoClaimController extends FinanceCgdClaimController
 
         $created = collect($result['imported'])->where('updated', false)->count();
         $updated = collect($result['imported'])->where('updated', true)->count();
+        $flashMsg = $result['message'];
+        if ($created > 0 || $updated > 0) {
+            $flashMsg .= " · นำเข้าใหม่ {$created} · อัปเดต {$updated}";
+        }
 
         return redirect()
             ->route('finance.lgo.import')
-            ->with('success', $result['message']." · ใหม่ {$created} · อัปเดต {$updated}")
+            ->with('success', $flashMsg)
             ->with('import_failures', $result['failures'])
             ->with('nhso_status', 'done');
+    }
+
+    public function nhsoScan(Request $request)
+    {
+        $this->extendNhsoRuntime(120);
+
+        try {
+            $summary = $this->nhso()->scanFiles();
+        } catch (\Throwable $e) {
+            throw ValidationException::withMessages([
+                'nhso' => 'ตรวจสอบรายการไฟล์ไม่สำเร็จ: '.$e->getMessage(),
+            ]);
+        }
+
+        return redirect()
+            ->route('finance.lgo.import')
+            ->with('success', "ตรวจสอบรายการไฟล์สำเร็จ: พบ {$summary['allowed_files']} ไฟล์ (ใหม่ {$summary['new_files']} ไฟล์, เคยดาวน์โหลดแล้ว {$summary['existing_files']} ไฟล์)");
     }
 
     public function nhsoClearSession()

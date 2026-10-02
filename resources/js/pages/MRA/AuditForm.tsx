@@ -68,6 +68,7 @@ interface Audit {
     visit_date: string;
     status: string;
     audit_type: string;
+    audit_target?: string | null;
     chief_complaint: string | null;
     pdx: string | null;
     bp_systolic: number | null;
@@ -366,7 +367,7 @@ export default function MraAuditForm({
             icon={FileSearch}
             badge="ศูนย์พัฒนาคุณภาพ · MRA"
             title="ประเมินคุณภาพเวชระเบียน"
-            subtitle={`${standardLabel} · ${maskPatientName(audit.patient_name)}`}
+            subtitle={`${standardLabel} · ${maskPatientName(audit.patient_name)} · ${audit.audit_target === 'rta' ? 'ส่ง ทบ.' : 'ตรวจสอบภายใน'}`}
             breadcrumbs={mraBreadcrumbs({ title: `ประเมิน #${audit.id}`, href: `/mra/${audit.id}/audit` })}
             headTitle={`ประเมินเวชระเบียน - ${audit.hn}`}
             actions={
@@ -474,6 +475,17 @@ export default function MraAuditForm({
                                         audit.audit_type === 'opd'
                                             ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                                             : 'border-violet-200 bg-violet-50 text-violet-700'
+                                    }
+                                />
+                            </div>
+                            <div className="flex justify-between gap-2 items-center">
+                                <span className="text-slate-500">ตรวจสำหรับ</span>
+                                <StatusPill
+                                    label={audit.audit_target === 'rta' ? 'ส่ง ทบ.' : 'ตรวจสอบภายใน'}
+                                    className={
+                                        audit.audit_target === 'rta'
+                                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                            : 'border-indigo-200 bg-indigo-50 text-indigo-700'
                                     }
                                 />
                             </div>

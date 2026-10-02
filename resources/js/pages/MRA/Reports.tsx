@@ -13,11 +13,16 @@ import {
     FileSearch,
     Stethoscope,
     BedDouble,
+    Building2,
+    ShieldCheck,
+    Layers,
+    ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { QualityPage, StatCard, Panel, StatusPill, EmptyState, Field, qualityInput } from '@/components/quality/quality-ui';
 import { ThaiDatePicker, formatThaiDateFromIso } from '@/components/ui/thai-date-picker';
 import MraSubNav, { mraBreadcrumbs } from './MraSubNav';
+import CriteriaErrorReportModal from './CriteriaErrorReportModal';
 
 interface CategoryStat {
     id: number;
@@ -31,6 +36,7 @@ interface CategoryStat {
 }
 
 interface TopError {
+    criteria_id?: number;
     criteria_code: string;
     criteria_name: string;
     category_name: string;
@@ -62,6 +68,7 @@ interface Props {
         from_date: string;
         to_date: string;
         channel?: 'all' | 'opd' | 'ipd';
+        audit_target?: 'all' | 'internal' | 'rta';
     };
 }
 
@@ -126,7 +133,15 @@ function CategoryTable({ rows, emptyText }: { rows: CategoryStat[]; emptyText: s
     );
 }
 
-function ErrorsTable({ rows, emptyText }: { rows: TopError[]; emptyText: string }) {
+function ErrorsTable({
+    rows,
+    emptyText,
+    onSelectError,
+}: {
+    rows: TopError[];
+    emptyText: string;
+    onSelectError?: (error: TopError) => void;
+}) {
     if (rows.length === 0) {
         return <EmptyState text={emptyText} />;
     }
@@ -138,20 +153,39 @@ function ErrorsTable({ rows, emptyText }: { rows: TopError[]; emptyText: string 
                     <tr className="border-b border-slate-100 text-left text-xs uppercase text-slate-400">
                         <th className="w-12 py-2 pr-3">#</th>
                         <th className="w-24 py-2 pr-3">รหัส</th>
-                        <th className="py-2 pr-3">รายการ</th>
+                        <th className="py-2 pr-3">รายการ (คลิกเพื่อดูรายงานเจาะลึก)</th>
                         <th className="py-2 pr-3">หมวด</th>
                         <th className="py-2 pr-3 text-center">จำนวนครั้ง</th>
+                        <th className="w-20 py-2 pr-3 text-right"></th>
                     </tr>
                 </thead>
                 <tbody>
                     {rows.map((error, index) => (
-                        <tr key={`${error.criteria_code}-${index}`} className="border-b border-slate-50">
+                        <tr
+                            key={`${error.criteria_code}-${index}`}
+                            onClick={() => onSelectError?.(error)}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                    onSelectError?.(error);
+                                }
+                            }}
+                            className="border-b border-slate-50 hover:bg-rose-50/50 cursor-pointer transition-colors group"
+                        >
                             <td className="py-2.5 pr-3 text-slate-500">{index + 1}</td>
-                            <td className="py-2.5 pr-3 font-mono text-xs text-slate-600">{error.criteria_code}</td>
-                            <td className="py-2.5 pr-3 font-medium text-slate-800">{error.criteria_name}</td>
+                            <td className="py-2.5 pr-3 font-mono text-xs text-slate-600 font-semibold">{error.criteria_code}</td>
+                            <td className="py-2.5 pr-3 font-medium text-slate-800 group-hover:text-rose-950">
+                                {error.criteria_name}
+                            </td>
                             <td className="py-2.5 pr-3 text-slate-500">{error.category_name}</td>
                             <td className="py-2.5 pr-3 text-center">
-                                <StatusPill label={String(error.fail_count)} className="border-rose-200 bg-rose-50 text-rose-700" />
+                                <StatusPill label={String(error.fail_count)} className="border-rose-200 bg-rose-50 text-rose-700 font-semibold" />
+                            </td>
+                            <td className="py-2.5 pr-3 text-right">
+                                <span className="text-[11px] font-medium text-rose-600 opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-0.5">
+                                    ดูเจาะลึก <ChevronRight className="h-3 w-3 inline" />
+                                </span>
                             </td>
                         </tr>
                     ))}
@@ -167,12 +201,14 @@ function ChannelSection({
     tone,
     icon: Icon,
     block,
+    onSelectError,
 }: {
     title: string;
     badge: string;
     tone: 'emerald' | 'violet';
     icon: React.ComponentType<{ className?: string }>;
     block: ChannelBlock;
+    onSelectError?: (error: TopError) => void;
 }) {
     const shell =
         tone === 'emerald'
@@ -231,8 +267,8 @@ function ChannelSection({
                 <CategoryTable rows={block.categoryStats} emptyText={`ยังไม่มีข้อมูลหมวด${badge}ในช่วงที่เลือก`} />
             </Panel>
 
-            <Panel title={`ข้อผิดพลาดที่พบบ่อย · ${badge}`} description="Top 10 รายการที่ไม่ผ่านบ่อยที่สุดในช่องทางนี้">
-                <ErrorsTable rows={block.topErrors} emptyText={`ไม่พบข้อผิดพลาด${badge}ในช่วงเวลาที่เลือก`} />
+            <Panel title={`ข้อผิดพลาดที่พบบ่อย · ${badge}`} description="Top 10 รายการที่ไม่ผ่านบ่อยที่สุดในช่องทางนี้ (คลิกเพื่อดูรายงานเจาะลึก)">
+                <ErrorsTable rows={block.topErrors} emptyText={`ไม่พบข้อผิดพลาด${badge}ในช่วงเวลาที่เลือก`} onSelectError={onSelectError} />
             </Panel>
         </section>
     );
@@ -242,6 +278,13 @@ export default function MraReports({ stats, opd, ipd, filters }: Props) {
     const [fromDate, setFromDate] = useState(filters.from_date);
     const [toDate, setToDate] = useState(filters.to_date);
     const [channel, setChannel] = useState<'all' | 'opd' | 'ipd'>(filters.channel || 'all');
+    const [auditTarget, setAuditTarget] = useState<'all' | 'internal' | 'rta'>(filters.audit_target || 'all');
+    const [selectedErrorCriteria, setSelectedErrorCriteria] = useState<{
+        id?: number;
+        code?: string;
+        name?: string;
+        channel?: 'all' | 'opd' | 'ipd';
+    } | null>(null);
 
     const handleFilter = () => {
         router.get(
@@ -250,29 +293,60 @@ export default function MraReports({ stats, opd, ipd, filters }: Props) {
                 from_date: fromDate,
                 to_date: toDate,
                 channel,
+                audit_target: auditTarget,
             },
             { preserveState: true },
         );
     };
+
+    const targetMeta = useMemo(() => {
+        if (auditTarget === 'internal') {
+            return {
+                title: 'ตรวจสอบภายใน (Internal Audit)',
+                dateLabelFrom: 'วันที่รับบริการ (จากวันที่)',
+                dateLabelTo: 'วันที่รับบริการ (ถึงวันที่)',
+                headerText: 'ช่วงวันที่ผู้มารับบริการ',
+                desc: 'ระบบกำลังกรองข้อมูลจาก "วันที่ผู้มารับบริการ (visit_date)" สำหรับการประเมินคุณภาพภายใน รพ.',
+            };
+        }
+        if (auditTarget === 'rta') {
+            return {
+                title: 'ส่ง ทบ. (กองทัพบก / RTA)',
+                dateLabelFrom: 'วันที่ตรวจสอบ (จากวันที่)',
+                dateLabelTo: 'วันที่ตรวจสอบ (ถึงวันที่)',
+                headerText: 'ช่วงวันที่ตรวจสอบข้อมูล',
+                desc: 'ระบบกำลังกรองข้อมูลจาก "วันที่ตรวจสอบข้อมูล (audited_at)" สำหรับสรุปรายงานส่งกองทัพบก',
+            };
+        }
+        return {
+            title: 'ทั้งหมด (Internal + ส่ง ทบ.)',
+            dateLabelFrom: 'จากวันที่',
+            dateLabelTo: 'ถึงวันที่',
+            headerText: 'ช่วงวันที่ (Internal: รับบริการ / ส่ง ทบ.: ตรวจสอบ)',
+            desc: 'ระบบแสดงรวมทั้งสองกลุ่ม (Internal Audit กรองตาม visit_date, ส่ง ทบ. กรองตาม audited_at)',
+        };
+    }, [auditTarget]);
 
     const pdfHref = useMemo(() => {
         const params = new URLSearchParams({
             from_date: fromDate,
             to_date: toDate,
             channel,
+            audit_target: auditTarget,
         });
 
         return `${route('mra.reports.export-pdf')}?${params.toString()}`;
-    }, [fromDate, toDate, channel]);
+    }, [fromDate, toDate, channel, auditTarget]);
 
     const excelHref = useMemo(() => {
         const params = new URLSearchParams({
             from_date: fromDate,
             to_date: toDate,
+            audit_target: auditTarget,
         });
 
         return `${route('mra.reports.export-excel')}?${params.toString()}`;
-    }, [fromDate, toDate]);
+    }, [fromDate, toDate, auditTarget]);
 
     const visibleSections = useMemo(() => {
         if (channel === 'opd') return ['opd'] as const;
@@ -286,7 +360,7 @@ export default function MraReports({ stats, opd, ipd, filters }: Props) {
             icon={FileSearch}
             badge="ศูนย์พัฒนาคุณภาพ · MRA"
             title="รายงานสรุปผลการตรวจ"
-            subtitle="แยกสรุป OPD และ IPD ตามเกณฑ์ MRA ปี 2563 (กรองจากวันที่ตรวจสอบ)"
+            subtitle={`แยกสรุป OPD และ IPD ตามเกณฑ์ MRA ปี 2563 · ${targetMeta.title}`}
             breadcrumbs={mraBreadcrumbs({ title: 'รายงาน', href: route('mra.reports') })}
             headTitle="รายงาน MRA"
             actions={
@@ -313,60 +387,98 @@ export default function MraReports({ stats, opd, ipd, filters }: Props) {
         >
             <div className="hidden text-center print:block">
                 <h1 className="text-xl font-bold">รายงานสรุปผลการตรวจสอบคุณภาพเวชระเบียน</h1>
-                <p className="text-sm">แยก OPD / IPD · ตามเกณฑ์ MRA 2563</p>
+                <p className="text-sm">แยก OPD / IPD · {targetMeta.title} · ตามเกณฑ์ MRA 2563</p>
                 <p className="mt-2 text-sm">
-                    ช่วงวันที่ตรวจสอบ: {formatThaiDateFromIso(fromDate)} – {formatThaiDateFromIso(toDate)}
+                    {targetMeta.headerText}: {formatThaiDateFromIso(fromDate)} – {formatThaiDateFromIso(toDate)}
                 </p>
             </div>
 
-            <Panel title="ตัวกรองรายงาน" description="เลือกช่วงวันที่ตรวจสอบ (ปี พ.ศ.) และช่องทางที่ต้องการดู" className="print:hidden">
-                <div className="flex flex-wrap items-end gap-4">
-                    <Field label="วันที่ตรวจสอบ (จากวันที่)">
-                        <ThaiDatePicker
-                            value={fromDate}
-                            onChange={setFromDate}
-                            className="w-52"
-                            placeholder="เลือกวันที่เริ่มต้น"
-                        />
-                    </Field>
-                    <Field label="วันที่ตรวจสอบ (ถึงวันที่)">
-                        <ThaiDatePicker
-                            value={toDate}
-                            onChange={setToDate}
-                            className="w-52"
-                            placeholder="เลือกวันที่สิ้นสุด"
-                        />
-                    </Field>
-                    <Field label="ช่องทาง">
-                        <div className="flex flex-wrap gap-2">
-                            {(
-                                [
-                                    ['all', 'ทั้งหมด'],
-                                    ['opd', 'OPD'],
-                                    ['ipd', 'IPD'],
-                                ] as const
-                            ).map(([key, label]) => (
-                                <Button
-                                    key={key}
-                                    type="button"
-                                    variant={channel === key ? 'default' : 'outline'}
-                                    className={cn(
-                                        'rounded-xl',
-                                        channel === key && key === 'opd' && 'bg-emerald-600 hover:bg-emerald-700',
-                                        channel === key && key === 'ipd' && 'bg-violet-600 hover:bg-violet-700',
-                                        channel === key && key === 'all' && 'bg-indigo-600 hover:bg-indigo-700',
-                                    )}
-                                    onClick={() => setChannel(key)}
-                                >
-                                    {label}
-                                </Button>
-                            ))}
-                        </div>
-                    </Field>
-                    <Button onClick={handleFilter} className="rounded-xl bg-indigo-600 hover:bg-indigo-700">
-                        <Calendar className="mr-2 h-4 w-4" />
-                        แสดงรายงาน
-                    </Button>
+            <Panel title="ตัวกรองรายงาน" description="เลือกวัตถุประสงค์การตรวจ ช่วงวันที่ และช่องทางที่ต้องการดู" className="print:hidden">
+                <div className="space-y-4">
+                    <div className="flex flex-wrap items-end gap-4">
+                        <Field label="วัตถุประสงค์การตรวจ">
+                            <div className="flex flex-wrap gap-2">
+                                {(
+                                    [
+                                        ['all', 'ทั้งหมด', Layers],
+                                        ['internal', 'ตรวจสอบภายใน', Building2],
+                                        ['rta', 'ส่ง ทบ.', ShieldCheck],
+                                    ] as const
+                                ).map(([key, label, IconComponent]) => (
+                                    <Button
+                                        key={key}
+                                        type="button"
+                                        variant={auditTarget === key ? 'default' : 'outline'}
+                                        className={cn(
+                                            'rounded-xl',
+                                            auditTarget === key && key === 'internal' && 'bg-indigo-600 hover:bg-indigo-700 text-white',
+                                            auditTarget === key && key === 'rta' && 'bg-emerald-600 hover:bg-emerald-700 text-white',
+                                            auditTarget === key && key === 'all' && 'bg-slate-800 hover:bg-slate-900 text-white',
+                                        )}
+                                        onClick={() => setAuditTarget(key)}
+                                    >
+                                        <IconComponent className="mr-1.5 h-4 w-4" />
+                                        {label}
+                                    </Button>
+                                ))}
+                            </div>
+                        </Field>
+
+                        <Field label="ช่องทาง">
+                            <div className="flex flex-wrap gap-2">
+                                {(
+                                    [
+                                        ['all', 'ทั้งหมด'],
+                                        ['opd', 'OPD'],
+                                        ['ipd', 'IPD'],
+                                    ] as const
+                                ).map(([key, label]) => (
+                                    <Button
+                                        key={key}
+                                        type="button"
+                                        variant={channel === key ? 'default' : 'outline'}
+                                        className={cn(
+                                            'rounded-xl',
+                                            channel === key && key === 'opd' && 'bg-emerald-600 hover:bg-emerald-700',
+                                            channel === key && key === 'ipd' && 'bg-violet-600 hover:bg-violet-700',
+                                            channel === key && key === 'all' && 'bg-indigo-600 hover:bg-indigo-700',
+                                        )}
+                                        onClick={() => setChannel(key)}
+                                    >
+                                        {label}
+                                    </Button>
+                                ))}
+                            </div>
+                        </Field>
+                    </div>
+
+                    <div className="flex flex-wrap items-end gap-4 pt-2 border-t border-slate-100">
+                        <Field label={targetMeta.dateLabelFrom}>
+                            <ThaiDatePicker
+                                value={fromDate}
+                                onChange={setFromDate}
+                                className="w-56"
+                                placeholder="เลือกวันที่เริ่มต้น"
+                            />
+                        </Field>
+                        <Field label={targetMeta.dateLabelTo}>
+                            <ThaiDatePicker
+                                value={toDate}
+                                onChange={setToDate}
+                                className="w-56"
+                                placeholder="เลือกวันที่สิ้นสุด"
+                            />
+                        </Field>
+                        <Button onClick={handleFilter} className="rounded-xl bg-indigo-600 hover:bg-indigo-700">
+                            <Calendar className="mr-2 h-4 w-4" />
+                            แสดงรายงาน
+                        </Button>
+                    </div>
+
+                    <div className="rounded-xl bg-slate-50 px-3.5 py-2 text-xs text-slate-600 border border-slate-200/60 flex items-center gap-2">
+                        <span className="font-semibold text-slate-800">เงื่อนไขวันที่:</span>
+                        <span>{targetMeta.desc}</span>
+                    </div>
                 </div>
             </Panel>
 
@@ -385,11 +497,39 @@ export default function MraReports({ stats, opd, ipd, filters }: Props) {
             ) : null}
 
             {visibleSections.includes('opd') ? (
-                <ChannelSection title="ผู้ป่วยนอก" badge="OPD" tone="emerald" icon={Stethoscope} block={opd} />
+                <ChannelSection
+                    title="ผู้ป่วยนอก"
+                    badge="OPD"
+                    tone="emerald"
+                    icon={Stethoscope}
+                    block={opd}
+                    onSelectError={(error) =>
+                        setSelectedErrorCriteria({
+                            id: error.criteria_id,
+                            code: error.criteria_code,
+                            name: error.criteria_name,
+                            channel: 'opd',
+                        })
+                    }
+                />
             ) : null}
 
             {visibleSections.includes('ipd') ? (
-                <ChannelSection title="ผู้ป่วยใน" badge="IPD" tone="violet" icon={BedDouble} block={ipd} />
+                <ChannelSection
+                    title="ผู้ป่วยใน"
+                    badge="IPD"
+                    tone="violet"
+                    icon={BedDouble}
+                    block={ipd}
+                    onSelectError={(error) =>
+                        setSelectedErrorCriteria({
+                            id: error.criteria_id,
+                            code: error.criteria_code,
+                            name: error.criteria_name,
+                            channel: 'ipd',
+                        })
+                    }
+                />
             ) : null}
 
             <div className="print:hidden">
@@ -399,6 +539,18 @@ export default function MraReports({ stats, opd, ipd, filters }: Props) {
                     </Button>
                 </Link>
             </div>
+
+            <CriteriaErrorReportModal
+                open={Boolean(selectedErrorCriteria)}
+                onOpenChange={(open) => !open && setSelectedErrorCriteria(null)}
+                criteriaId={selectedErrorCriteria?.id}
+                criteriaCode={selectedErrorCriteria?.code}
+                criteriaName={selectedErrorCriteria?.name}
+                fromDate={filters.from_date}
+                toDate={filters.to_date}
+                auditTarget={filters.audit_target}
+                channel={selectedErrorCriteria?.channel || filters.channel}
+            />
         </QualityPage>
     );
 }

@@ -38,10 +38,18 @@ self.addEventListener('message', (event) => {
   const data = event.data || {};
   if (data.type === 'SET_BADGE') {
     const n = Number(data.count) || 0;
-    if (n > 0 && self.registration.setAppBadge) {
-      self.registration.setAppBadge(n).catch(() => {});
-    } else if (self.registration.clearAppBadge) {
-      self.registration.clearAppBadge().catch(() => {});
+    if (n > 0) {
+      if (self.registration && self.registration.setAppBadge) {
+        self.registration.setAppBadge(n).catch(() => {});
+      } else if (self.navigator && self.navigator.setAppBadge) {
+        self.navigator.setAppBadge(n).catch(() => {});
+      }
+    } else {
+      if (self.registration && self.registration.clearAppBadge) {
+        self.registration.clearAppBadge().catch(() => {});
+      } else if (self.navigator && self.navigator.clearAppBadge) {
+        self.navigator.clearAppBadge().catch(() => {});
+      }
     }
   }
   if (data.type === 'SHOW_NOTIFY') {
@@ -52,6 +60,7 @@ self.addEventListener('message', (event) => {
       badge: '/icons/icon-192.png',
       tag: data.tag || 'org-chat',
       renotify: true,
+      silent: false,
       vibrate: [120, 60, 120],
       data: { url: data.url || '/chat' },
     };

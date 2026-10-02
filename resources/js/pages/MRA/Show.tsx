@@ -63,6 +63,7 @@ interface Audit {
   doctor_name: string | null;
   department: string | null;
   audit_type: 'opd' | 'ipd';
+  audit_target?: 'internal' | 'rta' | null;
   status: 'pending' | 'in_progress' | 'audited' | 'corrected';
   summary_notes: string | null;
   accuracy_percentage: number;
@@ -212,16 +213,17 @@ export default function MraShow({ audit, categories }: Props) {
       icon={FileSearch}
       badge="ศูนย์พัฒนาคุณภาพ · MRA"
       title="ผลการตรวจสอบเวชระเบียน"
-      subtitle={`${maskPatientName(audit.patient_name)} · HN: ${audit.hn} · VN: ${audit.vn}`}
+      subtitle={`${maskPatientName(audit.patient_name)} · HN: ${audit.hn} · VN: ${audit.vn} · ${audit.audit_target === 'rta' ? 'ส่ง ทบ.' : 'ตรวจสอบภายใน'}`}
       breadcrumbs={breadcrumbs}
       headTitle={`ผลการตรวจสอบ - ${audit.hn}`}
       actions={
         <div className="flex flex-wrap items-center gap-2 print:hidden">
-          {(audit.status === 'pending' || audit.status === 'in_progress') && (
-            <Button asChild className="rounded-xl bg-indigo-600 hover:bg-indigo-700">
-              <Link href={`/mra/${audit.id}/audit`}><Edit className="mr-2 h-4 w-4" />ตรวจสอบ</Link>
-            </Button>
-          )}
+          <Button asChild className="rounded-xl bg-indigo-600 hover:bg-indigo-700">
+            <Link href={`/mra/${audit.id}/audit`}>
+              <Edit className="mr-2 h-4 w-4" />
+              {audit.status === 'pending' ? 'เริ่มตรวจสอบ' : 'แก้ไขผลตรวจ'}
+            </Link>
+          </Button>
           <Button variant="outline" className="rounded-xl" onClick={handlePrint}><Printer className="mr-2 h-4 w-4" />พิมพ์</Button>
           <Button variant="outline" className="rounded-xl" onClick={handleExport}><Download className="mr-2 h-4 w-4" />PDF</Button>
         </div>
@@ -262,6 +264,13 @@ export default function MraShow({ audit, categories }: Props) {
                 <StatusPill
                   label={audit.audit_type.toUpperCase()}
                   className={audit.audit_type === 'opd' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-violet-200 bg-violet-50 text-violet-700'}
+                />
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">ตรวจสำหรับ:</span>
+                <StatusPill
+                  label={audit.audit_target === 'rta' ? 'ส่ง ทบ.' : 'ตรวจสอบภายใน'}
+                  className={audit.audit_target === 'rta' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-indigo-200 bg-indigo-50 text-indigo-700'}
                 />
               </div>
               {audit.doctor_name && (

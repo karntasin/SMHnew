@@ -24,7 +24,7 @@ class MraExcelReportService
      * Sheet 1: IPD (ตามโครงสร้าง mra.xlsx)
      * Sheet 2: OPD-ER (ตามโครงสร้าง mra2.xlsx)
      */
-    public function generateReport(string $fromDate, string $toDate): Spreadsheet
+    public function generateReport(string $fromDate, string $toDate, string $auditTarget = 'all'): Spreadsheet
     {
         $spreadsheet = new Spreadsheet();
         $spreadsheet->removeSheetByIndex(0); // ลบ default sheet
@@ -32,12 +32,12 @@ class MraExcelReportService
         // 1. สร้าง Sheet ผู้ป่วยใน (IPD)
         $ipdSheet = $spreadsheet->createSheet();
         $ipdSheet->setTitle('IPD');
-        $this->buildIpdSheet($ipdSheet, $fromDate, $toDate);
+        $this->buildIpdSheet($ipdSheet, $fromDate, $toDate, $auditTarget);
 
         // 2. สร้าง Sheet ผู้ป่วยนอก/ฉุกเฉิน (OPD-ER)
         $opdSheet = $spreadsheet->createSheet();
         $opdSheet->setTitle('OPD-ER');
-        $this->buildOpdSheet($opdSheet, $fromDate, $toDate);
+        $this->buildOpdSheet($opdSheet, $fromDate, $toDate, $auditTarget);
 
         // ให้เปิดที่หน้า IPD เสมอ
         $spreadsheet->setActiveSheetIndex(0);
@@ -48,19 +48,51 @@ class MraExcelReportService
     /**
      * สร้าง Sheet IPD ตามแบบ mra.xlsx
      */
-    private function buildIpdSheet(Worksheet $sheet, string $fromDate, string $toDate): void
+    private function buildIpdSheet(Worksheet $sheet, string $fromDate, string $toDate, string $auditTarget = 'all'): void
     {
         $fromCarbon = Carbon::parse($fromDate);
         $toCarbon = Carbon::parse($toDate);
         $buddhistYear = $toCarbon->year + 543;
         $periodText = $this->formatThaiDate($fromCarbon) . ' - ' . $this->formatThaiDate($toCarbon);
 
-        // ดึงข้อมูลการตรวจ IPD ที่ตรวจเสร็จสิ้นในช่วงเวลาที่ระบุ (audited_at)
-        $ipdAudits = MraAudit::where('audit_type', 'ipd')
-            ->whereIn('status', ['audited', 'corrected'])
-            ->whereDate('audited_at', '>=', $fromDate)
-            ->whereDate('audited_at', '<=', $toDate)
-            ->get();
+        $targetLabel = match ($auditTarget) {
+            'internal' => ' [วัตถุประสงค์: ตรวจสอบภายใน (Internal Audit)]',
+            'rta' => ' [วัตถุประสงค์: ส่ง ทบ.]',
+            default => '',
+        };
+        $dateTypeLabel = match ($auditTarget) {
+            'internal' => 'ช่วงวันที่รับบริการ',
+            'rta' => 'ช่วงวันที่ตรวจสอบ',
+            default => 'ช่วงวันที่',
+        };
+
+        // ดึงข้อมูลการตรวจ IPD ตามเงื่อนไขวัตถุประสงค์และช่วงเวลา
+        $ipdQuery = MraAudit::where('audit_type', 'ipd')
+            ->whereIn('status', ['audited', 'corrected']);
+
+        if ($auditTarget === 'internal') {
+            $ipdQuery->where('audit_target', 'internal')
+                ->whereDate('visit_date', '>=', $fromDate)
+                ->whereDate('visit_date', '<=', $toDate);
+        } elseif ($auditTarget === 'rta') {
+            $ipdQuery->where('audit_target', 'rta')
+                ->whereDate('audited_at', '>=', $fromDate)
+                ->whereDate('audited_at', '<=', $toDate);
+        } else {
+            $ipdQuery->where(function ($q) use ($fromDate, $toDate) {
+                $q->where(function ($sub) use ($fromDate, $toDate) {
+                    $sub->where('audit_target', 'internal')
+                        ->whereDate('visit_date', '>=', $fromDate)
+                        ->whereDate('visit_date', '<=', $toDate);
+                })->orWhere(function ($sub) use ($fromDate, $toDate) {
+                    $sub->where('audit_target', 'rta')
+                        ->whereDate('audited_at', '>=', $fromDate)
+                        ->whereDate('audited_at', '<=', $toDate);
+                });
+            });
+        }
+
+        $ipdAudits = $ipdQuery->get();
 
         $ipdAuditIds = $ipdAudits->pluck('id')->toArray();
         $totalIpdCharts = count($ipdAuditIds);
@@ -84,7 +116,7 @@ class MraExcelReportService
         $sheet->setCellValue('A1', 'รายงานสรุปผลการตรวจประเมินคุณภาพการบันทึกเวชระเบียน ผู้ป่วยใน (รวมคะแนนทุกแฟ้มที่รับตรวจ)');
 
         $sheet->mergeCells('A2:O2');
-        $sheet->setCellValue('A2', "Medical Record Audit Report (IPD) ประจำปี {$buddhistYear} (ช่วงวันที่ {$periodText})");
+        $sheet->setCellValue('A2', "Medical Record Audit Report (IPD) ประจำปี {$buddhistYear} ({$dateTypeLabel} {$periodText}){$targetLabel}");
 
         $sheet->mergeCells('A3:O3');
         $sheet->setCellValue('A3', 'ชื่อหน่วย รพ. ' . self::HOSPITAL_NAME);
@@ -199,19 +231,51 @@ class MraExcelReportService
     /**
      * สร้าง Sheet OPD-ER ตามแบบ mra2.xlsx
      */
-    private function buildOpdSheet(Worksheet $sheet, string $fromDate, string $toDate): void
+    private function buildOpdSheet(Worksheet $sheet, string $fromDate, string $toDate, string $auditTarget = 'all'): void
     {
         $fromCarbon = Carbon::parse($fromDate);
         $toCarbon = Carbon::parse($toDate);
         $buddhistYear = $toCarbon->year + 543;
         $periodText = $this->formatThaiDate($fromCarbon) . ' - ' . $this->formatThaiDate($toCarbon);
 
-        // ดึงข้อมูลการตรวจ OPD/ER ที่ตรวจเสร็จสิ้นในช่วงเวลาที่ระบุ (audited_at)
-        $opdAudits = MraAudit::where('audit_type', 'opd')
-            ->whereIn('status', ['audited', 'corrected'])
-            ->whereDate('audited_at', '>=', $fromDate)
-            ->whereDate('audited_at', '<=', $toDate)
-            ->get();
+        $targetLabel = match ($auditTarget) {
+            'internal' => ' [วัตถุประสงค์: ตรวจสอบภายใน (Internal Audit)]',
+            'rta' => ' [วัตถุประสงค์: ส่ง ทบ.]',
+            default => '',
+        };
+        $dateTypeLabel = match ($auditTarget) {
+            'internal' => 'ช่วงวันที่รับบริการ',
+            'rta' => 'ช่วงวันที่ตรวจสอบ',
+            default => 'ช่วงวันที่',
+        };
+
+        // ดึงข้อมูลการตรวจ OPD/ER ตามเงื่อนไขวัตถุประสงค์และช่วงเวลา
+        $opdQuery = MraAudit::where('audit_type', 'opd')
+            ->whereIn('status', ['audited', 'corrected']);
+
+        if ($auditTarget === 'internal') {
+            $opdQuery->where('audit_target', 'internal')
+                ->whereDate('visit_date', '>=', $fromDate)
+                ->whereDate('visit_date', '<=', $toDate);
+        } elseif ($auditTarget === 'rta') {
+            $opdQuery->where('audit_target', 'rta')
+                ->whereDate('audited_at', '>=', $fromDate)
+                ->whereDate('audited_at', '<=', $toDate);
+        } else {
+            $opdQuery->where(function ($q) use ($fromDate, $toDate) {
+                $q->where(function ($sub) use ($fromDate, $toDate) {
+                    $sub->where('audit_target', 'internal')
+                        ->whereDate('visit_date', '>=', $fromDate)
+                        ->whereDate('visit_date', '<=', $toDate);
+                })->orWhere(function ($sub) use ($fromDate, $toDate) {
+                    $sub->where('audit_target', 'rta')
+                        ->whereDate('audited_at', '>=', $fromDate)
+                        ->whereDate('audited_at', '<=', $toDate);
+                });
+            });
+        }
+
+        $opdAudits = $opdQuery->get();
 
         $opdAuditIds = $opdAudits->pluck('id')->toArray();
         $totalOpdCharts = count($opdAuditIds);
@@ -225,7 +289,7 @@ class MraExcelReportService
         $sheet->setCellValue('A1', 'รายงานสรุปผลการตรวจประเมินคุณภาพการบันทึกเวชระเบียน ผู้ป่วยนอก/ฉุกเฉิน (รวมคะแนนทุกแฟ้มที่รับการตรวจ)');
 
         $sheet->mergeCells('A2:M2');
-        $sheet->setCellValue('A2', "Medical Record Audit Report (OPD/ER) ประจำปี {$buddhistYear} (ช่วงวันที่ {$periodText})");
+        $sheet->setCellValue('A2', "Medical Record Audit Report (OPD/ER) ประจำปี {$buddhistYear} ({$dateTypeLabel} {$periodText}){$targetLabel}");
 
         $sheet->mergeCells('A3:M3');
         $sheet->setCellValue('A3', 'ชื่อหน่วย รพ. ' . self::HOSPITAL_NAME);

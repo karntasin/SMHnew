@@ -47,10 +47,49 @@ class TvBoardController extends Controller
             fn () => TvMediaPlaylist::activeForBoard($boardKey)->get()
         );
 
+        $pendingLabXray = Cache::remember(
+            "tv-board:{$boardKey}:pending-lab-xray",
+            self::QUEUE_CACHE_TTL,
+            fn () => $this->queueService->getPendingLabXrayPatients($boardKey)
+        );
+
+        $pendingScreening = Cache::remember(
+            "tv-board:{$boardKey}:pending-screening",
+            self::QUEUE_CACHE_TTL,
+            fn () => $this->queueService->getPendingScreeningPatients($boardKey)
+        );
+
         return response()->json([
             'generated_at' => now('Asia/Bangkok')->toIso8601String(),
             'rooms' => $grouped,
             'media' => $media,
+            'pending_lab_xray' => $pendingLabXray,
+            'pending_screening' => $pendingScreening,
+        ]);
+    }
+
+    /**
+     * Endpoint สำหรับจอ ER ใหม่ (3 sections: คัดกรอง/รอตรวจ/กำลังตรวจ)
+     * Alpine.js polling เรียกทุก N วินาที — คืน JSON เท่านั้น
+     */
+    public function erQueueData(): JsonResponse
+    {
+        $sections = Cache::remember(
+            'tv-board:er:sections',
+            self::QUEUE_CACHE_TTL,
+            fn () => $this->queueService->getErSections()
+        );
+
+        $media = Cache::remember(
+            'tv-board:003:media',
+            self::QUEUE_CACHE_TTL,
+            fn () => TvMediaPlaylist::activeForBoard('003')->get()
+        );
+
+        return response()->json([
+            'generated_at' => now('Asia/Bangkok')->toIso8601String(),
+            'media' => $media,
+            ...$sections,
         ]);
     }
 }

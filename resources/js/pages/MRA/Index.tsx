@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { Link, router } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,6 +15,14 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import {
   Plus,
   Search,
   FileText,
@@ -30,6 +38,9 @@ import {
   TrendingUp,
   CalendarRange,
   FileSearch,
+  Settings2,
+  Save,
+  Loader2,
 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
@@ -45,11 +56,14 @@ interface Audit {
   patient_name: string;
   visit_date: string;
   doctor_name: string | null;
+  department?: string | null;
   status: 'pending' | 'in_progress' | 'audited' | 'corrected';
   audit_type: 'opd' | 'ipd';
+  audit_target?: 'internal' | 'rta' | null;
   accuracy_percentage: number;
   total_items: number;
   correct_items: number;
+  summary_notes?: string | null;
   auditor: {
     name: string;
   } | null;
@@ -89,6 +103,43 @@ export default function MraIndex({ audits, filters, stats }: Props) {
   const [dateFrom, setDateFrom] = useState(filters.date_from || '');
   const [dateTo, setDateTo] = useState(filters.date_to || '');
   const [scoreFilter, setScoreFilter] = useState(filters.score_range || 'all');
+
+  const [editingAudit, setEditingAudit] = useState<Audit | null>(null);
+  const [editForm, setEditForm] = useState({
+    audit_target: 'internal',
+    status: 'pending',
+    department: '',
+    doctor_name: '',
+    summary_notes: '',
+  });
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const openEditModal = (audit: Audit) => {
+    setEditingAudit(audit);
+    setEditForm({
+      audit_target: audit.audit_target || 'internal',
+      status: audit.status || 'pending',
+      department: audit.department || '',
+      doctor_name: audit.doctor_name || '',
+      summary_notes: audit.summary_notes || '',
+    });
+  };
+
+  const handleSaveEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAudit) return;
+    setSavingEdit(true);
+    router.put(`/mra/${editingAudit.id}`, editForm, {
+      preserveScroll: true,
+      onSuccess: () => {
+        setEditingAudit(null);
+        setSavingEdit(false);
+      },
+      onError: () => {
+        setSavingEdit(false);
+      },
+    });
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -295,10 +346,20 @@ export default function MraIndex({ audits, filters, stats }: Props) {
                           {audit.doctor_name && <div className="text-xs text-slate-400">แพทย์: {audit.doctor_name}</div>}
                         </td>
                         <td className="py-2.5 pr-3">
-                          <StatusPill
-                            label={audit.audit_type.toUpperCase()}
-                            className={audit.audit_type === 'opd' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-violet-200 bg-violet-50 text-violet-700'}
-                          />
+                          <div className="space-y-1">
+                            <StatusPill
+                              label={audit.audit_type.toUpperCase()}
+                              className={audit.audit_type === 'opd' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-violet-200 bg-violet-50 text-violet-700'}
+                            />
+                            <div>
+                              <span className={cn(
+                                "inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded",
+                                audit.audit_target === 'rta' ? "bg-emerald-100 text-emerald-800" : "bg-indigo-100 text-indigo-800"
+                              )}>
+                                {audit.audit_target === 'rta' ? 'ส่ง ทบ.' : 'ภายใน'}
+                              </span>
+                            </div>
+                          </div>
                         </td>
                         <td className="py-2.5 pr-3 text-slate-600">
                           {audit.auditor?.name || '-'}
@@ -317,24 +378,46 @@ export default function MraIndex({ audits, filters, stats }: Props) {
                         </td>
                         <td className="py-2.5 pr-3">{getStatusBadge(audit.status)}</td>
                         <td className="py-2.5 text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm"><MoreHorizontal className="h-4 w-4" /></Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-48">
-                              <DropdownMenuItem asChild>
-                                <Link href={`/mra/${audit.id}`} className="flex items-center"><Eye className="mr-2 h-4 w-4" />ดูรายละเอียด</Link>
-                              </DropdownMenuItem>
-                              {(audit.status === 'pending' || audit.status === 'in_progress') && (
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              asChild
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700"
+                              title={audit.status === 'pending' ? 'เริ่มตรวจสอบ' : 'แก้ไขผลการตรวจ'}
+                            >
+                              <Link href={`/mra/${audit.id}/audit`}>
+                                <Edit className="h-4 w-4" />
+                              </Link>
+                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-500 hover:text-slate-700">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-56">
                                 <DropdownMenuItem asChild>
-                                  <Link href={`/mra/${audit.id}/audit`} className="flex items-center"><Edit className="mr-2 h-4 w-4" />ตรวจสอบ</Link>
+                                  <Link href={`/mra/${audit.id}`} className="flex items-center cursor-pointer">
+                                    <Eye className="mr-2 h-4 w-4 text-slate-500" />ดูรายละเอียด
+                                  </Link>
                                 </DropdownMenuItem>
-                              )}
-                              <DropdownMenuItem className="text-rose-600" onClick={() => handleDelete(audit.id)}>
-                                <Trash2 className="mr-2 h-4 w-4" />ลบ
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                                <DropdownMenuItem asChild>
+                                  <Link href={`/mra/${audit.id}/audit`} className="flex items-center cursor-pointer text-indigo-600">
+                                    <Edit className="mr-2 h-4 w-4" />
+                                    {audit.status === 'pending' ? 'เริ่มตรวจสอบ' : 'แก้ไขผลการตรวจ (ประเมินเกณฑ์)'}
+                                  </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => openEditModal(audit)} className="flex items-center cursor-pointer text-amber-600">
+                                  <Settings2 className="mr-2 h-4 w-4" />
+                                  แก้ไขข้อมูลการตรวจ (ทบ./แผนก/สถานะ)
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="text-rose-600 cursor-pointer" onClick={() => handleDelete(audit.id)}>
+                                  <Trash2 className="mr-2 h-4 w-4" />ลบ
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -364,6 +447,132 @@ export default function MraIndex({ audits, filters, stats }: Props) {
               </div>
             )}
         </Panel>
+
+        {/* Modal แก้ไขข้อมูลการตรวจเวชระเบียน */}
+        <Dialog open={!!editingAudit} onOpenChange={(open) => !open && setEditingAudit(null)}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-indigo-950">
+                <Settings2 className="h-5 w-5 text-indigo-600" />
+                แก้ไขข้อมูลการตรวจเวชระเบียน
+              </DialogTitle>
+              <DialogDescription>
+                HN: {editingAudit?.hn} · VN: {editingAudit?.vn || '-'} · ผู้ป่วย: {editingAudit ? maskPatientName(editingAudit.patient_name) : ''}
+              </DialogDescription>
+            </DialogHeader>
+
+            <form onSubmit={handleSaveEdit} className="space-y-4 py-2">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 block mb-1">
+                    ตรวจสำหรับ (เป้าหมาย)
+                  </label>
+                  <Select
+                    value={editForm.audit_target}
+                    onValueChange={(val) => setEditForm((prev) => ({ ...prev, audit_target: val }))}
+                  >
+                    <SelectTrigger className={qualityInput}>
+                      <SelectValue placeholder="เลือกเป้าหมาย" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="internal">ตรวจสอบภายใน</SelectItem>
+                      <SelectItem value="rta">ส่ง ทบ.</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 block mb-1">
+                    สถานะ
+                  </label>
+                  <Select
+                    value={editForm.status}
+                    onValueChange={(val) => setEditForm((prev) => ({ ...prev, status: val }))}
+                  >
+                    <SelectTrigger className={qualityInput}>
+                      <SelectValue placeholder="เลือกสถานะ" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pending">รอตรวจสอบ</SelectItem>
+                      <SelectItem value="in_progress">กำลังตรวจสอบ</SelectItem>
+                      <SelectItem value="audited">ตรวจสอบแล้ว</SelectItem>
+                      <SelectItem value="corrected">แก้ไขแล้ว</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 block mb-1">
+                    แผนก / คลินิก
+                  </label>
+                  <input
+                    type="text"
+                    className={cn(qualityInput, 'w-full')}
+                    value={editForm.department}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, department: e.target.value }))}
+                    placeholder="เช่น อายุรกรรม, ศัลยกรรม"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 block mb-1">
+                    แพทย์ผู้รักษา
+                  </label>
+                  <input
+                    type="text"
+                    className={cn(qualityInput, 'w-full')}
+                    value={editForm.doctor_name}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, doctor_name: e.target.value }))}
+                    placeholder="ชื่อแพทย์"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-600 block mb-1">
+                  หมายเหตุสรุปผลการตรวจ
+                </label>
+                <textarea
+                  rows={3}
+                  className={cn(qualityInput, 'w-full resize-none py-2')}
+                  value={editForm.summary_notes}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, summary_notes: e.target.value }))}
+                  placeholder="บันทึกข้อเสนอแนะ หรือหมายเหตุเพิ่มเติม..."
+                />
+              </div>
+
+              <DialogFooter className="gap-2 sm:gap-0 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setEditingAudit(null)}
+                  disabled={savingEdit}
+                >
+                  ยกเลิก
+                </Button>
+                <Button
+                  type="submit"
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                  disabled={savingEdit}
+                >
+                  {savingEdit ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      กำลังบันทึก...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="mr-2 h-4 w-4" />
+                      บันทึกการแก้ไข
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
     </QualityPage>
   );
 }

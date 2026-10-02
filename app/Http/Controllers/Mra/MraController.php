@@ -16,6 +16,7 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use App\Support\PiiMask;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -235,6 +236,147 @@ class MraController extends Controller
     }
 
     /**
+     * ดึงรายงานเจาะลึกข้อผิดพลาดของเกณฑ์ข้อนั้น (Criteria Error Drilldown Report)
+     */
+    public function criteriaErrorReport(Request $request)
+    {
+        $criteriaId = $request->input('criteria_id');
+        $criteriaCode = $request->input('criteria_code');
+        $fromDate = $request->input('from_date');
+        $toDate = $request->input('to_date');
+        $auditTarget = $request->input('audit_target', 'all');
+        $channel = $request->input('channel', 'all');
+
+        $criteria = null;
+        if ($criteriaId) {
+            $criteria = MraCriteria::with('category')->find($criteriaId);
+        } elseif ($criteriaCode) {
+            $criteria = MraCriteria::with('category')->where('code', $criteriaCode)->first();
+        }
+
+        if (!$criteria) {
+            return response()->json(['error' => 'ไม่พบข้อมูลเกณฑ์ที่ระบุ'], 404);
+        }
+
+        $auditQuery = MraAudit::query()->whereIn('status', ['audited', 'corrected']);
+
+        if ($channel && in_array($channel, ['opd', 'ipd'], true)) {
+            $auditQuery->where('audit_type', $channel);
+        }
+
+        if ($fromDate && $toDate) {
+            if ($auditTarget === 'internal') {
+                $auditQuery->where('audit_target', 'internal')
+                    ->whereDate('visit_date', '>=', $fromDate)
+                    ->whereDate('visit_date', '<=', $toDate);
+            } elseif ($auditTarget === 'rta') {
+                $auditQuery->where('audit_target', 'rta')
+                    ->whereDate('audited_at', '>=', $fromDate)
+                    ->whereDate('audited_at', '<=', $toDate);
+            } else {
+                $auditQuery->where(function ($q) use ($fromDate, $toDate) {
+                    $q->where(function ($sub) use ($fromDate, $toDate) {
+                        $sub->where('audit_target', 'internal')
+                            ->whereDate('visit_date', '>=', $fromDate)
+                            ->whereDate('visit_date', '<=', $toDate);
+                    })->orWhere(function ($sub) use ($fromDate, $toDate) {
+                        $sub->where('audit_target', 'rta')
+                            ->whereDate('audited_at', '>=', $fromDate)
+                            ->whereDate('audited_at', '<=', $toDate);
+                    });
+                });
+            }
+        } elseif ($auditTarget && in_array($auditTarget, ['internal', 'rta'], true)) {
+            $auditQuery->where('audit_target', $auditTarget);
+        }
+
+        $auditIds = (clone $auditQuery)->pluck('id');
+
+        // รายการประเมินทั้งหมดของข้อนี้ (Pass + Fail) เพื่อหาอัตราความผิดพลาด
+        $allDetailsQuery = MraAuditDetail::where('mra_criteria_id', $criteria->id)
+            ->whereIn('mra_audit_id', $auditIds);
+
+        $totalEvaluated = (clone $allDetailsQuery)->whereIn('result', ['pass', 'fail'])->count();
+
+        // รายการที่ Fail
+        $failedDetails = MraAuditDetail::where('mra_criteria_id', $criteria->id)
+            ->whereIn('mra_audit_id', $auditIds)
+            ->where('result', 'fail')
+            ->with(['audit.auditor'])
+            ->latest('id')
+            ->get();
+
+        $failCount = $failedDetails->count();
+        $totalLostScore = $failedDetails->sum(function ($d) use ($criteria) {
+            $max = $d->max_score !== null ? (float)$d->max_score : (float)$criteria->max_score;
+            $obtained = (float)($d->obtained_score ?? 0);
+            return max(0, $max - $obtained);
+        });
+
+        $failRate = $totalEvaluated > 0 ? round(($failCount / $totalEvaluated) * 100, 1) : 0;
+
+        $records = $failedDetails->map(function ($detail) use ($criteria) {
+            $audit = $detail->audit;
+            $maxScore = $detail->max_score !== null ? (float)$detail->max_score : (float)$criteria->max_score;
+            $obtainedScore = (float)($detail->obtained_score ?? 0);
+            $lostScore = max(0, $maxScore - $obtainedScore);
+
+            return [
+                'detail_id' => $detail->id,
+                'audit_id' => $audit?->id,
+                'audit_type' => $audit?->audit_type ?? 'opd',
+                'audit_target' => $audit?->audit_target ?? 'internal',
+                'hn' => $audit?->hn,
+                'patient_name' => PiiMask::patientName($audit?->patient_name),
+                'vn' => $audit?->vn,
+                'an' => $audit?->an,
+                'visit_date' => $audit?->visit_date ? Carbon::parse($audit->visit_date)->format('Y-m-d') : null,
+                'department' => $audit?->department ?: 'ไม่ระบุแผนก',
+                'doctor_name' => $audit?->doctor_name ?: 'ไม่ระบุแพทย์',
+                'auditor_name' => $audit?->auditor?->name ?: 'ไม่ระบุผู้ตรวจ',
+                'audited_at' => $audit?->audited_at ? Carbon::parse($audit->audited_at)->format('Y-m-d H:i') : null,
+                'max_score' => $maxScore,
+                'obtained_score' => $obtainedScore,
+                'lost_score' => $lostScore,
+                'hosxp_value' => $detail->hosxp_value,
+                'auditor_comment' => $detail->auditor_comment,
+                'summary_notes' => $audit?->summary_notes,
+            ];
+        })->values();
+
+        $uniqueAuditors = $records->pluck('auditor_name')->filter(fn($name) => $name !== 'ไม่ระบุผู้ตรวจ')->unique()->values();
+
+        return response()->json([
+            'criteria' => [
+                'id' => $criteria->id,
+                'code' => $criteria->code,
+                'name' => $criteria->name,
+                'name_en' => $criteria->name_en,
+                'category_name' => $criteria->category?->name ?? 'ทั่วไป',
+                'audit_type' => $criteria->category?->audit_type ?? 'opd',
+                'max_score' => (float)$criteria->max_score,
+                'audit_guide' => $criteria->audit_guide,
+                'description' => $criteria->description,
+            ],
+            'summary' => [
+                'total_lost_score' => round($totalLostScore, 2),
+                'fail_count' => $failCount,
+                'total_evaluated' => $totalEvaluated,
+                'fail_rate_percentage' => $failRate,
+                'auditors_count' => $uniqueAuditors->count(),
+                'auditors' => $uniqueAuditors,
+            ],
+            'records' => $records,
+            'filters' => [
+                'from_date' => $fromDate,
+                'to_date' => $toDate,
+                'audit_target' => $auditTarget,
+                'channel' => $channel,
+            ],
+        ]);
+    }
+
+    /**
      * Auto-check criteria จาก HOSxP
      */
     public function autoCheck(Request $request)
@@ -303,6 +445,7 @@ class MraController extends Controller
             'temperature' => 'nullable|numeric',
             'respiratory_rate' => 'nullable|integer',
             'audit_type' => 'required|in:opd,ipd',
+            'audit_target' => 'required|in:internal,rta',
         ]);
 
         // ใช้ HN จาก HOSxP เป็นหลัก และดึงชื่อ/CID เต็มฝั่งเซิร์ฟเวอร์ (ไม่เชื่อค่าจากเบราว์เซอร์ที่ถูก mask)
@@ -561,12 +704,15 @@ class MraController extends Controller
     }
 
     /**
-     * Update existing audit (legacy)
+     * Update existing audit
      */
     public function update(Request $request, MraAudit $audit)
     {
         $validated = $request->validate([
-            'status' => 'required|in:pending,audited,corrected',
+            'status' => 'required|in:pending,in_progress,audited,corrected',
+            'audit_target' => 'nullable|in:internal,rta',
+            'doctor_name' => 'nullable|string|max:255',
+            'department' => 'nullable|string|max:255',
             'summary_notes' => 'nullable|string',
         ]);
 
@@ -574,10 +720,12 @@ class MraController extends Controller
 
         if ($validated['status'] === 'audited') {
             $audit->calculateScores();
-            $audit->update(['audited_at' => now()]);
+            if (!$audit->audited_at) {
+                $audit->update(['audited_at' => now()]);
+            }
         }
 
-        return redirect()->back()->with('success', 'Audit updated successfully.');
+        return redirect()->back()->with('success', 'แก้ไขข้อมูลการตรวจเรียบร้อยแล้ว');
     }
 
     /**
@@ -624,8 +772,9 @@ class MraController extends Controller
         $fromDate = $request->input('from_date', now()->startOfMonth()->format('Y-m-d'));
         $toDate = $request->input('to_date', now()->format('Y-m-d'));
         $channel = $request->input('channel', 'all');
+        $auditTarget = $request->input('audit_target', 'all');
 
-        return Inertia::render('MRA/Reports', $this->reportsPayload($fromDate, $toDate, $channel));
+        return Inertia::render('MRA/Reports', $this->reportsPayload($fromDate, $toDate, $channel, $auditTarget));
     }
 
     public function exportReportsPdf(Request $request, ThaiPdfService $pdf): Response
@@ -633,7 +782,8 @@ class MraController extends Controller
         $fromDate = $request->input('from_date', now()->startOfMonth()->format('Y-m-d'));
         $toDate = $request->input('to_date', now()->format('Y-m-d'));
         $channel = $request->input('channel', 'all');
-        $data = $this->reportsPayload($fromDate, $toDate, $channel);
+        $auditTarget = $request->input('audit_target', 'all');
+        $data = $this->reportsPayload($fromDate, $toDate, $channel, $auditTarget);
         $channel = $data['filters']['channel'];
         $overviewStats = match ($channel) {
             'opd' => $data['opd']['stats'],
@@ -649,6 +799,18 @@ class MraController extends Controller
             default => 'ทั้งหมด (OPD + IPD)',
         };
 
+        $targetLabel = match ($data['filters']['audit_target']) {
+            'internal' => 'ตรวจสอบภายใน (Internal Audit)',
+            'rta' => 'ส่ง ทบ. (กองทัพบก)',
+            default => 'ทั้งหมด (Internal + ส่ง ทบ.)',
+        };
+
+        $dateTypeLabel = match ($data['filters']['audit_target']) {
+            'internal' => 'ช่วงวันที่ผู้มารับบริการ',
+            'rta' => 'ช่วงวันที่ตรวจสอบข้อมูล',
+            default => 'ช่วงวันที่',
+        };
+
         $html = view('mra.reports-pdf', [
             'hospitalName' => self::HOSPITAL_NAME,
             'stats' => $overviewStats,
@@ -656,6 +818,8 @@ class MraController extends Controller
             'ipd' => $data['ipd'],
             'filters' => $data['filters'],
             'channelLabel' => $channelLabel,
+            'targetLabel' => $targetLabel,
+            'dateTypeLabel' => $dateTypeLabel,
             'fromDateLabel' => $this->formatThaiDate(Carbon::parse($data['filters']['from_date'])->timezone(config('app.timezone'))),
             'toDateLabel' => $this->formatThaiDate(Carbon::parse($data['filters']['to_date'])->timezone(config('app.timezone'))),
             'generatedAt' => $this->formatThaiDateTime($now),
@@ -677,14 +841,20 @@ class MraController extends Controller
     {
         $fromDate = $request->input('from_date', now()->startOfMonth()->format('Y-m-d'));
         $toDate = $request->input('to_date', now()->format('Y-m-d'));
+        $auditTarget = $request->input('audit_target', 'all');
 
-        $spreadsheet = $excelService->generateReport($fromDate, $toDate);
+        $spreadsheet = $excelService->generateReport($fromDate, $toDate, $auditTarget);
 
         $tempFile = tempnam(sys_get_temp_dir(), 'mra_excel_');
         $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
         $writer->save($tempFile);
 
-        $filename = "รายงานสรุป-MRA_{$fromDate}_{$toDate}.xlsx";
+        $targetSuffix = match ($auditTarget) {
+            'internal' => '_internal',
+            'rta' => '_rta',
+            default => '',
+        };
+        $filename = "รายงานสรุป-MRA_{$fromDate}_{$toDate}{$targetSuffix}.xlsx";
 
         return response()->download($tempFile, $filename, [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -836,6 +1006,7 @@ class MraController extends Controller
                 $totalAudits = MraAuditDetail::where('mra_criteria_id', $item->mra_criteria_id)->count();
 
                 return [
+                    'criteria_id' => $item->mra_criteria_id,
                     'criteria_code' => $item->criteria?->code ?? '',
                     'criteria_name' => $item->criteria?->name ?? 'Unknown',
                     'category_name' => $item->criteria?->category?->name ?? '',
@@ -873,14 +1044,39 @@ class MraController extends Controller
     /**
      * @return array{stats: array, opd: array, ipd: array, categoryStats: \Illuminate\Support\Collection, topErrors: \Illuminate\Support\Collection, filters: array}
      */
-    private function reportsPayload(string $fromDate, string $toDate, string $channel): array
+    private function reportsPayload(string $fromDate, string $toDate, string $channel, string $auditTarget = 'all'): array
     {
         $channel = in_array($channel, ['all', 'opd', 'ipd'], true) ? $channel : 'all';
+        $auditTarget = in_array($auditTarget, ['all', 'internal', 'rta'], true) ? $auditTarget : 'all';
 
-        $buildStats = function (?string $auditType) use ($fromDate, $toDate) {
-            $query = MraAudit::whereDate('audited_at', '>=', $fromDate)
-                ->whereDate('audited_at', '<=', $toDate)
-                ->whereIn('status', ['audited', 'corrected']);
+        $applyFilter = function ($query) use ($auditTarget, $fromDate, $toDate) {
+            $query->whereIn('status', ['audited', 'corrected']);
+            if ($auditTarget === 'internal') {
+                $query->where('audit_target', 'internal')
+                    ->whereDate('visit_date', '>=', $fromDate)
+                    ->whereDate('visit_date', '<=', $toDate);
+            } elseif ($auditTarget === 'rta') {
+                $query->where('audit_target', 'rta')
+                    ->whereDate('audited_at', '>=', $fromDate)
+                    ->whereDate('audited_at', '<=', $toDate);
+            } else {
+                $query->where(function ($q) use ($fromDate, $toDate) {
+                    $q->where(function ($sub) use ($fromDate, $toDate) {
+                        $sub->where('audit_target', 'internal')
+                            ->whereDate('visit_date', '>=', $fromDate)
+                            ->whereDate('visit_date', '<=', $toDate);
+                    })->orWhere(function ($sub) use ($fromDate, $toDate) {
+                        $sub->where('audit_target', 'rta')
+                            ->whereDate('audited_at', '>=', $fromDate)
+                            ->whereDate('audited_at', '<=', $toDate);
+                    });
+                });
+            }
+        };
+
+        $buildStats = function (?string $auditType) use ($applyFilter) {
+            $query = MraAudit::query();
+            $applyFilter($query);
             if ($auditType) {
                 $query->where('audit_type', $auditType);
             }
@@ -894,17 +1090,15 @@ class MraController extends Controller
             ];
         };
 
-        $buildCategoryStats = function (string $auditType) use ($fromDate, $toDate) {
+        $buildCategoryStats = function (string $auditType) use ($applyFilter) {
             return MraCategory::active()
                 ->forAuditType($auditType)
                 ->orderBy('sort_order')
                 ->get()
-                ->map(function ($category) use ($fromDate, $toDate, $auditType) {
-                    $details = MraAuditDetail::whereHas('audit', function ($q) use ($fromDate, $toDate, $auditType) {
-                        $q->whereDate('audited_at', '>=', $fromDate)
-                            ->whereDate('audited_at', '<=', $toDate)
-                            ->where('audit_type', $auditType)
-                            ->whereIn('status', ['audited', 'corrected']);
+                ->map(function ($category) use ($applyFilter, $auditType) {
+                    $details = MraAuditDetail::whereHas('audit', function ($q) use ($applyFilter, $auditType) {
+                        $q->where('audit_type', $auditType);
+                        $applyFilter($q);
                     })->whereHas('criteria', function ($q) use ($category) {
                         $q->where('mra_category_id', $category->id);
                     })->get();
@@ -926,13 +1120,11 @@ class MraController extends Controller
                 ->values();
         };
 
-        $buildTopErrors = function (string $auditType) use ($fromDate, $toDate) {
+        $buildTopErrors = function (string $auditType) use ($applyFilter) {
             return MraAuditDetail::where('result', 'fail')
-                ->whereHas('audit', function ($q) use ($fromDate, $toDate, $auditType) {
-                    $q->whereDate('audited_at', '>=', $fromDate)
-                        ->whereDate('audited_at', '<=', $toDate)
-                        ->where('audit_type', $auditType)
-                        ->whereIn('status', ['audited', 'corrected']);
+                ->whereHas('audit', function ($q) use ($applyFilter, $auditType) {
+                    $q->where('audit_type', $auditType);
+                    $applyFilter($q);
                 })
                 ->whereHas('criteria.category', function ($q) use ($auditType) {
                     $q->where('audit_type', $auditType);
@@ -945,6 +1137,7 @@ class MraController extends Controller
                 ->get()
                 ->map(function ($item) use ($auditType) {
                     return [
+                        'criteria_id' => $item->mra_criteria_id,
                         'criteria_code' => $item->criteria?->code ?? '',
                         'criteria_name' => $item->criteria?->name ?? 'Unknown',
                         'category_name' => $item->criteria?->category?->name ?? '',
@@ -981,6 +1174,7 @@ class MraController extends Controller
                 'from_date' => $fromDate,
                 'to_date' => $toDate,
                 'channel' => $channel,
+                'audit_target' => $auditTarget,
             ],
         ];
     }

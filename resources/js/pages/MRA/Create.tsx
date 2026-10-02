@@ -10,7 +10,7 @@ import { ThaiDatePicker } from '@/components/ui/thai-date-picker';
 import {
   Save, Search, FileText, Activity, User, Building2, Loader2,
   Heart, Thermometer, Wind, Stethoscope, ClipboardList, CheckCircle2, ChevronRight,
-  UserSearch, CalendarDays, FileCheck, FileSearch,
+  UserSearch, CalendarDays, FileCheck, FileSearch, ShieldCheck,
 } from 'lucide-react';
 import axios from '@/lib/axios';
 import { toast } from 'sonner';
@@ -100,6 +100,7 @@ export default function MraCreate() {
     temperature: '',
     respiratory_rate: '',
     audit_type: 'opd' as 'opd' | 'ipd',
+    audit_target: 'internal' as 'internal' | 'rta',
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -198,10 +199,11 @@ export default function MraCreate() {
   const breadcrumbs = mraBreadcrumbs({ title: 'สร้างการตรวจสอบใหม่', href: route('mra.create') });
 
   const steps = [
-    { id: 1, name: 'ค้นหาผู้ป่วย', icon: UserSearch, completed: !!patient },
-    { id: 2, name: 'เลือก Visit', icon: CalendarDays, completed: !!selectedVn },
-    { id: 3, name: 'กรอกข้อมูล', icon: ClipboardList, completed: !!data.patient_name && !!data.visit_date },
-    { id: 4, name: 'บันทึก', icon: FileCheck, completed: false },
+    { id: 1, name: 'ระบุวัตถุประสงค์', icon: ShieldCheck, completed: !!data.audit_target },
+    { id: 2, name: 'ค้นหาผู้ป่วย', icon: UserSearch, completed: !!patient },
+    { id: 3, name: 'เลือก Visit', icon: CalendarDays, completed: !!selectedVn },
+    { id: 4, name: 'กรอกข้อมูล', icon: ClipboardList, completed: !!data.patient_name && !!data.visit_date },
+    { id: 5, name: 'บันทึก', icon: FileCheck, completed: false },
   ];
 
   return (
@@ -233,7 +235,112 @@ export default function MraCreate() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          <Panel title="ขั้นตอนที่ 1 — ค้นหาผู้ป่วย" description="ระบุ HN เพื่อค้นหาข้อมูลผู้ป่วยจากระบบ HOSxP">
+          <Panel
+            title="ขั้นตอนที่ 1 — ระบุวัตถุประสงค์การตรวจ"
+            description="กรุณาระบุวัตถุประสงค์ก่อนทำการตรวจ เพื่อกำหนดเงื่อนไขการสรุปผลและรายงานทางสถิติ"
+          >
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Internal Audit */}
+              <div
+                onClick={() => setData('audit_target', 'internal')}
+                className={cn(
+                  'relative flex cursor-pointer flex-col justify-between rounded-2xl border-2 p-4 transition-all shadow-sm',
+                  data.audit_target === 'internal'
+                    ? 'border-indigo-600 bg-indigo-50/70 ring-2 ring-indigo-500/20 shadow-md'
+                    : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50'
+                )}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={cn(
+                        'flex h-11 w-11 items-center justify-center rounded-2xl transition-colors',
+                        data.audit_target === 'internal' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
+                      )}
+                    >
+                      <Building2 className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-900 text-base">ตรวจสอบภายใน (Internal Audit)</span>
+                        <Badge variant="outline" className="text-xs bg-indigo-100/80 text-indigo-700 border-indigo-200">
+                          ภายใน รพ.
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1">
+                        สำหรับประเมินคุณภาพการบันทึกเวชระเบียนภายในโรงพยาบาล
+                      </p>
+                    </div>
+                  </div>
+                  <div
+                    className={cn(
+                      'flex h-6 w-6 items-center justify-center rounded-full border-2 transition-colors',
+                      data.audit_target === 'internal' ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300'
+                    )}
+                  >
+                    {data.audit_target === 'internal' && <div className="h-2 w-2 rounded-full bg-white" />}
+                  </div>
+                </div>
+                <div className="mt-3 pt-2.5 border-t border-slate-200/60 flex items-center text-xs text-indigo-950 font-medium">
+                  <span className="text-slate-500 mr-1.5">เงื่อนไขวันที่ในรายงาน:</span>
+                  <span className="bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-md font-semibold">
+                    วันที่ผู้มารับบริการ (Visit Date)
+                  </span>
+                </div>
+              </div>
+
+              {/* RTA */}
+              <div
+                onClick={() => setData('audit_target', 'rta')}
+                className={cn(
+                  'relative flex cursor-pointer flex-col justify-between rounded-2xl border-2 p-4 transition-all shadow-sm',
+                  data.audit_target === 'rta'
+                    ? 'border-emerald-600 bg-emerald-50/70 ring-2 ring-emerald-500/20 shadow-md'
+                    : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50'
+                )}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={cn(
+                        'flex h-11 w-11 items-center justify-center rounded-2xl transition-colors',
+                        data.audit_target === 'rta' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'
+                      )}
+                    >
+                      <ShieldCheck className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-900 text-base">ส่ง ทบ. (กองทัพบก / RTA)</span>
+                        <Badge variant="outline" className="text-xs bg-emerald-100/80 text-emerald-700 border-emerald-200">
+                          ส่งหน่วยเหนือ
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1">
+                        สำหรับรวบรวมรายงานและส่งผลการประเมินให้หน่วยงานกองทัพบก
+                      </p>
+                    </div>
+                  </div>
+                  <div
+                    className={cn(
+                      'flex h-6 w-6 items-center justify-center rounded-full border-2 transition-colors',
+                      data.audit_target === 'rta' ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-300'
+                    )}
+                  >
+                    {data.audit_target === 'rta' && <div className="h-2 w-2 rounded-full bg-white" />}
+                  </div>
+                </div>
+                <div className="mt-3 pt-2.5 border-t border-slate-200/60 flex items-center text-xs text-emerald-950 font-medium">
+                  <span className="text-slate-500 mr-1.5">เงื่อนไขวันที่ในรายงาน:</span>
+                  <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md font-semibold">
+                    วันที่ตรวจสอบข้อมูล (Audit Date)
+                  </span>
+                </div>
+              </div>
+            </div>
+          </Panel>
+
+          <Panel title="ขั้นตอนที่ 2 — ค้นหาผู้ป่วย" description="ระบุ HN เพื่อค้นหาข้อมูลผู้ป่วยจากระบบ HOSxP">
               <div className="flex gap-4 items-end">
                 <div className="flex-1 max-w-xs">
                   <Label htmlFor="hn">HN (Hospital Number)</Label>
@@ -305,7 +412,7 @@ export default function MraCreate() {
           </Panel>
 
           {recentVisits.length > 0 && (
-            <Panel title="ขั้นตอนที่ 2 — เลือก Visit" description={`รายการ Visit (${recentVisits.length} รายการ — OPD ${opdVisitCount}, IPD ${ipdVisitCount})`}>
+            <Panel title="ขั้นตอนที่ 3 — เลือก Visit" description={`รายการ Visit (${recentVisits.length} รายการ — OPD ${opdVisitCount}, IPD ${ipdVisitCount})`}>
                 {/* ตัวกรองช่วงวันที่และประเภท */}
                 <div className="mb-4 space-y-3">
                   {/* ตัวกรองประเภท Visit (OPD/IPD) */}
@@ -472,7 +579,7 @@ export default function MraCreate() {
             </Panel>
           )}
 
-          <Panel title="ขั้นตอนที่ 3 — ประเภทการตรวจสอบ">
+          <Panel title="ขั้นตอนที่ 4 — ประเภทการตรวจสอบ">
               <RadioGroup
                 value={data.audit_type}
                 onValueChange={(value) => setData('audit_type', value as 'opd' | 'ipd')}
@@ -502,6 +609,7 @@ export default function MraCreate() {
                     <CheckCircle2 className="h-6 w-6 text-green-500 ml-auto" />
                   )}
                 </Label>
+
                 <Label
                   htmlFor="ipd"
                   className={cn(
@@ -530,7 +638,7 @@ export default function MraCreate() {
 
           </Panel>
 
-          <Panel title="ขั้นตอนที่ 4 — ข้อมูล Visit" description="ข้อมูลจะถูกดึงจาก HOSxP โดยอัตโนมัติ หรือสามารถกรอกเองได้">
+          <Panel title="ขั้นตอนที่ 5 — ข้อมูล Visit" description="ข้อมูลจะถูกดึงจาก HOSxP โดยอัตโนมัติ หรือสามารถกรอกเองได้">
               {/* Row 1 */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>

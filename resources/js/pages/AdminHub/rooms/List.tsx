@@ -21,10 +21,11 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Calendar, Clock, Users, CheckCircle, XCircle, Search, Filter, Plus, MoreHorizontal } from 'lucide-react';
+import { Calendar, Clock, Users, CheckCircle, XCircle, Search, Filter, Plus, MoreHorizontal, Edit } from 'lucide-react';
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
 import CreateModal from './CreateModal';
+import EditModal, { BookingToEdit } from './EditModal';
 import RoomSubNav from './RoomSubNav';
 
 interface Room {
@@ -39,12 +40,19 @@ interface Room {
 
 interface Booking {
     id: number;
+    user_id?: number;
+    room_id?: number;
     title: string;
+    description?: string | null;
     start_time: string;
     end_time: string;
+    booking_date?: string;
+    start_time_hi?: string;
+    end_time_hi?: string;
     status: string;
+    can_edit?: boolean;
     room: Room | null;
-    user: { name: string };
+    user: { id?: number; name: string };
     attendees_count: number;
 }
 
@@ -62,6 +70,8 @@ interface Props {
 
 export default function List({ rooms = [], bookings = [], stats, currentFilter = 'all' }: Props) {
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [editingBooking, setEditingBooking] = useState<BookingToEdit | null>(null);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const { url } = usePage();
 
@@ -272,7 +282,7 @@ export default function List({ rooms = [], bookings = [], stats, currentFilter =
                                                     <div className="flex flex-col text-sm">
                                                         <span className="font-medium">{format(new Date(booking.start_time), 'd MMM yyyy', { locale: th })}</span>
                                                         <span className="text-muted-foreground">
-                                                            {format(new Date(booking.start_time), 'HH:mm')} - {format(new Date(booking.end_time), 'HH:mm')}
+                                                            {format(new Date(booking.start_time), 'HH:mm')} - {format(new Date(booking.end_time), 'HH:mm')} น.
                                                         </span>
                                                     </div>
                                                 </TableCell>
@@ -291,6 +301,18 @@ export default function List({ rooms = [], bookings = [], stats, currentFilter =
                                                             <DropdownMenuItem onClick={() => router.visit(route('rooms.bookings.show', booking.id))}>
                                                                 ดูรายละเอียด
                                                             </DropdownMenuItem>
+                                                            {booking.can_edit && (
+                                                                <DropdownMenuItem
+                                                                    className="text-sky-600 focus:text-sky-700"
+                                                                    onClick={() => {
+                                                                        setEditingBooking(booking);
+                                                                        setIsEditModalOpen(true);
+                                                                    }}
+                                                                >
+                                                                    <Edit className="mr-2 h-4 w-4" />
+                                                                    แก้ไขการจอง
+                                                                </DropdownMenuItem>
+                                                            )}
                                                             <DropdownMenuSeparator />
                                                             {booking.status === 'pending' && (
                                                                 <>
@@ -325,6 +347,13 @@ export default function List({ rooms = [], bookings = [], stats, currentFilter =
                 open={isCreateModalOpen} 
                 onOpenChange={setIsCreateModalOpen} 
                 rooms={rooms}
+            />
+
+            <EditModal
+                open={isEditModalOpen}
+                onOpenChange={setIsEditModalOpen}
+                rooms={rooms}
+                booking={editingBooking}
             />
         </AppLayout>
     );

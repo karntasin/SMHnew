@@ -36,6 +36,7 @@ class MraAudit extends Model
         'auditor_id',
         'status',
         'audit_type',
+        'audit_target',
         'total_score',
         'total_max_score',
         'total_obtained_score',
@@ -203,4 +204,16 @@ class MraAudit extends Model
     {
         return $query->whereBetween('visit_date', [$from, $to]);
     }
+
+    /**
+     * Scope by audit target (internal vs rta)
+     */
+    public function scopeTarget($query, ?string $target)
+    {
+        if ($target && in_array($target, ['internal', 'rta'], true)) {
+            return $query->where('audit_target', $target);
+        }
+        return $query;
+    }
 }
+

@@ -1,20 +1,22 @@
 import { Link } from '@inertiajs/react';
-import { FileCheck2, FileSpreadsheet, ShieldAlert, Upload } from 'lucide-react';
+import { ArrowLeftRight, FileCheck2, FileSpreadsheet, ShieldAlert, Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Props {
     dashboardUrl: string;
     importUrl: string;
+    compareUrl?: string;
     stmUrl?: string;
     precheckUrl?: string;
     importLabel?: string;
-    active: 'dashboard' | 'import' | 'stm' | 'precheck';
+    active: 'dashboard' | 'compare' | 'import' | 'stm' | 'precheck';
     disabledImport?: boolean;
 }
 
 export default function ClaimModuleSubNav({
     dashboardUrl,
     importUrl,
+    compareUrl,
     stmUrl,
     precheckUrl,
     importLabel = 'นำเข้าไฟล์',
@@ -25,11 +27,23 @@ export default function ClaimModuleSubNav({
         {
             key: 'dashboard' as const,
             label: 'ตรวจสอบ',
-            hint: 'เปรียบเทียบกับ HOSxP',
+            hint: 'ภาพรวมสิทธิ์',
             href: dashboardUrl,
             icon: FileCheck2,
             disabled: false,
         },
+        ...(compareUrl
+            ? [
+                  {
+                      key: 'compare' as const,
+                      label: 'เปรียบเทียบ',
+                      hint: 'STM vs HOSxP',
+                      href: compareUrl,
+                      icon: ArrowLeftRight,
+                      disabled: false,
+                  },
+              ]
+            : []),
         ...(precheckUrl
             ? [
                   {

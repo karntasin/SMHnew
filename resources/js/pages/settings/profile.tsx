@@ -6,6 +6,7 @@ import { Camera, MessageCircle, User } from 'lucide-react';
 
 import DeleteUser from '@/components/delete-user';
 import DepartmentPicker from '@/components/department-picker';
+import HaTeamPicker, { type HaTeamOption } from '@/components/ha-team-picker';
 import HeadingSmall from '@/components/heading-small';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
@@ -30,6 +31,7 @@ interface ProfilePageProps {
     mustVerifyEmail: boolean;
     status?: string;
     departments?: DepartmentOption[];
+    ha_teams?: HaTeamOption[];
     chatLiffUrl?: string;
     addFriendUrl?: string;
 }
@@ -38,6 +40,7 @@ export default function Profile({
     mustVerifyEmail,
     status,
     departments = [],
+    ha_teams = [],
     chatLiffUrl,
     addFriendUrl,
 }: ProfilePageProps) {
@@ -53,12 +56,17 @@ export default function Profile({
     const initialPrimary =
         typeof auth.user.primary_department_id === 'number' ? auth.user.primary_department_id : initialDeptIds[0] ?? null;
 
+    const initialHaTeamIds = Array.isArray(auth.user.ha_team_ids)
+        ? (auth.user.ha_team_ids as number[])
+        : [];
+
     const { data, setData, patch, processing, recentlySuccessful } = useForm({
         name: auth.user.name,
         email: auth.user.email,
         chat_display_name: (auth.user.chat_display_name as string | null) || '',
         department_ids: initialDeptIds,
         primary_department_id: initialPrimary,
+        ha_team_ids: initialHaTeamIds,
     });
 
     const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -99,6 +107,17 @@ export default function Profile({
             department_ids: next,
             primary_department_id: data.primary_department_id === deptId ? next[0] ?? null : data.primary_department_id,
         });
+    };
+
+    const toggleHaTeam = (teamId: number) => {
+        const next = data.ha_team_ids.includes(teamId)
+            ? data.ha_team_ids.filter((id) => id !== teamId)
+            : [...data.ha_team_ids, teamId];
+        setData('ha_team_ids', next);
+    };
+
+    const removeHaTeam = (teamId: number) => {
+        setData('ha_team_ids', data.ha_team_ids.filter((id) => id !== teamId));
     };
 
     const submit: FormEventHandler = (e) => {
@@ -265,6 +284,14 @@ export default function Profile({
                             onRemove={removeDepartment}
                             onSetPrimary={(id) => setData('primary_department_id', id)}
                             error={(errors.department_ids as string | undefined) || (errors.primary_department_id as string | undefined)}
+                        />
+
+                        <HaTeamPicker
+                            teams={ha_teams}
+                            selectedIds={data.ha_team_ids}
+                            onToggle={toggleHaTeam}
+                            onRemove={removeHaTeam}
+                            error={errors.ha_team_ids as string | undefined}
                         />
 
                         <div className="flex items-center gap-4">

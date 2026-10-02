@@ -46,15 +46,19 @@
         $doc = $docLabel ?? ($batch->document_no ?? $batch->filename ?? 'สรุปทุกไฟล์');
     @endphp
 
-    <h1>รายงานสรุปตรวจสอบเบิกจ่ายตรง กรมบัญชีกลาง</h1>
+    <h1>รายงานสรุปเปรียบเทียบข้อมูลเรียกเก็บ STM กับ ชดเชยสุทธิ และ HOSxP ตามวันที่มารับบริการ</h1>
     <div class="meta">
         {{ $hospitalName }} · {{ $doc }}
-        · ช่วง HOSxP {{ $reconciliation->start_date->format('d/m/Y') }} - {{ $reconciliation->end_date->format('d/m/Y') }}
+        @if (!empty($startDateFilter) && !empty($endDateFilter))
+            · ช่วงวันที่รับบริการ {{ date('d/m/Y', strtotime($startDateFilter)) }} - {{ date('d/m/Y', strtotime($endDateFilter)) }}
+        @elseif (!empty($reconciliation->start_date) && !empty($reconciliation->end_date))
+            · ช่วง HOSxP {{ $reconciliation->start_date->format('d/m/Y') }} - {{ $reconciliation->end_date->format('d/m/Y') }}
+        @endif
         · สร้างเมื่อ {{ $generatedAt }}
     </div>
     <div class="meta">
-        กรองเดือน: <strong>{{ $monthFilterLabel ?? 'ทุกเดือน' }}</strong>
-        · กรองสถานะ: <strong>{{ $statusFilterLabel ?? 'ทั้งหมด' }}</strong>
+        กรองสถานะ: <strong>{{ $statusFilterLabel ?? 'ทั้งหมด' }}</strong>
+        · กรองเดือน: <strong>{{ $monthFilterLabel ?? 'ทุกเดือน' }}</strong>
         · กรอง Error: <strong>{{ $errorFilterLabel ?? 'ทุก Error Code' }}</strong>
         · กรองยอดเงิน: <strong>{{ $amountFilterLabel ?? 'ทุกยอดเงิน' }}</strong>
         @if (!empty($search))
@@ -63,17 +67,51 @@
         · รายการตามตัวกรอง {{ number_format($summary['item_count'] ?? $items->count()) }} รายการ
     </div>
 
-    <h2>สรุปตามตัวกรอง</h2>
+    <h2>สรุปการเปรียบเทียบตามวันที่ผู้ป่วยมารับบริการ (สิทธิจ่ายตรง 12)</h2>
     <table class="kpi">
         <tr>
-            <td><div class="box"><div class="label">จำนวนรายการ</div><div class="value">{{ number_format($summary['item_count'] ?? 0) }}</div></div></td>
-            <td><div class="box"><div class="label">HOSxP (SEQ ตรง)</div><div class="value">{{ number_format($summary['total_hosxp'] ?? 0, 2) }}</div></div></td>
-            <td><div class="box"><div class="label">Payment</div><div class="value">{{ number_format($summary['total_hosxp_paid'] ?? 0, 2) }}</div></div></td>
-            <td><div class="box"><div class="label">หลังหัก Payment</div><div class="value">{{ number_format($summary['total_hosxp_net'] ?? 0, 2) }}</div></div></td>
-            <td><div class="box"><div class="label">เรียกเก็บ</div><div class="value">{{ number_format($summary['total_claim'] ?? 0, 2) }}</div></div></td>
-            <td><div class="box"><div class="label">ชดเชยสุทธิ</div><div class="value">{{ number_format($summary['total_approved'] ?? 0, 2) }}</div></div></td>
-            <td><div class="box"><div class="label">ยอดขาด</div><div class="value" style="color:#b91c1c">{{ number_format($summary['total_shortfall'] ?? 0, 2) }}</div></div></td>
-            <td><div class="box"><div class="label">HOSxP ไม่มี SEQ</div><div class="value">{{ number_format($summary['total_hosxp_unmatched_net'] ?? 0, 2) }}</div></div></td>
+            <td style="width: 16.66%;">
+                <div class="box">
+                    <div class="label">1. HOSxP (SEQ ตรง) (12)</div>
+                    <div class="value">{{ number_format($summary['total_hosxp'] ?? 0, 2) }}</div>
+                    <div style="font-size: 8pt; color: #64748b;">{{ number_format($summary['hosxp_matched_count'] ?? 0) }} visits · สุทธิ {{ number_format($summary['total_hosxp_net'] ?? 0, 2) }}</div>
+                </div>
+            </td>
+            <td style="width: 16.66%;">
+                <div class="box">
+                    <div class="label">2. HOSxP ตามวันที่บริการ (12)</div>
+                    <div class="value">{{ number_format($summary['total_hosxp_all_net'] ?? $summary['total_hosxp_all'] ?? 0, 2) }}</div>
+                    <div style="font-size: 8pt; color: #64748b;">{{ number_format($summary['hosxp_all_count'] ?? 0) }} visits ทั้งหมด</div>
+                </div>
+            </td>
+            <td style="width: 16.66%;">
+                <div class="box">
+                    <div class="label">3. STM (SEQ ตรง)</div>
+                    <div class="value">{{ number_format($summary['total_stm_claim_matched'] ?? 0, 2) }}</div>
+                    <div style="font-size: 8pt; color: #64748b;">ชดเชย {{ number_format($summary['total_stm_approved_matched'] ?? 0, 2) }}</div>
+                </div>
+            </td>
+            <td style="width: 16.66%;">
+                <div class="box">
+                    <div class="label">4. STM ตามวันที่บริการ</div>
+                    <div class="value">{{ number_format($summary['total_claim'] ?? 0, 2) }}</div>
+                    <div style="font-size: 8pt; color: #64748b;">ชดเชย {{ number_format($summary['total_approved'] ?? 0, 2) }}</div>
+                </div>
+            </td>
+            <td style="width: 16.66%;">
+                <div class="box">
+                    <div class="label">5. ยอดขาด</div>
+                    <div class="value" style="color:#b91c1c">{{ number_format($summary['total_shortfall'] ?? 0, 2) }}</div>
+                    <div style="font-size: 8pt; color: #b91c1c;">{{ number_format($summary['shortfall_count'] ?? 0) }} รายการ</div>
+                </div>
+            </td>
+            <td style="width: 16.66%;">
+                <div class="box">
+                    <div class="label">6. HOSxP ไม่มี SEQ ตรง (12)</div>
+                    <div class="value" style="color:#b45309">{{ number_format($summary['total_hosxp_unmatched_net'] ?? 0, 2) }}</div>
+                    <div style="font-size: 8pt; color: #b45309;">{{ number_format($summary['only_hosxp_count'] ?? 0) }} visits (หลังหัก Payment)</div>
+                </div>
+            </td>
         </tr>
     </table>
 
@@ -189,9 +227,9 @@
                         @endif
                     </td>
                     <td>{{ $item->hn }}</td>
-                    <td>{{ $item->pid }}</td>
+                    <td>{{ \App\Support\PiiMask::cid($item->pid) }}</td>
                     <td>{{ $item->seq_no }}</td>
-                    <td>{{ $item->patient_name ?: 'ไม่พบชื่อใน HOSxP' }}</td>
+                    <td>{{ $item->patient_name ? \App\Support\PiiMask::patientName($item->patient_name) : 'ไม่พบชื่อใน HOSxP' }}</td>
                     <td>{{ $item->pttype ?: (($item->pttype_code ?? '').($item->hipdata_code ? ' ('.$item->hipdata_code.')' : '')) }}</td>
                     <td>{{ optional($item->visit_date)->format('d/m/Y') }}</td>
                     <td class="num">{{ $gross !== null ? number_format($gross, 2) : '-' }}</td>

@@ -57,7 +57,7 @@ class UserLineAccountMergeService
             $stub->delete();
         });
 
-        $keep = $keep->fresh(['departments']) ?? $keep;
+        $keep = $keep->fresh(['departments', 'haTeams']) ?? $keep;
 
         try {
             $this->fshhChat->syncUser($keep);

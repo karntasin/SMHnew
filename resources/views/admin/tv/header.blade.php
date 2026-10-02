@@ -68,6 +68,16 @@
                class="px-4 py-2 rounded-xl text-sm font-bold transition-colors {{ request()->is('*/settings*') ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100' }}">
                 ⚙️ ตั้งค่าจอแสดงผล
             </a>
+            @if($normalized === 'opd')
+            <a href="{{ $info['base_url'] }}/screening"
+               class="px-4 py-2 rounded-xl text-sm font-bold transition-colors {{ request()->is('*/screening*') ? 'bg-indigo-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100' }}">
+                📋 รอซักประวัติ (002)
+            </a>
+            <a href="{{ $info['base_url'] }}/lab-xray"
+               class="px-4 py-2 rounded-xl text-sm font-bold transition-colors {{ request()->is('*/lab-xray*') ? 'bg-indigo-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100' }}">
+                🔬 รอผล LAB & X-RAY
+            </a>
+            @endif
             <a href="{{ $info['base_url'] }}/playlist"
                class="px-4 py-2 rounded-xl text-sm font-bold transition-colors {{ request()->is('*/playlist*') ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100' }}">
                 🎬 จัดการสื่อ/ประกาศ

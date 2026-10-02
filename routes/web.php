@@ -358,10 +358,16 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::post('/nhso/start', [App\Http\Controllers\FinanceCgdClaimController::class, 'nhsoStart'])->name('nhso.start');
         Route::post('/nhso/otp', [App\Http\Controllers\FinanceCgdClaimController::class, 'nhsoOtp'])->name('nhso.otp');
         Route::post('/nhso/download', [App\Http\Controllers\FinanceCgdClaimController::class, 'nhsoDownload'])->name('nhso.download');
+        Route::post('/nhso/scan', [App\Http\Controllers\FinanceCgdClaimController::class, 'nhsoScan'])->name('nhso.scan');
         Route::post('/nhso/clear', [App\Http\Controllers\FinanceCgdClaimController::class, 'nhsoClearSession'])->name('nhso.clear');
         Route::post('/reconcile-all', [App\Http\Controllers\FinanceCgdClaimController::class, 'reconcileAll'])->name('reconcile-all');
         Route::get('/reconcile-all', fn () => redirect()->route('finance.cgd.dashboard'))->name('reconcile-all.get');
         Route::get('/precheck', [App\Http\Controllers\FinanceCgdCDenyPrecheckController::class, 'index'])->name('precheck');
+        Route::get('/compare', [App\Http\Controllers\FinanceCgdClaimController::class, 'compareIndex'])->name('compare');
+        Route::post('/compare/reconcile', [App\Http\Controllers\FinanceCgdClaimController::class, 'reconcileCompare'])->name('compare.reconcile');
+        Route::get('/compare/export', [App\Http\Controllers\FinanceCgdClaimController::class, 'exportSummaryExcel'])->name('compare.export');
+        Route::get('/compare/export-pdf', [App\Http\Controllers\FinanceCgdClaimController::class, 'exportSummaryPdf'])->name('compare.export-pdf');
+        Route::get('/compare/export-pair-pdf', [App\Http\Controllers\FinanceCgdClaimController::class, 'exportPairwisePdf'])->name('compare.export-pair-pdf');
         Route::get('/summary', [App\Http\Controllers\FinanceCgdClaimController::class, 'showSummary'])->name('summary');
         Route::get('/summary/export', [App\Http\Controllers\FinanceCgdClaimController::class, 'exportSummaryExcel'])->name('summary.export');
         Route::get('/summary/export-pdf', [App\Http\Controllers\FinanceCgdClaimController::class, 'exportSummaryPdf'])->name('summary.export-pdf');
@@ -389,6 +395,7 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::post('/nhso/start', [App\Http\Controllers\FinanceLgoClaimController::class, 'nhsoStart'])->name('nhso.start');
         Route::post('/nhso/otp', [App\Http\Controllers\FinanceLgoClaimController::class, 'nhsoOtp'])->name('nhso.otp');
         Route::post('/nhso/download', [App\Http\Controllers\FinanceLgoClaimController::class, 'nhsoDownload'])->name('nhso.download');
+        Route::post('/nhso/scan', [App\Http\Controllers\FinanceLgoClaimController::class, 'nhsoScan'])->name('nhso.scan');
         Route::post('/nhso/clear', [App\Http\Controllers\FinanceLgoClaimController::class, 'nhsoClearSession'])->name('nhso.clear');
         Route::post('/reconcile-all', [App\Http\Controllers\FinanceLgoClaimController::class, 'reconcileAll'])->name('reconcile-all');
         Route::get('/reconcile-all', fn () => redirect()->route('finance.lgo.dashboard'))->name('reconcile-all.get');
@@ -445,19 +452,19 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::post('/settings/import-preview', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'previewStockImport'])->name('settings.import-preview');
         Route::post('/settings/import-commit', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'commitStockImport'])->name('settings.import-commit');
         Route::post('/settings/packaging', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'storePackagingType'])->name('settings.packaging.store');
-        Route::put('/settings/packaging/{type}', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'updatePackagingType'])->name('settings.packaging.update');
+        Route::match(['put', 'patch'], '/settings/packaging/{type}', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'updatePackagingType'])->name('settings.packaging.update');
         Route::delete('/settings/packaging/{type}', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'destroyPackagingType'])->name('settings.packaging.destroy');
         Route::post('/settings/locations', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'storeLocation'])->name('settings.locations.store');
-        Route::put('/settings/locations/{location}', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'updateLocation'])->name('settings.locations.update');
+        Route::match(['put', 'patch'], '/settings/locations/{location}', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'updateLocation'])->name('settings.locations.update');
         Route::delete('/settings/locations/{location}', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'destroyLocation'])->name('settings.locations.destroy');
         Route::post('/settings/upsert', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'upsertSetting'])->name('settings.upsert');
 
-        Route::put('/lots/{lot}', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'lotUpdate'])->name('lots.update');
+        Route::match(['put', 'patch'], '/lots/{lot}', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'lotUpdate'])->name('lots.update');
         Route::delete('/lots/{lot}', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'lotDestroy'])->name('lots.destroy');
         Route::post('/lots/{lot}/qr', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'lotRegenerateQr'])->name('lots.qr');
         Route::get('/drugs/{icode}/units', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'itemUnits'])->name('drugs.units');
         Route::post('/manual-dispense', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'manualDispense'])->name('manual-dispense');
-        Route::put('/balances/{balance}', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'updateBalance'])->name('balances.update');
+        Route::match(['put', 'patch'], '/balances/{balance}', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'updateBalance'])->name('balances.update');
         Route::delete('/balances/{balance}', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'destroyBalance'])->name('balances.destroy');
         Route::post('/reconcile-stock', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'reconcileStock'])->name('reconcile-stock');
         Route::get('/drug-out/stock-info', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'drugOutStockInfo'])->name('drug-out.stock-info');
@@ -481,9 +488,9 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::post('/settings/batch', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'saveBatchSettings'])->name('settings.batch');
         Route::get('/items', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'items'])->name('items');
         Route::post('/items/import', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'importItems'])->name('items.import');
-        Route::put('/items/{item}', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'updateItem'])->name('items.update');
+        Route::match(['put', 'patch'], '/items/{item}', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'updateItem'])->name('items.update');
         Route::post('/items/{item}/units', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'storeUnit'])->name('items.units.store');
-        Route::put('/items/units/{unit}', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'updateUnit'])->name('items.units.update');
+        Route::match(['put', 'patch'], '/items/units/{unit}', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'updateUnit'])->name('items.units.update');
         Route::post('/items/{item}/barcodes', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'storeBarcode'])->name('items.barcodes.store');
         Route::delete('/items/barcodes/{barcode}', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'destroyBarcode'])->name('items.barcodes.destroy');
 
@@ -725,6 +732,7 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::get('/search-patient', [App\Http\Controllers\Mra\MraController::class, 'searchPatient'])->name('search-patient');
         Route::get('/visit-data', [App\Http\Controllers\Mra\MraController::class, 'getVisitData'])->name('visit-data');
         Route::get('/criteria', [App\Http\Controllers\Mra\MraController::class, 'getCriteria'])->name('criteria');
+        Route::get('/criteria-error-report', [App\Http\Controllers\Mra\MraController::class, 'criteriaErrorReport'])->name('criteria-error-report');
         Route::get('/auto-check', [App\Http\Controllers\Mra\MraController::class, 'autoCheck'])->name('auto-check');
         Route::get('/statistics', [App\Http\Controllers\Mra\MraController::class, 'statistics'])->name('statistics');
         
@@ -734,6 +742,7 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::get('/dashboard/export-pdf', [App\Http\Controllers\Mra\MraController::class, 'exportDashboardPdf'])->name('dashboard.export-pdf');
         Route::get('/reports', [App\Http\Controllers\Mra\MraController::class, 'reports'])->name('reports');
         Route::get('/reports/export-pdf', [App\Http\Controllers\Mra\MraController::class, 'exportReportsPdf'])->name('reports.export-pdf');
+        Route::get('/reports/export-excel', [App\Http\Controllers\Mra\MraController::class, 'exportReportsExcel'])->name('reports.export-excel');
         Route::get('/settings', [App\Http\Controllers\Mra\MraController::class, 'settings'])->name('settings');
         Route::get('/guide', [App\Http\Controllers\Mra\MraController::class, 'guide'])->name('guide');
         Route::get('/create', [App\Http\Controllers\Mra\MraController::class, 'create'])->name('create');
@@ -893,6 +902,10 @@ Route::get('/drug/queue-data', [App\Http\Controllers\TvBoardController::class, '
 Route::get('/tv-drug/queue-data', [App\Http\Controllers\TvBoardController::class, 'queueData'])->defaults('boardKey', '013');
 Route::get('/tv/{boardKey}/queue-data', [App\Http\Controllers\TvBoardController::class, 'queueData'])->name('tv.board.data');
 
+// ER 3-section display data (คัดกรอง/รอตรวจ/กำลังตรวจ)
+Route::get('/er/sections-data', [App\Http\Controllers\TvBoardController::class, 'erQueueData']);
+Route::get('/tv-er/sections-data', [App\Http\Controllers\TvBoardController::class, 'erQueueData']);
+
 // --- Admin Queue Management (ต้อง auth) ---
 Route::middleware(['web', 'auth'])->group(function () {
     // 1. Root Shortcuts & Redirects
@@ -925,6 +938,9 @@ Route::middleware(['web', 'auth'])->group(function () {
         Route::get('settings/{boardKey?}', [App\Http\Controllers\Admin\TvDisplaySettingController::class, 'edit'])->name('settings.edit');
         Route::put('settings/{boardKey?}', [App\Http\Controllers\Admin\TvDisplaySettingController::class, 'update'])->name('settings.update');
 
+        Route::get('lab-xray/{boardKey?}', [App\Http\Controllers\Admin\TvDisplaySettingController::class, 'labXray'])->name('lab_xray.index');
+        Route::get('screening/{boardKey?}', [App\Http\Controllers\Admin\TvDisplaySettingController::class, 'screening'])->name('screening.index');
+
         Route::get('playlist/{boardKey?}', [App\Http\Controllers\Admin\TvMediaPlaylistController::class, 'index'])->name('playlist.index');
         Route::post('playlist/{boardKey?}', [App\Http\Controllers\Admin\TvMediaPlaylistController::class, 'store'])->name('playlist.store');
         Route::patch('playlist/{item}/toggle', [App\Http\Controllers\Admin\TvMediaPlaylistController::class, 'toggle'])->name('playlist.toggle');
@@ -933,8 +949,9 @@ Route::middleware(['web', 'auth'])->group(function () {
 
         Route::get('rooms/{boardKey?}', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'index'])->name('rooms.index');
         Route::post('rooms/{boardKey?}', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'store'])->name('rooms.store');
-        Route::patch('rooms/{room}/toggle', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'toggle'])->name('rooms.toggle');
-        Route::delete('rooms/{room}', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'destroy'])->name('rooms.destroy');
     });
 });
+
+
+
 
