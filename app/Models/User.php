@@ -121,9 +121,9 @@ class User extends Authenticatable implements HasMedia
     public function getAvatarUrlAttribute(): ?string
     {
         if ($this->avatar && !str_starts_with($this->avatar, 'http')) {
-            return asset('storage/' . $this->avatar);
+            return url('storage/' . ltrim($this->avatar, '/'));
         }
-        return $this->avatar ?? $this->line_picture_url;
+        return $this->avatar ?: $this->line_picture_url;
     }
 
     /**

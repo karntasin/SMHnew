@@ -14,6 +14,7 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\Response;
 
 class QualityIndicatorController extends Controller
@@ -24,6 +25,9 @@ class QualityIndicatorController extends Controller
 
     public function index(Request $request)
     {
+        $view = $request->query('view', 'list');
+        $isTrash = $view === 'trash';
+
         $type = $request->query('type', 'department'); // 'department', 'ha_team', 'organization'
         if (! in_array($type, ['department', 'ha_team', 'organization'], true)) {
             $type = 'department';
@@ -33,32 +37,52 @@ class QualityIndicatorController extends Controller
         $teamId = $request->filled('team_id') ? (int) $request->query('team_id') : null;
         $category = $request->filled('category') ? trim((string) $request->query('category')) : null;
 
-        $query = QualityIndicator::where('type', $type)
-            ->with(['department', 'team', 'family.master'])
-            ->withCount('entries')
-            ->orderBy('category')
-            ->orderBy('code');
+        if ($isTrash) {
+            $indicators = QualityIndicator::onlyTrashed()
+                ->with([
+                    'department:id,name',
+                    'team:id,abbreviation,name_th',
+                    'deletedBy:id,name',
+                    'restoredBy:id,name',
+                ])
+                ->orderByDesc('deleted_at')
+                ->orderBy('code')
+                ->get()
+                ->map(function (QualityIndicator $indicator) {
+                    $indicator->setAttribute('entries_count', $indicator->entries()->count());
+                    $indicator->setAttribute('deleted_by_name', $indicator->deletedBy?->name);
+                    $indicator->setAttribute('restored_by_name', $indicator->restoredBy?->name);
 
-        if ($type === 'department' && $departmentId) {
-            $query->where('department_id', $departmentId);
+                    return $indicator;
+                });
+        } else {
+            $query = QualityIndicator::where('type', $type)
+                ->with(['department', 'team', 'family.master'])
+                ->withCount('entries')
+                ->orderBy('category')
+                ->orderBy('code');
+
+            if ($type === 'department' && $departmentId) {
+                $query->where('department_id', $departmentId);
+            }
+
+            if ($type === 'ha_team' && $teamId) {
+                $query->where('team_id', $teamId);
+            }
+
+            if ($type === 'organization' && $category && $category !== 'all') {
+                $query->where('category', $category);
+            }
+
+            $indicators = $query->get()->map(function (QualityIndicator $indicator) {
+                $this->families->overlaySharedFields($indicator);
+                $master = $this->families->masterOf($indicator);
+                $indicator->setAttribute('entries_count', $master->entries()->count());
+                $indicator->setAttribute('aliases_count', max(0, $indicator->family?->indicators()->count() - 1));
+
+                return $indicator;
+            });
         }
-
-        if ($type === 'ha_team' && $teamId) {
-            $query->where('team_id', $teamId);
-        }
-
-        if ($type === 'organization' && $category && $category !== 'all') {
-            $query->where('category', $category);
-        }
-
-        $indicators = $query->get()->map(function (QualityIndicator $indicator) {
-            $this->families->overlaySharedFields($indicator);
-            $master = $this->families->masterOf($indicator);
-            $indicator->setAttribute('entries_count', $master->entries()->count());
-            $indicator->setAttribute('aliases_count', max(0, $indicator->family?->indicators()->count() - 1));
-
-            return $indicator;
-        });
 
         $orgCategoryCounts = [
             'all' => QualityIndicator::where('type', 'organization')->count(),
@@ -68,32 +92,36 @@ class QualityIndicatorController extends Controller
 
         $departments = Department::query()->orderBy('name')->get(['id', 'name']);
         $teams = TeamHa::query()->orderBy('abbreviation')->get(['id', 'abbreviation', 'name_th']);
-        $linkableIndicators = QualityIndicator::query()
-            ->with(['department:id,name', 'team:id,abbreviation,name_th', 'family'])
-            ->orderBy('type')
-            ->orderBy('code')
-            ->get(['id', 'family_id', 'type', 'code', 'name', 'department_id', 'team_id'])
-            ->map(function (QualityIndicator $item) {
-                $owner = match ($item->type) {
-                    'department' => $item->department?->name ?: 'ไม่ระบุแผนก',
-                    'ha_team' => $item->team
-                        ? trim(($item->team->abbreviation ? $item->team->abbreviation.' · ' : '').$item->team->name_th)
-                        : 'ไม่ระบุทีม',
-                    default => 'ระดับองค์กร',
-                };
+        $linkableIndicators = $isTrash
+            ? collect()
+            : QualityIndicator::query()
+                ->with(['department:id,name', 'team:id,abbreviation,name_th', 'family'])
+                ->orderBy('type')
+                ->orderBy('code')
+                ->get(['id', 'family_id', 'type', 'code', 'name', 'department_id', 'team_id'])
+                ->map(function (QualityIndicator $item) {
+                    $owner = match ($item->type) {
+                        'department' => $item->department?->name ?: 'ไม่ระบุแผนก',
+                        'ha_team' => $item->team
+                            ? trim(($item->team->abbreviation ? $item->team->abbreviation.' · ' : '').$item->team->name_th)
+                            : 'ไม่ระบุทีม',
+                        default => 'ระดับองค์กร',
+                    };
 
-                return [
-                    'id' => $item->id,
-                    'code' => $item->code,
-                    'name' => $item->name,
-                    'type' => $item->type,
-                    'owner' => $owner,
-                ];
-            });
+                    return [
+                        'id' => $item->id,
+                        'code' => $item->code,
+                        'name' => $item->name,
+                        'type' => $item->type,
+                        'owner' => $owner,
+                    ];
+                });
 
         return Inertia::render('QualityIndicators/Index', [
             'indicators' => $indicators,
             'type' => $type,
+            'view' => $isTrash ? 'trash' : 'list',
+            'trashCount' => QualityIndicator::onlyTrashed()->count(),
             'departments' => $departments,
             'teams' => $teams,
             'linkableIndicators' => $linkableIndicators,
@@ -115,7 +143,11 @@ class QualityIndicatorController extends Controller
             'type' => 'required|in:department,ha_team,organization',
             'department_id' => 'nullable|required_if:type,department|exists:departments,id',
             'team_id' => 'nullable|required_if:type,ha_team|exists:teamha,id',
-            'code' => 'nullable|string|unique:quality_indicators,code',
+            'code' => [
+                'nullable',
+                'string',
+                Rule::unique('quality_indicators', 'code')->whereNull('deleted_at'),
+            ],
             'link_to_id' => 'nullable|integer|exists:quality_indicators,id',
         ];
 
@@ -156,7 +188,11 @@ class QualityIndicatorController extends Controller
     public function update(Request $request, QualityIndicator $indicator)
     {
         $validated = $request->validate([
-            'code' => 'nullable|string|unique:quality_indicators,code,' . $indicator->id,
+            'code' => [
+                'nullable',
+                'string',
+                Rule::unique('quality_indicators', 'code')->whereNull('deleted_at')->ignore($indicator->id),
+            ],
             'name' => 'required|string',
             'category' => 'nullable|string',
             'unit' => 'required|string',
@@ -209,7 +245,11 @@ class QualityIndicatorController extends Controller
             'type' => 'required|in:department,ha_team,organization',
             'department_id' => 'nullable|required_if:type,department|exists:departments,id',
             'team_id' => 'nullable|required_if:type,ha_team|exists:teamha,id',
-            'code' => 'required|string|unique:quality_indicators,code',
+            'code' => [
+                'required',
+                'string',
+                Rule::unique('quality_indicators', 'code')->whereNull('deleted_at'),
+            ],
         ]);
 
         $alias = $this->families->createAlias($indicator, $validated);
@@ -365,7 +405,28 @@ class QualityIndicatorController extends Controller
 
         return redirect()
             ->route('quality-indicators.index', $query)
-            ->with('success', 'ลบตัวชี้วัดเรียบร้อย');
+            ->with('success', 'ย้ายตัวชี้วัดไปถังขยะแล้ว — กู้คืนได้จากเมนูถังขยะ');
+    }
+
+    public function restore(int $indicator)
+    {
+        $model = QualityIndicator::onlyTrashed()->findOrFail($indicator);
+
+        $this->families->restoreIndicator($model);
+
+        $type = $model->type ?: 'department';
+        $query = ['type' => $type];
+
+        if ($type === 'department' && $model->department_id) {
+            $query['department_id'] = $model->department_id;
+        }
+        if ($type === 'ha_team' && $model->team_id) {
+            $query['team_id'] = $model->team_id;
+        }
+
+        return redirect()
+            ->route('quality-indicators.index', $query)
+            ->with('success', 'กู้คืนตัวชี้วัดเรียบร้อย');
     }
 
     public function exportIndicatorPdf(QualityIndicator $indicator, ThaiPdfService $pdf): Response

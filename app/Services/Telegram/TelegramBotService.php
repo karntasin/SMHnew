@@ -15,9 +15,57 @@ class TelegramBotService
 
     public function defaultChatId(): ?string
     {
-        $chatId = trim((string) config('services.telegram.chat_id', ''));
+        return self::firstFilled((string) config('services.telegram.chat_id', ''));
+    }
 
-        return $chatId !== '' ? $chatId : null;
+    public static function firstFilled(string ...$values): ?string
+    {
+        foreach ($values as $value) {
+            $trimmed = trim($value);
+            if ($trimmed !== '') {
+                return $trimmed;
+            }
+        }
+
+        return null;
+    }
+
+    public static function firstLikelyBotToken(string ...$values): ?string
+    {
+        foreach ($values as $value) {
+            $trimmed = trim($value);
+            if (self::isLikelyBotToken($trimmed)) {
+                return $trimmed;
+            }
+        }
+
+        return null;
+    }
+
+    public static function firstLikelyChatId(string ...$values): ?string
+    {
+        foreach ($values as $value) {
+            $trimmed = trim($value);
+            if (self::isLikelyChatId($trimmed)) {
+                return $trimmed;
+            }
+        }
+
+        return null;
+    }
+
+    public static function isLikelyBotToken(?string $token): bool
+    {
+        $token = trim((string) $token);
+
+        return (bool) preg_match('/^\d{6,}:[A-Za-z0-9_-]{20,}$/', $token);
+    }
+
+    public static function isLikelyChatId(?string $chatId): bool
+    {
+        $chatId = trim((string) $chatId);
+
+        return (bool) preg_match('/^-?\d{5,}$/', $chatId);
     }
 
     /**
@@ -28,6 +76,7 @@ class TelegramBotService
         string $text,
         bool $disablePreview = true,
         ?string $parseMode = 'HTML',
+        ?string $botToken = null,
     ): array {
         $chatId = trim((string) ($chatId ?: $this->defaultChatId()));
         $text = trim($text);
@@ -36,9 +85,12 @@ class TelegramBotService
             return ['ok' => false, 'message' => 'ไม่มีผู้รับหรือข้อความว่าง', 'message_id' => null];
         }
 
-        $token = trim((string) config('services.telegram.bot_token', ''));
-        if ($token === '') {
-            return ['ok' => false, 'message' => 'ยังไม่ได้ตั้งค่า TELEGRAM_BOT_TOKEN', 'message_id' => null];
+        $token = self::firstLikelyBotToken(
+            (string) ($botToken ?? ''),
+            (string) config('services.telegram.bot_token', ''),
+        );
+        if ($token === null) {
+            return ['ok' => false, 'message' => 'ยังไม่ได้ตั้งค่า TELEGRAM_BOT_TOKEN ที่ถูกต้อง', 'message_id' => null];
         }
 
         $payload = [
@@ -73,16 +125,20 @@ class TelegramBotService
         if ($parseMode && ($response->json('error_code') === 400 || $response->status() === 400)) {
             Log::warning('Telegram HTML rejected, retrying plain', ['body' => $response->body()]);
 
-            return $this->sendMessage($chatId, strip_tags($text), $disablePreview, null);
+            return $this->sendMessage($chatId, strip_tags($text), $disablePreview, null, $token);
         }
 
-        $detail = $response->json('description') ?? $response->body();
+        $detail = (string) ($response->json('description') ?? $response->body());
         Log::warning('Telegram send rejected', [
             'status' => $response->status(),
             'body' => $response->body(),
         ]);
 
-        return ['ok' => false, 'message' => (string) $detail, 'message_id' => null];
+        if ($response->status() === 404 || strcasecmp($detail, 'Not Found') === 0) {
+            $detail = 'Bot Token ไม่ถูกต้องหรือถูกเพิกถอน (Telegram: Not Found)';
+        }
+
+        return ['ok' => false, 'message' => $detail, 'message_id' => null];
     }
 
     public static function e(string $value): string

@@ -409,8 +409,10 @@ class HosxpQueueService
     }
 
     /**
-     * ดึงข้อมูลผู้ป่วยรอซักประวัติ / คัดกรอง (cur_dep = '002' จุดคัดกรองห้องตรวจโรคภายนอก)
-     * สำหรับหน้าจอรอซักประวัติบน TV คิวห้องตรวจ
+     * ดึงข้อมูลผู้ป่วยรอซักประวัติ / คัดกรอง สำหรับหน้าจอ TV คิวห้องตรวจ
+     *
+     * แสดงเฉพาะผู้ที่ทั้ง main_dep และ cur_dep เป็น '002' (จุดคัดกรองห้องตรวจโรคภายนอก)
+     * ผู้ป่วยที่อยู่จุดคัดกรองชั่วคราวแต่แผนกหลักไม่ใช่ 002 จะไม่ถูกส่งออกไป
      *
      * PDPA: คืนเฉพาะ oqueue + display_name (masked) เท่านั้น ไม่ส่ง hn/vn/ชื่อเต็มออกไป
      */
@@ -430,12 +432,13 @@ class HosxpQueueService
                         });
                 })
                 ->select([
-                    'o.vn', 'o.hn', 'o.oqueue', 'o.vstdate', 'o.vsttime', 'o.cur_dep', 'o.cur_dep_busy',
+                    'o.vn', 'o.hn', 'o.oqueue', 'o.vstdate', 'o.vsttime', 'o.cur_dep', 'o.main_dep', 'o.cur_dep_busy',
                     'p.pname', 'p.fname', 'p.lname',
                     'oa.oapp_id', 'oa.lab_list_text', 'oa.xray_list_text', 'oa.app_cause', 'oa.note'
                 ])
                 ->whereDate('o.vstdate', $today)
-                ->where('o.cur_dep', '002')
+                ->whereRaw("TRIM(o.cur_dep) = ?", ['002'])
+                ->whereRaw("TRIM(o.main_dep) = ?", ['002'])
                 ->orderBy('o.oqueue', 'asc');
 
             $allRows = $query->get();
@@ -480,6 +483,12 @@ class HosxpQueueService
 
             $pendingPatients = [];
             foreach ($rows as $row) {
+                $curDep = trim((string) ($row->cur_dep ?? ''));
+                $mainDep = trim((string) ($row->main_dep ?? ''));
+                if ($curDep !== '002' || $mainDep !== '002') {
+                    continue;
+                }
+
                 $isAppointment = !empty($row->oapp_id);
                 $hasLab = !empty($row->lab_list_text) || in_array($row->vn, $labVns);
                 $hasXray = !empty($row->xray_list_text) || in_array($row->vn, $xrayVns);
@@ -526,9 +535,10 @@ class HosxpQueueService
     /**
      * ดึงข้อมูล ER แบบ 3 Section สำหรับจอแสดงผลใหม่
      *
-     * Section 1: รอคัดกรอง (cur_dep = 003)
-     * Section 2: คิวรอตรวจ (cur_dep = 063, service5 ว่าง) — แยกตามสี triage
-     * Section 3: กำลังตรวจรักษา (cur_dep = 063, service5 ไม่ว่าง) — แสดงสถานะ lab/xray
+     * Section 1: คัดแยก (Triage) — cur_dep = 003 จนกว่าจะส่งเข้า 063
+     * Section 2: คิวรอตรวจ — cur_dep = 063 และยังไม่มี lab/xray/หัตถการ/วินิจฉัย/doctor_tx_time/สถานภาพจำหน่าย
+     * Section 3: กำลังตรวจรักษา — cur_dep = 063 และมี lab / xray / หัตถการ / วินิจฉัย / doctor_tx_time
+     *            หรือสถานภาพจำหน่าย (ยกเว้นกลับบ้าน); ไม่ใช้ service5 เป็นตัวดันข้อ 3
      *
      * PDPA: คืนเฉพาะ oqueue + display_name (masked) เท่านั้น ไม่ส่ง hn/vn/ชื่อเต็มออกไป
      */
@@ -538,16 +548,15 @@ class HosxpQueueService
         $today = now('Asia/Bangkok')->toDateString();
         $conn = DB::connection('hosxp');
 
-        // --- Section 1: รอคัดกรอง (cur_dep = 003 และยังไม่ได้คัดกรอง/ยังไม่จำหน่าย) ---
+        // --- Section 1: คัดแยก (Triage) ที่จุดคัดกรอง ER (cur_dep = 003) ---
         $screeningQuery = $conn->table('ovst as o')
             ->leftJoin('patient as p', 'p.hn', '=', 'o.hn')
             ->leftJoin('er_regist as e', 'e.vn', '=', 'o.vn')
-            ->leftJoin('opdscreen as s', 's.vn', '=', 'o.vn')
+            ->leftJoin('er_leave_status as els', 'els.er_leave_status_id', '=', 'e.er_leave_status_id')
             ->select([
                 'p.pname', 'p.fname', 'p.lname', 'o.oqueue', 'o.vsttime', 'o.cur_dep',
                 'e.finish_time', 'e.er_dch_type', 'e.er_leave_status_id',
-                'e.er_screen', 'e.enter_er_time', 'e.er_emergency_type', 'e.er_emergency_level_id',
-                'e.doctor_tx_time', 's.opdscreen_patient_type_id',
+                'els.er_leave_status_name',
             ])
             ->whereDate('o.vstdate', $today)
             ->where('o.cur_dep', '003')
@@ -555,36 +564,18 @@ class HosxpQueueService
             ->get();
 
         $screening = $screeningQuery->filter(function ($row) {
-            // 1. ตัดออกทันทีหากจำหน่ายแล้ว/ตรวจเสร็จแล้ว
-            $hasFinishTime = !empty($row->finish_time)
-                && !str_starts_with((string) $row->finish_time, '1899')
-                && !str_starts_with((string) $row->finish_time, '0000');
-            $hasDchType = !empty($row->er_dch_type);
-            $hasLeaveStatus = !empty($row->er_leave_status_id);
-            if ($hasFinishTime || $hasDchType || $hasLeaveStatus || trim((string) $row->cur_dep) === '999') {
-                return false;
-            }
-
-            // 2. ตัดออกหากผ่านการคัดกรองแล้ว (er_screen='Y', มี enter_er_time, มีระดับฉุกเฉิน, เริ่มตรวจแล้ว หรือย้ายเข้า 063)
-            $isScreened = strtoupper(trim((string) ($row->er_screen ?? ''))) === 'Y'
-                || (!empty($row->enter_er_time) && !str_starts_with((string) $row->enter_er_time, '1899') && !str_starts_with((string) $row->enter_er_time, '0000'))
-                || !empty($row->er_emergency_type)
-                || !empty($row->er_emergency_level_id)
-                || !empty($row->opdscreen_patient_type_id)
-                || (!empty($row->doctor_tx_time) && !str_starts_with((string) $row->doctor_tx_time, '1899') && !str_starts_with((string) $row->doctor_tx_time, '0000'))
-                || trim((string) $row->cur_dep) === '063';
-
-            return !$isScreened;
+            return ! $this->isErRemovedFromDisplay($row);
         })->map(fn ($row) => [
             'oqueue' => $row->oqueue,
             'display_name' => $this->maskThaiName($row->pname, $row->fname, $row->lname),
         ])->values()->all();
 
-        // --- Section 2 + 3: ห้องฉุกเฉิน (cur_dep in ('063', '003') ที่ผ่านการคัดกรองแล้ว) ---
+        // --- Section 2 + 3: ห้องฉุกเฉิน (cur_dep = 063 เท่านั้น) ---
         $erRows = $conn->table('ovst as o')
             ->leftJoin('patient as p', 'p.hn', '=', 'o.hn')
             ->leftJoin('opdscreen as s', 's.vn', '=', 'o.vn')
             ->leftJoin('er_regist as e', 'e.vn', '=', 'o.vn')
+            ->leftJoin('er_leave_status as els', 'els.er_leave_status_id', '=', 'e.er_leave_status_id')
             ->leftJoin('opdscreen_patient_type as t', 't.opdscreen_patient_type_id', '=', 's.opdscreen_patient_type_id')
             ->leftJoin('er_emergency_level as l', 'l.er_emergency_level_id', '=', 'e.er_emergency_type')
             ->leftJoin('service_time as st', 'st.vn', '=', 'o.vn')
@@ -593,6 +584,7 @@ class HosxpQueueService
                 'o.oqueue', 'o.vn', 'o.vstdate', 'o.vsttime', 'o.cur_dep',
                 'e.enter_er_time', 'e.finish_time', 'e.doctor_tx_time',
                 'e.er_dch_type', 'e.er_leave_status_id',
+                'els.er_leave_status_name',
                 'e.er_screen',
                 'e.er_emergency_type', 'e.er_emergency_level_id',
                 's.opdscreen_patient_type_id',
@@ -602,59 +594,32 @@ class HosxpQueueService
                 'st.service5',
             ])
             ->whereDate('o.vstdate', $today)
-            ->whereIn('o.cur_dep', ['003', '063'])
+            ->where('o.cur_dep', '063')
             ->orderBy('o.oqueue')
             ->get();
 
-        // กรอง: เอาออกคนที่จำหน่ายแล้ว (finish_time, er_dch_type, er_leave_status_id, cur_dep = 999)
-        // และต้องเป็นคนที่ผ่านการคัดกรองแล้วเท่านั้น (หากยังไม่คัดกรองจะอยู่ใน Section 1)
-        $erRows = $erRows->filter(function ($row) {
-            $hasFinishTime = !empty($row->finish_time)
-                && !str_starts_with((string) $row->finish_time, '1899')
-                && !str_starts_with((string) $row->finish_time, '0000');
-            $hasDchType = !empty($row->er_dch_type);
-            $hasLeaveStatus = !empty($row->er_leave_status_id);
-            if ($hasFinishTime || $hasDchType || $hasLeaveStatus || trim((string) $row->cur_dep) === '999') {
-                return false;
-            }
-
-            // ตรวจสอบว่าผ่านการคัดกรองแล้วหรือยัง
-            $isScreened = trim((string) $row->cur_dep) === '063'
-                || strtoupper(trim((string) ($row->er_screen ?? ''))) === 'Y'
-                || (!empty($row->enter_er_time) && !str_starts_with((string) $row->enter_er_time, '1899') && !str_starts_with((string) $row->enter_er_time, '0000'))
-                || !empty($row->er_emergency_type)
-                || !empty($row->er_emergency_level_id)
-                || !empty($row->opdscreen_patient_type_id)
-                || (!empty($row->doctor_tx_time) && !str_starts_with((string) $row->doctor_tx_time, '1899') && !str_starts_with((string) $row->doctor_tx_time, '0000'));
-
-            return $isScreened;
-        });
+        $erRows = $erRows->filter(fn ($row) => ! $this->isErRemovedFromDisplay($row));
 
         $allErVns = $erRows->pluck('vn')->filter()->unique()->all();
 
-        // Batch query ตรวจสอบเงื่อนไขย้ายเข้าข้อ 3 (กำลังตรวจรักษา):
-        // 1. สั่งตรวจ LAB (lab_head)
         $labVns = !empty($allErVns) ? $conn->table('lab_head')
             ->whereIn('vn', $allErVns)
             ->pluck('vn')
             ->flip()
             ->all() : [];
 
-        // 2. สั่งตรวจ X-ray (xray_head)
         $xrayVns = !empty($allErVns) ? $conn->table('xray_head')
             ->whereIn('vn', $allErVns)
             ->pluck('vn')
             ->flip()
             ->all() : [];
 
-        // 3. ลงผลวินิจฉัยโรค (ovstdiag)
         $diagVns = !empty($allErVns) ? $conn->table('ovstdiag')
             ->whereIn('vn', $allErVns)
             ->pluck('vn')
             ->flip()
             ->all() : [];
 
-        // 4. ลงหัตถการ (er_regist_oper / doctor_operation)
         $operErVns = !empty($allErVns) ? $conn->table('er_regist_oper')
             ->whereIn('vn', $allErVns)
             ->pluck('vn')
@@ -672,8 +637,6 @@ class HosxpQueueService
 
         foreach ($erRows as $row) {
             $vn = $row->vn;
-            $svc5 = trim((string) ($row->service5 ?? ''));
-            $hasService5 = $svc5 !== '' && !str_starts_with($svc5, '0000');
             $hasLab = isset($labVns[$vn]);
             $hasXray = isset($xrayVns[$vn]);
             $hasDiag = isset($diagVns[$vn]);
@@ -682,20 +645,32 @@ class HosxpQueueService
                 && !str_starts_with((string) $row->doctor_tx_time, '1899')
                 && !str_starts_with((string) $row->doctor_tx_time, '0000');
 
-            $isTreating = $hasService5 || $hasLab || $hasXray || $hasDiag || $hasOper || $hasDocTx;
+            $leaveStatusName = trim((string) ($row->er_leave_status_name ?? ''));
+            $hasOtherLeaveStatus = $leaveStatusName !== '' && ! $this->isErHomeDischargeStatus($leaveStatusName);
+
+            // ข้อ 3 = มี lab / xray / หัตถการ / วินิจฉัย / แพทย์เริ่มตรวจ / สถานภาพจำหน่าย (ไม่ใช่กลับบ้าน)
+            // ไม่ใช้ service5 เป็นตัวดันข้อ 3 โดยลำพัง (อาจเป็นแผนกอื่น เช่น 007 ตอนคัดกรอง)
+            $isTreating = $hasOtherLeaveStatus
+                || $hasDocTx
+                || $hasLab
+                || $hasXray
+                || $hasDiag
+                || $hasOper;
+
             $triageInfo = $this->resolveTriageInfo($row, $erSetting);
 
             if ($isTreating) {
-                // Section 3: กำลังตรวจรักษา (เข้าเงื่อนไขข้อใดข้อหนึ่ง)
-                $statusText = match (true) {
-                    $hasLab && $hasXray => 'รอผล Lab + X-ray',
-                    $hasLab => 'รอผล Lab',
-                    $hasXray => 'รอผล X-ray',
-                    $hasOper => 'ทำหัตถการ',
-                    $hasDiag => 'ตรวจวินิจฉัยแล้ว',
-                    $hasDocTx => 'แพทย์กำลังตรวจ',
-                    default => 'กำลังตรวจรักษา',
-                };
+                $statusText = $hasOtherLeaveStatus
+                    ? $leaveStatusName
+                    : match (true) {
+                        $hasLab && $hasXray => 'รอผล Lab + X-ray',
+                        $hasLab => 'รอผล Lab',
+                        $hasXray => 'รอผล X-ray',
+                        $hasOper => 'ทำหัตถการ',
+                        $hasDiag => 'ตรวจวินิจฉัยแล้ว',
+                        $hasDocTx => 'แพทย์กำลังตรวจ',
+                        default => 'กำลังตรวจรักษา',
+                    };
 
                 $treating[] = [
                     'oqueue' => $row->oqueue,
@@ -706,7 +681,6 @@ class HosxpQueueService
                     'status_text' => $statusText,
                 ];
             } else {
-                // Section 2: คิวรอตรวจ (ยังไม่เริ่มตรวจ/ไม่มี lab, xray, diag, oper)
                 $waiting[] = [
                     'oqueue' => $row->oqueue,
                     'display_name' => $this->maskThaiName($row->pname, $row->fname, $row->lname),
@@ -720,7 +694,6 @@ class HosxpQueueService
             }
         }
 
-        // จัดกลุ่มรอตรวจตามระดับ triage (1→5)
         $waitingGrouped = collect($waiting)
             ->groupBy('triage_level')
             ->sortKeys()
@@ -746,6 +719,45 @@ class HosxpQueueService
             'waiting_grouped' => $waitingGrouped,
             'treating' => $treating,
         ];
+    }
+
+    /**
+     * ตัดออกจากจอ ER เมื่อปิดเคสแล้ว / ย้ายออก / สถานภาพกลับบ้าน
+     */
+    private function isErRemovedFromDisplay(object $row): bool
+    {
+        if (trim((string) ($row->cur_dep ?? '')) === '999') {
+            return true;
+        }
+
+        $hasFinishTime = !empty($row->finish_time)
+            && !str_starts_with((string) $row->finish_time, '1899')
+            && !str_starts_with((string) $row->finish_time, '0000');
+        if ($hasFinishTime) {
+            return true;
+        }
+
+        $leaveStatusName = trim((string) ($row->er_leave_status_name ?? ''));
+        if ($leaveStatusName !== '' && $this->isErHomeDischargeStatus($leaveStatusName)) {
+            return true;
+        }
+
+        // บางเคสมี er_dch_type แต่ไม่มีชื่อสถานภาพ — ถ้าเป็นกลับบ้านผ่าน dch type text
+        $dchType = trim((string) ($row->er_dch_type ?? ''));
+        if ($dchType !== '' && $this->isErHomeDischargeStatus($dchType)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    private function isErHomeDischargeStatus(string $status): bool
+    {
+        $normalized = mb_strtolower(trim($status));
+
+        return str_contains($normalized, 'กลับบ้าน')
+            || str_contains($normalized, 'discharge home')
+            || $normalized === 'home';
     }
 
     /**

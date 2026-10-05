@@ -154,6 +154,30 @@ export default function Settings({
     });
 
     const [isSavingSettings, setIsSavingSettings] = useState(false);
+    const [isTestingStockTelegram, setIsTestingStockTelegram] = useState(false);
+    const [isTestingEgfrTelegram, setIsTestingEgfrTelegram] = useState(false);
+
+    const handleTestTelegram = (target: 'stock' | 'egfr') => {
+        if (target === 'stock') setIsTestingStockTelegram(true);
+        if (target === 'egfr') setIsTestingEgfrTelegram(true);
+
+        router.post(
+            route('pharmacy.inventory.settings.test-telegram'),
+            {
+                target,
+                telegram_bot_token: settingValues['telegram_bot_token'] || '',
+                telegram_stock_chat_id: settingValues['telegram_stock_chat_id'] || '',
+                telegram_egfr_chat_id: settingValues['telegram_egfr_chat_id'] || '',
+            },
+            {
+                preserveScroll: true,
+                onFinish: () => {
+                    setIsTestingStockTelegram(false);
+                    setIsTestingEgfrTelegram(false);
+                },
+            }
+        );
+    };
 
     // Location Modals state
     const [isAddLocationOpen, setIsAddLocationOpen] = useState(false);
@@ -577,27 +601,14 @@ export default function Settings({
                                     การแจ้งเตือนผ่าน Telegram Bot อัตโนมัติ
                                 </h2>
                                 <p className="text-xs text-muted-foreground">
-                                    ส่งรายงานสรุปยาเหลือน้อยและยาใกล้หมดอายุเข้ากลุ่ม Telegram งานคลังยาตามกำหนดเวลา
+                                    แจ้งเตือนสต็อกเข้ากลุ่มคลังยา และแจ้งเตือนขนาดยาตาม eGFR เข้ากลุ่ม Drug&egfr คนละกลุ่มกัน
                                 </p>
                             </div>
 
-                            <div className="space-y-4">
-                                <div className="flex items-center gap-3">
-                                    <input
-                                        type="checkbox"
-                                        id="telegram_stock_alerts_enabled"
-                                        checked={settingValues['telegram_stock_alerts_enabled'] === '1'}
-                                        onChange={(e) => handleSettingChange('telegram_stock_alerts_enabled', e.target.checked ? '1' : '0')}
-                                        className="h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
-                                    />
-                                    <Label htmlFor="telegram_stock_alerts_enabled" className="text-sm font-semibold cursor-pointer">
-                                        เปิดใช้งานการส่งแจ้งเตือนสต็อกอัตโนมัติผ่าน Telegram
-                                    </Label>
-                                </div>
-
-                                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                                    <div className="space-y-1.5">
-                                        <Label className="text-xs font-semibold">Telegram Bot Token</Label>
+                            <div className="space-y-6">
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs font-semibold">Telegram Bot Token (หลัก)</Label>
+                                    <div className="max-w-md">
                                         <Input
                                             type="password"
                                             placeholder="เช่น 123456789:ABCdefGhIJKlmNoPQRstuVWXyz"
@@ -605,13 +616,98 @@ export default function Settings({
                                             onChange={(e) => handleSettingChange('telegram_bot_token', e.target.value)}
                                         />
                                     </div>
-                                    <div className="space-y-1.5">
-                                        <Label className="text-xs font-semibold">Chat ID / Group ID</Label>
-                                        <Input
-                                            placeholder="เช่น -1001234567890"
-                                            value={settingValues['telegram_chat_id'] ?? ''}
-                                            onChange={(e) => handleSettingChange('telegram_chat_id', e.target.value)}
+                                    <p className="text-[11px] text-muted-foreground">
+                                        Token จาก @BotFather รูปแบบเช่น <code>123456789:AA...</code> — ห้ามใส่รหัสผ่านอื่น หากเว้นว่างระบบจะใช้ค่าจากไฟล์ .env
+                                    </p>
+                                </div>
+
+                                {/* กลุ่มที่ 1: ระบบคลังยา (Pharmacy Stock Alerts) */}
+                                <div className="rounded-xl border border-violet-100 bg-violet-50/40 p-4 space-y-3 dark:border-violet-900/30 dark:bg-violet-950/20">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                        <div className="flex items-center gap-2">
+                                            <Package className="h-4 w-4 text-violet-600" />
+                                            <span className="text-sm font-bold text-foreground">1. แจ้งเตือนคลังยา (กลุ่มคลังยา)</span>
+                                            <span className="text-xs text-muted-foreground">(สต็อกต่ำ / สต็อกหมด / ใกล้หมดอายุ 90 วัน)</span>
+                                        </div>
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            disabled={isTestingStockTelegram}
+                                            onClick={() => handleTestTelegram('stock')}
+                                            className="text-xs text-violet-700 hover:text-violet-800 border-violet-200 hover:bg-violet-100"
+                                        >
+                                            <Send className="mr-1 h-3 w-3" />
+                                            {isTestingStockTelegram ? 'กำลังทดสอบ...' : 'ทดสอบส่งเข้ากลุ่มคลังยา'}
+                                        </Button>
+                                    </div>
+
+                                    <div className="flex items-center gap-3">
+                                        <input
+                                            type="checkbox"
+                                            id="telegram_stock_alerts_enabled"
+                                            checked={settingValues['telegram_stock_alerts_enabled'] === '1'}
+                                            onChange={(e) => handleSettingChange('telegram_stock_alerts_enabled', e.target.checked ? '1' : '0')}
+                                            className="h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
                                         />
+                                        <Label htmlFor="telegram_stock_alerts_enabled" className="text-sm font-semibold cursor-pointer">
+                                            เปิดใช้งานการแจ้งเตือนสต็อกยาเข้า Telegram กลุ่มคลังยา
+                                        </Label>
+                                    </div>
+
+                                    <div className="max-w-md space-y-1.5">
+                                        <Label className="text-xs font-semibold">Chat ID / Group ID (กลุ่มคลังยา)</Label>
+                                        <Input
+                                            placeholder="เช่น -1001234567890 (กลุ่มคลังยา)"
+                                            value={settingValues['telegram_stock_chat_id'] ?? ''}
+                                            onChange={(e) => handleSettingChange('telegram_stock_chat_id', e.target.value)}
+                                        />
+                                        <p className="text-[11px] text-muted-foreground">ID ของกลุ่มงานคลังยาเท่านั้น (ขึ้นต้นด้วย -100) ไม่ส่งไปกลุ่ม Drug&egfr</p>
+                                    </div>
+                                </div>
+
+                                {/* กลุ่มที่ 2: ระบบแจ้งเตือนการใช้ยา ตรวจขนาดยาตามช่วง eGFR */}
+                                <div className="rounded-xl border border-rose-100 bg-rose-50/40 p-4 space-y-3 dark:border-rose-900/30 dark:bg-rose-950/20">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                        <div className="flex items-center gap-2">
+                                            <ShieldAlert className="h-4 w-4 text-rose-600" />
+                                            <span className="text-sm font-bold text-foreground">2. ตรวจขนาดยาตามช่วง eGFR (กลุ่ม Drug&egfr)</span>
+                                            <span className="text-xs text-muted-foreground">(แจ้งเตือนสั่งยาเกินขนาดตามค่าไต / ห้ามใช้)</span>
+                                        </div>
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            disabled={isTestingEgfrTelegram}
+                                            onClick={() => handleTestTelegram('egfr')}
+                                            className="text-xs text-rose-700 hover:text-rose-800 border-rose-200 hover:bg-rose-100"
+                                        >
+                                            <Send className="mr-1 h-3 w-3" />
+                                            {isTestingEgfrTelegram ? 'กำลังทดสอบ...' : 'ทดสอบส่งเข้ากลุ่ม Drug&egfr'}
+                                        </Button>
+                                    </div>
+
+                                    <div className="flex items-center gap-3">
+                                        <input
+                                            type="checkbox"
+                                            id="telegram_egfr_alerts_enabled"
+                                            checked={settingValues['telegram_egfr_alerts_enabled'] === '1'}
+                                            onChange={(e) => handleSettingChange('telegram_egfr_alerts_enabled', e.target.checked ? '1' : '0')}
+                                            className="h-4 w-4 rounded border-gray-300 text-rose-600 focus:ring-rose-500"
+                                        />
+                                        <Label htmlFor="telegram_egfr_alerts_enabled" className="text-sm font-semibold cursor-pointer">
+                                            เปิดใช้งานการแจ้งเตือนสั่งยาตาม eGFR เข้า Telegram กลุ่ม Drug&egfr
+                                        </Label>
+                                    </div>
+
+                                    <div className="max-w-md space-y-1.5">
+                                        <Label className="text-xs font-semibold">Chat ID / Group ID (กลุ่ม Drug&egfr)</Label>
+                                        <Input
+                                            placeholder="เช่น -1009876543210 (กลุ่ม Drug&egfr)"
+                                            value={settingValues['telegram_egfr_chat_id'] ?? ''}
+                                            onChange={(e) => handleSettingChange('telegram_egfr_chat_id', e.target.value)}
+                                        />
+                                        <p className="text-[11px] text-muted-foreground">ID ของกลุ่ม Drug&egfr เท่านั้น (ขึ้นต้นด้วย -100) ไม่ส่งไปกลุ่มคลังยา</p>
                                     </div>
                                 </div>
                             </div>

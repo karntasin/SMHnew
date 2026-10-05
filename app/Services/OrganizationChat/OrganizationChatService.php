@@ -110,6 +110,14 @@ class OrganizationChatService
     public function serializeUser(User $user): array
     {
         $department = $user->primaryDepartment();
+        $avatar = (string) ($user->avatar_url ?? '');
+        if ($avatar !== '' && ! str_starts_with($avatar, 'http')) {
+            $avatar = url(ltrim($avatar, '/'));
+        }
+        if ($avatar === '') {
+            $name = urlencode($user->chat_name ?: $user->display_name ?: 'User');
+            $avatar = "https://ui-avatars.com/api/?name={$name}&background=0D8ABC&color=fff&size=200";
+        }
 
         return [
             'userId' => (string) $user->id,
@@ -117,7 +125,7 @@ class OrganizationChatService
             'displayName' => $user->display_name,
             'department' => $department?->name ?? '',
             'email' => (string) ($user->email ?? ''),
-            'avatar' => (string) ($user->avatar_url ?? ''),
+            'avatar' => $avatar,
             'status' => 'online',
             'createdAt' => $user->created_at?->toIso8601String() ?? '',
             'lastLogin' => $user->updated_at?->toIso8601String() ?? '',

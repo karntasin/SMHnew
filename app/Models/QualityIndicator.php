@@ -3,10 +3,14 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class QualityIndicator extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'family_id',
         'type',
@@ -22,11 +26,16 @@ class QualityIndicator extends Model
         'frequency',
         'formula_description',
         'is_active',
+        'deleted_by',
+        'restored_by',
+        'restored_at',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
         'target_value' => 'decimal:2',
+        'deleted_at' => 'datetime',
+        'restored_at' => 'datetime',
     ];
 
     public function family()
@@ -41,7 +50,7 @@ class QualityIndicator extends Model
 
     public function team()
     {
-        return $this->belongsTo(TeamHa::class, 'team_id'); // Assuming TeamHa model exists or will be created? No, I created table 'teamha' but maybe not model.
+        return $this->belongsTo(TeamHa::class, 'team_id');
     }
 
     public function entries(): HasMany
@@ -52,5 +61,15 @@ class QualityIndicator extends Model
     public function reviews(): HasMany
     {
         return $this->hasMany(QualityReview::class, 'quality_indicator_id');
+    }
+
+    public function deletedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'deleted_by');
+    }
+
+    public function restoredBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'restored_by');
     }
 }

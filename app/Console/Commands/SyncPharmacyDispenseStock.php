@@ -25,7 +25,7 @@ class SyncPharmacyDispenseStock extends Command
             return self::FAILURE;
         }
 
-        if ($this->option('notify') || config('services.telegram.stock_alerts.enabled')) {
+        if ($this->option('notify') || $notifier->isEnabled()) {
             $n = $notifier->notify();
             $this->line($n['message']);
         }

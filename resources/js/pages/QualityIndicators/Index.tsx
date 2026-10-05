@@ -39,7 +39,7 @@ import {
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Search, BarChart2, MoreVertical, Pencil, Trash, FileDown, Upload, Link2, ClipboardCheck, Target, Layers, Copy } from 'lucide-react';
+import { Plus, Search, BarChart2, MoreVertical, Pencil, Trash, Trash2, FileDown, Upload, Link2, ClipboardCheck, Target, Layers, Copy, RotateCcw, List } from 'lucide-react';
 import { QualityPage, StatCard, Panel, StatusPill, EmptyState, qualityInput } from '@/components/quality/quality-ui';
 import IndicatorsSubNav from '@/pages/QualityIndicators/IndicatorsSubNav';
 import { cn } from '@/lib/utils';
@@ -77,12 +77,17 @@ interface Indicator {
     is_active: boolean;
     description: string;
     formula_description: string;
+    type?: string;
     entries_count?: number;
     aliases_count?: number;
     is_master?: boolean;
     master_code?: string | null;
     department?: Department;
     team?: Team;
+    deleted_at?: string | null;
+    deleted_by_name?: string | null;
+    restored_at?: string | null;
+    restored_by_name?: string | null;
 }
 
 interface LinkableIndicator {
@@ -99,9 +104,11 @@ const LINK_TYPE_LABEL: Record<string, string> = {
     ha_team: 'ระดับทีม HA',
 };
 
-export default function Index({ indicators, type, departments, teams, linkableIndicators = [], filters, orgCategoryCounts }: {
+export default function Index({ indicators, type, view = 'list', trashCount = 0, departments, teams, linkableIndicators = [], filters, orgCategoryCounts }: {
     indicators: Indicator[];
     type: 'department' | 'ha_team' | 'organization';
+    view?: 'list' | 'trash';
+    trashCount?: number;
     departments: Department[];
     teams: Team[];
     linkableIndicators?: LinkableIndicator[];
@@ -117,6 +124,7 @@ export default function Index({ indicators, type, departments, teams, linkableIn
         strategy: number;
     };
 }) {
+    const isTrash = view === 'trash';
     const [isOpen, setIsOpen] = useState(false);
     const [search, setSearch] = useState(filters?.search || '');
     const [departmentFilter, setDepartmentFilter] = useState(filters?.department_id ? String(filters.department_id) : 'all');
@@ -126,6 +134,7 @@ export default function Index({ indicators, type, departments, teams, linkableIn
     const [copyingFrom, setCopyingFrom] = useState<Indicator | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<Indicator | null>(null);
     const [deleting, setDeleting] = useState(false);
+    const [restoringId, setRestoringId] = useState<number | null>(null);
     const [linkSourceType, setLinkSourceType] = useState<'all' | 'organization' | 'department' | 'ha_team'>('all');
     const [linkSearch, setLinkSearch] = useState('');
 
@@ -232,6 +241,7 @@ export default function Index({ indicators, type, departments, teams, linkableIn
     };
 
     const getPageTitle = () => {
+        if (isTrash) return 'ถังขยะตัวชี้วัดคุณภาพ';
         switch (type) {
             case 'organization': return 'ตัวชี้วัดคุณภาพ (ระดับองค์กร)';
             case 'department': return 'ตัวชี้วัดคุณภาพ (ระดับแผนก)';
@@ -242,14 +252,16 @@ export default function Index({ indicators, type, departments, teams, linkableIn
     const pageTitle = getPageTitle();
 
     const getSubtitle = () => {
+        if (isTrash) return 'กู้คืนตัวชี้วัดที่ถูกลบ พร้อมดูผู้ลบและเวลาที่ลบ';
         if (type === 'department') return 'บริหารจัดการตัวชี้วัดคุณภาพระดับแผนก/หน่วยงาน';
         if (type === 'ha_team') return 'บริหารจัดการตัวชี้วัดคุณภาพระดับทีมนำทางคลินิก (PCT/Teams)';
         return 'บริหารจัดการตัวชี้วัดคุณภาพระดับองค์กร (แบบประเมินตนเอง SAR & แผนยุทธศาสตร์ รพ.)';
     };
 
     const ownerLabel = (indicator: Indicator) => {
-        if (type === 'department') return indicator.department?.name || 'ไม่ระบุแผนก';
-        if (type === 'ha_team') {
+        const indicatorType = indicator.type || type;
+        if (indicatorType === 'department') return indicator.department?.name || 'ไม่ระบุแผนก';
+        if (indicatorType === 'ha_team') {
             if (!indicator.team) return 'ไม่ระบุทีม';
             return `${indicator.team.abbreviation} · ${indicator.team.name_th}`;
         }
@@ -333,6 +345,38 @@ export default function Index({ indicators, type, departments, teams, linkableIn
         });
     };
 
+    const handleRestore = (indicator: Indicator) => {
+        if (restoringId) return;
+        setRestoringId(indicator.id);
+        router.post(route('quality-indicators.restore', indicator.id), {}, {
+            preserveScroll: true,
+            onFinish: () => setRestoringId(null),
+            onError: (errors) => {
+                setRestoringId(null);
+                const message = errors.code || errors.indicator || Object.values(errors)[0];
+                if (message) {
+                    window.alert(String(message));
+                }
+            },
+        });
+    };
+
+    const formatDateTime = (value?: string | null) => {
+        if (!value) return '-';
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) return value;
+        return d.toLocaleString('th-TH', {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+        });
+    };
+
+    const typeLabel = (t?: string) => {
+        if (t === 'organization') return 'ระดับองค์กร';
+        if (t === 'ha_team') return 'ระดับทีม';
+        return 'ระดับแผนก';
+    };
+
     const deleteEntriesCount = deleteTarget?.entries_count ?? 0;
     const hasDeleteEntries = deleteEntriesCount > 0;
     const isLinking = !editingIndicator && !!data.link_to_id;
@@ -412,38 +456,86 @@ export default function Index({ indicators, type, departments, teams, linkableIn
             breadcrumbs={breadcrumbs}
             actions={
                 <div className="flex flex-wrap gap-2">
-                    <a href={groupPdfHref} target="_blank" rel="noreferrer">
-                        <Button type="button" variant="outline" className="rounded-xl border-emerald-200 text-emerald-800 hover:bg-emerald-50">
-                            <FileDown className="mr-2 h-4 w-4" />
-                            {groupPdfLabel}
-                        </Button>
-                    </a>
-                    <Link
-                        href={route('quality-indicators.import.index', {
-                            type,
-                            ...(type === 'department' && departmentFilter !== 'all' ? { department_id: departmentFilter } : {}),
-                            ...(type === 'ha_team' && teamFilter !== 'all' ? { team_id: teamFilter } : {}),
-                        })}
-                    >
-                        <Button type="button" variant="outline" className="rounded-xl border-emerald-200 text-emerald-800 hover:bg-emerald-50">
-                            <Upload className="mr-2 h-4 w-4" />
-                            นำเข้า Excel
+                    {!isTrash && (
+                        <>
+                            <a href={groupPdfHref} target="_blank" rel="noreferrer">
+                                <Button type="button" variant="outline" className="rounded-xl border-emerald-200 text-emerald-800 hover:bg-emerald-50">
+                                    <FileDown className="mr-2 h-4 w-4" />
+                                    {groupPdfLabel}
+                                </Button>
+                            </a>
+                            <Link
+                                href={route('quality-indicators.import.index', {
+                                    type,
+                                    ...(type === 'department' && departmentFilter !== 'all' ? { department_id: departmentFilter } : {}),
+                                    ...(type === 'ha_team' && teamFilter !== 'all' ? { team_id: teamFilter } : {}),
+                                })}
+                            >
+                                <Button type="button" variant="outline" className="rounded-xl border-emerald-200 text-emerald-800 hover:bg-emerald-50">
+                                    <Upload className="mr-2 h-4 w-4" />
+                                    นำเข้า Excel
+                                </Button>
+                            </Link>
+                            <Button onClick={handleCreate} className="rounded-xl bg-emerald-600 hover:bg-emerald-700">
+                                <Plus className="mr-2 h-4 w-4" />
+                                เพิ่มตัวชี้วัด
+                            </Button>
+                        </>
+                    )}
+                    <Link href={isTrash ? route('quality-indicators.index', { type }) : route('quality-indicators.index', { view: 'trash' })}>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className={cn(
+                                'rounded-xl',
+                                isTrash
+                                    ? 'border-emerald-200 text-emerald-800 hover:bg-emerald-50'
+                                    : 'border-rose-200 text-rose-700 hover:bg-rose-50',
+                            )}
+                        >
+                            {isTrash ? (
+                                <>
+                                    <List className="mr-2 h-4 w-4" />
+                                    กลับรายการ
+                                </>
+                            ) : (
+                                <>
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    ถังขยะ{trashCount > 0 ? ` (${trashCount})` : ''}
+                                </>
+                            )}
                         </Button>
                     </Link>
-                    <Button onClick={handleCreate} className="rounded-xl bg-emerald-600 hover:bg-emerald-700">
-                        <Plus className="mr-2 h-4 w-4" />
-                        เพิ่มตัวชี้วัด
-                    </Button>
                 </div>
             }
-            subNav={<IndicatorsSubNav active="quality-indicators.index" />}
+            subNav={
+                <IndicatorsSubNav
+                    active={isTrash ? 'quality-indicators.trash' : 'quality-indicators.index'}
+                    trashCount={trashCount}
+                />
+            }
         >
             <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-                <StatCard label="ตัวชี้วัดทั้งหมด" value={indicators.length} icon={BarChart2} tone="emerald" />
-                <StatCard label="Active" value={activeCount} sub={`${indicators.length - activeCount} inactive`} icon={BarChart2} tone="teal" />
-                <StatCard label="แสดงผล" value={filteredIndicators.length} sub="หลังกรองค้นหา" icon={Search} tone="cyan" />
+                <StatCard
+                    label={isTrash ? 'ในถังขยะ' : 'ตัวชี้วัดทั้งหมด'}
+                    value={indicators.length}
+                    icon={isTrash ? Trash2 : BarChart2}
+                    tone="emerald"
+                />
+                {!isTrash ? (
+                    <>
+                        <StatCard label="Active" value={activeCount} sub={`${indicators.length - activeCount} inactive`} icon={BarChart2} tone="teal" />
+                        <StatCard label="แสดงผล" value={filteredIndicators.length} sub="หลังกรองค้นหา" icon={Search} tone="cyan" />
+                    </>
+                ) : (
+                    <>
+                        <StatCard label="แสดงผล" value={filteredIndicators.length} sub="หลังค้นหา" icon={Search} tone="cyan" />
+                        <StatCard label="กู้คืนได้" value={filteredIndicators.length} sub="ข้อมูลวัดผลยังอยู่" icon={RotateCcw} tone="teal" />
+                    </>
+                )}
             </div>
 
+            {!isTrash && (
             <div className="flex flex-wrap gap-2">
                 {typeTabs.map((tab) => (
                     <Link key={tab.key} href={route('quality-indicators.index', { type: tab.key })}>
@@ -462,8 +554,9 @@ export default function Index({ indicators, type, departments, teams, linkableIn
                     </Link>
                 ))}
             </div>
+            )}
 
-            {type === 'organization' && (
+            {!isTrash && type === 'organization' && (
                 <div className="rounded-2xl border border-sky-200/80 bg-gradient-to-r from-sky-50/70 via-blue-50/40 to-indigo-50/30 p-3.5 sm:p-4 shadow-xs">
                     <div className="mb-2.5 flex items-center justify-between">
                         <div className="flex items-center gap-2">
@@ -572,7 +665,7 @@ export default function Index({ indicators, type, departments, teams, linkableIn
                 </div>
             )}
 
-            {(type === 'department' || type === 'ha_team') && (
+            {!isTrash && (type === 'department' || type === 'ha_team') && (
                 <Panel title="กรองข้อมูล" description={type === 'department' ? 'แยกดูตามแผนก/หน่วยงาน' : 'แยกดูตามทีม HA'}>
                     <div className="flex flex-wrap items-end gap-3">
                         {type === 'department' ? (
@@ -641,8 +734,8 @@ export default function Index({ indicators, type, departments, teams, linkableIn
             )}
 
             <Panel
-                title="รายการตัวชี้วัด"
-                description="ค้นหาและจัดการตัวชี้วัดคุณภาพ"
+                title={isTrash ? 'ตัวชี้วัดในถังขยะ' : 'รายการตัวชี้วัด'}
+                description={isTrash ? 'กู้คืนตัวชี้วัดที่ถูกลบ — ข้อมูลการวัดผลยังถูกเก็บไว้' : 'ค้นหาและจัดการตัวชี้วัดคุณภาพ'}
                 action={
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -656,7 +749,56 @@ export default function Index({ indicators, type, departments, teams, linkableIn
                 }
             >
                 {filteredIndicators.length === 0 ? (
-                    <EmptyState text="ไม่พบตัวชี้วัด" />
+                    <EmptyState text={isTrash ? 'ไม่มีตัวชี้วัดในถังขยะ' : 'ไม่พบตัวชี้วัด'} />
+                ) : isTrash ? (
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        {filteredIndicators.map((indicator) => (
+                            <div
+                                key={indicator.id}
+                                className="flex h-full flex-col rounded-2xl border border-rose-200/70 bg-white p-4"
+                            >
+                                <div className="mb-2 flex items-start justify-between gap-2">
+                                    <StatusPill
+                                        label={indicator.code || 'No Code'}
+                                        className="border-slate-200 bg-slate-50 text-slate-600"
+                                    />
+                                    <StatusPill
+                                        label={typeLabel(indicator.type)}
+                                        className="border-rose-200 bg-rose-50 text-rose-700"
+                                    />
+                                </div>
+                                <h3 className="mb-1 text-base font-semibold text-slate-900">{indicator.name}</h3>
+                                <p className="mb-3 text-xs font-medium text-emerald-700">{ownerLabel(indicator)}</p>
+                                <div className="mb-4 space-y-1.5 rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2 text-xs text-slate-600">
+                                    <p>
+                                        <span className="font-semibold text-slate-800">ผู้ลบ:</span>{' '}
+                                        {indicator.deleted_by_name || 'ไม่ระบุ'}
+                                    </p>
+                                    <p>
+                                        <span className="font-semibold text-slate-800">ลบเมื่อ:</span>{' '}
+                                        {formatDateTime(indicator.deleted_at)}
+                                    </p>
+                                    {(indicator.entries_count ?? 0) > 0 && (
+                                        <p>
+                                            <span className="font-semibold text-slate-800">ข้อมูลวัดผล:</span>{' '}
+                                            {indicator.entries_count?.toLocaleString('th-TH')} รายการ (ยังอยู่)
+                                        </p>
+                                    )}
+                                </div>
+                                <div className="mt-auto">
+                                    <Button
+                                        type="button"
+                                        className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700"
+                                        disabled={restoringId === indicator.id}
+                                        onClick={() => handleRestore(indicator)}
+                                    >
+                                        <RotateCcw className="mr-2 h-4 w-4" />
+                                        {restoringId === indicator.id ? 'กำลังกู้คืน...' : 'กู้คืน'}
+                                    </Button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 ) : (
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                         {filteredIndicators.map((indicator) => (
@@ -1077,32 +1219,23 @@ export default function Index({ indicators, type, departments, teams, linkableIn
             >
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>
-                            {hasDeleteEntries
-                                ? 'ตัวชี้วัดนี้มีข้อมูลการวัดผลแล้ว — ยืนยันลบ?'
-                                : 'ยืนยันการลบ?'}
-                        </AlertDialogTitle>
+                        <AlertDialogTitle>ย้ายตัวชี้วัดไปถังขยะ?</AlertDialogTitle>
                         <AlertDialogDescription asChild>
                             <div className="space-y-2 text-sm text-muted-foreground">
                                 <p>
-                                    ต้องการลบตัวชี้วัด{' '}
+                                    ต้องการย้ายตัวชี้วัด{' '}
                                     <span className="font-medium text-foreground">
                                         {deleteTarget?.code ? `${deleteTarget.code} — ` : ''}
                                         {deleteTarget?.name}
                                     </span>{' '}
-                                    หรือไม่?
+                                    ไปถังขยะหรือไม่?
                                 </p>
-                                {hasDeleteEntries ? (
-                                    <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
-                                        พบข้อมูลการวัดผล (Data Entries) จำนวน{' '}
-                                        <span className="font-semibold">
-                                            {deleteEntriesCount.toLocaleString('th-TH')}
-                                        </span>{' '}
-                                        รายการ หากลบตัวชี้วัดนี้ ข้อมูลการบันทึกทั้งหมดจะถูกลบถาวรและไม่สามารถย้อนกลับได้
-                                    </p>
-                                ) : (
-                                    <p>การกระทำนี้ไม่สามารถย้อนกลับได้</p>
-                                )}
+                                <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-900">
+                                    สามารถกู้คืนได้ภายหลังจากเมนูถังขยะ และระบบจะบันทึกชื่อผู้ลบไว้
+                                    {hasDeleteEntries
+                                        ? ` ข้อมูลการวัดผล ${deleteEntriesCount.toLocaleString('th-TH')} รายการจะถูกเก็บไว้ด้วย`
+                                        : ''}
+                                </p>
                             </div>
                         </AlertDialogDescription>
                     </AlertDialogHeader>
@@ -1118,11 +1251,7 @@ export default function Index({ indicators, type, departments, teams, linkableIn
                                 handleDelete();
                             }}
                         >
-                            {deleting
-                                ? 'กำลังลบ...'
-                                : hasDeleteEntries
-                                  ? 'ยืนยันลบพร้อมข้อมูลการวัดผล'
-                                  : 'ยืนยันลบ'}
+                            {deleting ? 'กำลังย้าย...' : 'ย้ายไปถังขยะ'}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

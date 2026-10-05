@@ -27,49 +27,53 @@
         .layout-1 .waiting-name { font-size: var(--max-waiting-name-size); }
         .layout-1 .waiting-item { padding: 0.55rem 1.15rem; margin-bottom: 0.45rem; border-radius: 0.65rem; }
         .layout-1 .empty-state { font-size: 1.35rem; padding: 1.25rem; }
+        .layout-1 .lab-status-badge { font-size: 0.75rem; padding: 0.15rem 0.45rem; }
 
         .layout-2-4 {
-            --max-room-title-size: 1.25rem;
-            --max-calling-no-size: 2.5rem;
-            --max-calling-name-size: 1.25rem;
-            --max-waiting-no-size: 1.15rem;
-            --max-waiting-name-size: 1rem;
+            --max-room-title-size: 1.15rem;
+            --max-calling-no-size: 2.15rem;
+            --max-calling-name-size: 1.1rem;
+            --max-waiting-no-size: 1.05rem;
+            --max-waiting-name-size: 0.95rem;
         }
-        .layout-2-4 .room-card { padding: 0.65rem 0.85rem; }
+        .layout-2-4 .room-card { padding: 0.5rem 0.7rem; }
         .layout-2-4 .room-title { font-size: var(--max-room-title-size); }
-        .layout-2-4 .room-header-wrap { padding: 0.35rem 0.65rem; margin-bottom: 0.45rem; border-radius: 0.5rem; }
-        .layout-2-4 .wait-badge { font-size: 0.75rem; padding: 0.15rem 0.5rem; }
-        .layout-2-4 .calling-label { font-size: 0.9rem; }
+        .layout-2-4 .room-header-wrap { padding: 0.3rem 0.55rem; margin-bottom: 0.35rem; border-radius: 0.5rem; }
+        .layout-2-4 .wait-badge { font-size: 0.7rem; padding: 0.12rem 0.4rem; }
+        .layout-2-4 .calling-label { font-size: 0.8rem; }
         .layout-2-4 .calling-no { font-size: var(--max-calling-no-size); line-height: 1; }
         .layout-2-4 .calling-name { font-size: var(--max-calling-name-size); }
-        .layout-2-4 .calling-box { padding: 0.45rem 0.75rem; border-radius: 0.65rem; margin-bottom: 0.45rem; }
-        .layout-2-4 .waiting-title { font-size: 0.8rem; margin-bottom: 0.2rem; }
+        .layout-2-4 .calling-box { padding: 0.35rem 0.6rem; border-radius: 0.55rem; margin-bottom: 0.3rem; }
+        .layout-2-4 .waiting-title { font-size: 0.75rem; margin-bottom: 0.15rem; }
         .layout-2-4 .waiting-no { font-size: var(--max-waiting-no-size); }
         .layout-2-4 .waiting-name { font-size: var(--max-waiting-name-size); }
-        .layout-2-4 .waiting-item { padding: 0.25rem 0.55rem; margin-bottom: 0.2rem; border-radius: 0.375rem; }
-        .layout-2-4 .empty-state { font-size: 0.9rem; padding: 0.45rem; }
+        .layout-2-4 .waiting-item { padding: 0.2rem 0.45rem; margin-bottom: 0.12rem; border-radius: 0.375rem; }
+        .layout-2-4 .empty-state { font-size: 0.85rem; padding: 0.35rem; }
+        .layout-2-4 .waiting-area-box { padding: 0.3rem 0.4rem; }
+        .layout-2-4 .lab-status-badge { font-size: 0.65rem; padding: 0.1rem 0.35rem; }
 
         .layout-5-8 {
-            --max-room-title-size: 1.05rem;
-            --max-calling-no-size: 1.6rem;
-            --max-calling-name-size: 1rem;
-            --max-waiting-no-size: 0.95rem;
-            --max-waiting-name-size: 0.875rem;
+            --max-room-title-size: 0.95rem;
+            --max-calling-no-size: 1.35rem;
+            --max-calling-name-size: 0.875rem;
+            --max-waiting-no-size: 0.875rem;
+            --max-waiting-name-size: 0.8rem;
         }
-        .layout-5-8 .room-card { padding: 0.35rem 0.55rem; }
+        .layout-5-8 .room-card { padding: 0.25rem 0.4rem; }
         .layout-5-8 .room-title { font-size: var(--max-room-title-size); }
-        .layout-5-8 .room-header-wrap { padding: 0.2rem 0.4rem; margin-bottom: 0.2rem; border-radius: 0.4rem; }
-        .layout-5-8 .wait-badge { font-size: 0.65rem; padding: 0.1rem 0.35rem; }
-        .layout-5-8 .calling-label { font-size: 0.725rem; }
+        .layout-5-8 .room-header-wrap { padding: 0.15rem 0.35rem; margin-bottom: 0.15rem; border-radius: 0.35rem; }
+        .layout-5-8 .wait-badge { font-size: 0.6rem; padding: 0.08rem 0.3rem; }
+        .layout-5-8 .calling-label { font-size: 0.65rem; }
         .layout-5-8 .calling-no { font-size: var(--max-calling-no-size); line-height: 1; }
         .layout-5-8 .calling-name { font-size: var(--max-calling-name-size); }
-        .layout-5-8 .calling-box { padding: 0.25rem 0.45rem; border-radius: 0.4rem; margin-bottom: 0.2rem; }
-        .layout-5-8 .waiting-title { font-size: 0.65rem; margin-bottom: 0.15rem; }
+        .layout-5-8 .calling-box { padding: 0.18rem 0.35rem; border-radius: 0.35rem; margin-bottom: 0.12rem; }
+        .layout-5-8 .waiting-title { font-size: 0.6rem; margin-bottom: 0.1rem; }
         .layout-5-8 .waiting-no { font-size: var(--max-waiting-no-size); }
         .layout-5-8 .waiting-name { font-size: var(--max-waiting-name-size); }
-        .layout-5-8 .waiting-item { padding: 0.35rem 0.65rem; border-radius: 0.5rem; }
-        .layout-5-8 .empty-state { font-size: 0.75rem; padding: 0.3rem; }
-        .layout-5-8 .waiting-area-box { padding: 0.4rem 0.55rem; }
+        .layout-5-8 .waiting-item { padding: 0.2rem 0.4rem; border-radius: 0.35rem; }
+        .layout-5-8 .empty-state { font-size: 0.7rem; padding: 0.25rem; }
+        .layout-5-8 .waiting-area-box { padding: 0.25rem 0.35rem; }
+        .layout-5-8 .lab-status-badge { font-size: 0.6rem; padding: 0.05rem 0.3rem; }
 
         .layout-9-plus {
             --max-room-title-size: 0.8rem;
@@ -92,6 +96,7 @@
         .layout-9-plus .waiting-item { padding: 0.15rem 0.35rem; border-radius: 0.3rem; }
         .layout-9-plus .empty-state { font-size: 0.65rem; padding: 0.15rem; }
         .layout-9-plus .waiting-area-box { padding: 0.25rem 0.35rem; }
+        .layout-9-plus .lab-status-badge { font-size: 0.55rem; padding: 0.05rem 0.25rem; }
 
         /* Grid Rows Explicit Helpers to guarantee exact split in 43" TV view */
         .grid-rows-1 { grid-template-rows: repeat(1, minmax(0, 1fr)) !important; }
@@ -705,7 +710,7 @@
                  x-transition:enter="transition ease-out duration-300"
                  x-transition:enter-start="opacity-0 scale-95"
                  x-transition:enter-end="opacity-100 scale-100"
-                 class="grid gap-2 md:gap-2.5 flex-1 min-h-0 h-full" :class="gridClass">
+                 class="grid gap-1.5 flex-1 min-h-0 h-full" :class="gridClass">
                 <template x-for="([roomName, roomData], idx) in Object.entries(rooms)" :key="roomName">
                     <!-- Room Card -->
                     <div class="room-card backdrop-blur-sm rounded-xl md:rounded-2xl shadow-xl flex flex-col h-full min-h-0 relative overflow-hidden transition-all duration-300"
@@ -773,7 +778,7 @@
                                                 <span class="calling-name text-slate-900 font-extrabold truncate block" x-text="q.display_name"
                                                       @if(($settings->font_calling_name ?? 'auto') !== 'auto') style="font-size: {{ $settings->font_calling_name }}px" @endif></span>
                                                 <template x-if="!isDrugBoard && q.lab_status_text">
-                                                    <span class="text-xs font-black px-1.5 py-0.5 rounded bg-slate-900/85 tracking-wide inline-block mt-0.5"
+                                                    <span class="lab-status-badge font-black rounded bg-slate-900/85 tracking-wide inline-block mt-0.5 max-w-full truncate"
                                                           :class="q.lab_status === 'confirmed' ? 'text-emerald-300 border border-emerald-500/50' : 'text-sky-300 border border-sky-500/50 animate-pulse'"
                                                           x-text="'[ ' + (q.lab_status === 'confirmed' ? '✅ ' : '🔬 ') + q.lab_status_text + ' ]'"></span>
                                                 </template>
@@ -791,13 +796,13 @@
                         </div>
 
                         <!-- Waiting Area -->
-                        <div class="{{ $waitingAreaBg }} rounded-xl p-2.5 flex-1 flex flex-col min-h-0 border overflow-hidden relative waiting-area-box">
-                            <h3 class="waiting-title font-bold uppercase tracking-wider flex-shrink-0 mb-1.5"
+                        <div class="{{ $waitingAreaBg }} rounded-xl p-1.5 flex-1 flex flex-col min-h-0 border overflow-hidden relative waiting-area-box">
+                            <h3 class="waiting-title font-bold uppercase tracking-wider flex-shrink-0 mb-1"
                                 :class="getWaitingTitleColorClass(roomData, idx)"
                                 x-text="getWaitingTitle(roomData, idx)"></h3>
                             
                             <!-- Waiting Items: stacked neatly with consistent comfortable gap -->
-                            <div class="flex-1 overflow-hidden flex flex-col justify-start gap-1.5 md:gap-2">
+                            <div class="flex-1 overflow-hidden flex flex-col justify-start gap-1">
                                 <template x-for="q in roomData.waiting.slice(0, maxWaiting)" :key="roomName + '-waiting-' + q.oqueue">
                                     <div class="waiting-item flex justify-between items-center transition-all duration-200"
                                          :class="(!isDrugBoard && q.triage_level) ? getErWaitingItemClass(q) : ('border ' + getWaitingItemBgClass(roomData, idx))">
@@ -842,8 +847,8 @@
                                                         </template>
                                                     </div>
                                                     <template x-if="!isDrugBoard && q.lab_status_text">
-                                                        <div class="mt-0.5 flex items-center gap-1">
-                                                            <span class="text-xs font-black px-2 py-0.5 rounded shadow-sm tracking-wide inline-block"
+                                                        <div class="mt-0.5 flex items-center gap-1 min-w-0">
+                                                            <span class="lab-status-badge font-black rounded shadow-sm tracking-wide inline-block max-w-full truncate"
                                                                   :class="q.lab_status === 'confirmed' ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-500/70' : 'bg-sky-950/90 text-sky-300 border border-sky-500/70 animate-pulse'"
                                                                   x-text="'[ ' + (q.lab_status === 'confirmed' ? '✅ ' : '🔬 ') + q.lab_status_text + ' ]'"></span>
                                                         </div>
@@ -1171,14 +1176,14 @@
 
             </div>
 
-            <!-- ER 3-Row Layout (1. รอคัดกรอง -> 2. คิวรอตรวจ -> 3. กำลังตรวจรักษา -> แถบข้อความ) -->
+            <!-- ER 3-Row Layout (1. รอคัดแยก Triage -> 2. คิวรอตรวจ -> 3. กำลังตรวจรักษา -> แถบข้อความ) -->
             <div x-show="isErBoard" x-cloak class="er-sections-wrap flex-1 min-h-0">
 
-                <!-- แถวที่ 1: รอคัดกรอง / ลงทะเบียน (ตามลำดับคิว) -->
+                <!-- แถวที่ 1: รอคัดแยก (Triage) — อยู่ที่จุดคัดกรอง 003 จนกว่าจะส่งเข้า 063 -->
                 <div class="er-row-section er-row-screening" :class="getSectionRowClass('screening')">
                     <div class="er-row-header er-row-header-screening">
                         <span class="text-xl mr-2">📋</span>
-                        <span>1. รอคัดกรอง / ลงทะเบียน (ตามลำดับคิว)</span>
+                        <span>1. รอคัดแยก (Triage)</span>
                         <span class="er-section-count bg-amber-700/80 text-amber-200" x-text="erScreening.length + ' คิว'"></span>
                     </div>
                     <div class="er-row-body">
@@ -1192,7 +1197,7 @@
                         </div>
                         <template x-if="erScreening.length === 0">
                             <div class="flex items-center justify-center py-3">
-                                <span class="text-slate-400 font-bold text-sm tracking-wide">— ไม่มีคิวรอคัดกรองในขณะนี้ —</span>
+                                <span class="text-slate-400 font-bold text-sm tracking-wide">— ไม่มีคิวรอคัดแยกในขณะนี้ —</span>
                             </div>
                         </template>
                     </div>
@@ -1361,7 +1366,7 @@
                     if (len <= 1) return 7;
                     if (len === 2) return 6;
                     if (len <= 4) return 3; // 2 rows x 2 cols
-                    if (len <= 6) return 3; // 2 rows x 3 cols (OPD 5 rooms)
+                    if (len <= 6) return 2; // 2 rows x 3 cols (OPD 5–6 rooms @ 43" 1080p)
                     if (len <= 8) return 2; // 2 rows x 4 cols
                     return 2;
                 },

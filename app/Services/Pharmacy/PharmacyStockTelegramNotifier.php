@@ -13,10 +13,35 @@ class PharmacyStockTelegramNotifier
         private readonly TelegramBotService $telegram,
     ) {}
 
+    public function getBotToken(): ?string
+    {
+        $dbToken = \App\Models\Pharmacy\PharmacySetting::query()->where('key', 'telegram_bot_token')->value('value');
+
+        return TelegramBotService::firstLikelyBotToken(
+            (string) $dbToken,
+            (string) config('services.telegram.stock_alerts.bot_token', ''),
+            (string) config('services.telegram.bot_token', ''),
+        );
+    }
+
+    public function getChatId(): ?string
+    {
+        $dbStockChat = \App\Models\Pharmacy\PharmacySetting::query()->where('key', 'telegram_stock_chat_id')->value('value');
+
+        return TelegramBotService::firstLikelyChatId(
+            (string) $dbStockChat,
+            (string) config('services.telegram.stock_alerts.chat_id', ''),
+        );
+    }
+
     public function isEnabled(): bool
     {
-        return (bool) config('services.telegram.stock_alerts.enabled', false)
-            && $this->telegram->isConfigured();
+        $dbEnabled = \App\Models\Pharmacy\PharmacySetting::query()->where('key', 'telegram_stock_alerts_enabled')->value('value');
+        $enabled = $dbEnabled !== null
+            ? (bool) (int) $dbEnabled
+            : (bool) config('services.telegram.stock_alerts.enabled', false);
+
+        return $enabled && filled($this->getBotToken()) && filled($this->getChatId());
     }
 
     /**
@@ -24,11 +49,14 @@ class PharmacyStockTelegramNotifier
      */
     public function notify(bool $force = false): array
     {
+        $token = $this->getBotToken();
+        $chatId = $this->getChatId();
+
         if (! $this->isEnabled() && ! $force) {
-            return ['ok' => false, 'skipped' => true, 'message' => 'ยังไม่เปิด TELEGRAM_STOCK_ALERTS_ENABLED', 'sent' => 0];
+            return ['ok' => false, 'skipped' => true, 'message' => 'ยังไม่เปิดแจ้งเตือนสต็อกยาผ่าน Telegram', 'sent' => 0];
         }
-        if (! $this->telegram->isConfigured()) {
-            return ['ok' => false, 'skipped' => true, 'message' => 'ยังไม่ตั้งค่า Telegram bot/chat', 'sent' => 0];
+        if (! filled($token) || ! filled($chatId)) {
+            return ['ok' => false, 'skipped' => true, 'message' => 'ยังไม่ตั้งค่า Telegram bot token หรือ Chat ID สำหรับกลุ่มคลังยา', 'sent' => 0];
         }
 
         $snap = $this->inventory->alertSnapshot();
@@ -85,7 +113,7 @@ class PharmacyStockTelegramNotifier
             $lines[] = '🔗 <a href="https://'.$e($host).'/pharmacy/inventory">เปิดคลังยา</a>';
         }
 
-        $res = $this->telegram->sendMessage(null, implode("\n", $lines));
+        $res = $this->telegram->sendMessage($chatId, implode("\n", $lines), true, 'HTML', $token);
         if (! ($res['ok'] ?? false)) {
             Log::warning('Pharmacy stock telegram failed: '.($res['message'] ?? ''));
 

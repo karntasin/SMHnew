@@ -50,6 +50,7 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
     Route::get('dashboard/stats', [DashboardController::class, 'stats'])->name('dashboard.stats');
     Route::get('dashboard/monthly-visits', [DashboardController::class, 'monthlyVisits'])->name('dashboard.monthly-visits');
     Route::get('dashboard/pdf', [DashboardController::class, 'exportPdf'])->name('dashboard.pdf');
+    Route::get('dashboard/department-daily-pdf', [DashboardController::class, 'exportDepartmentDailyPdf'])->name('dashboard.department-daily-pdf');
     Route::get('dashboard/cv-risk-report', [CvRiskReportController::class, 'export'])->name('dashboard.cv-risk-report');
 
     // Department data dashboards (ข้อมูลรายแผนก)
@@ -164,6 +165,7 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::post('/guide/reset', [App\Http\Controllers\QualityIndicatorGuideController::class, 'reset'])->name('guide.reset');
 
         Route::get('/{indicator}/export-pdf', [App\Http\Controllers\QualityIndicatorController::class, 'exportIndicatorPdf'])->name('export-indicator-pdf');
+        Route::post('/{indicator}/restore', [App\Http\Controllers\QualityIndicatorController::class, 'restore'])->name('restore')->withTrashed();
         Route::get('/{indicator}', [App\Http\Controllers\QualityIndicatorController::class, 'show'])->name('show');
         Route::put('/{indicator}', [App\Http\Controllers\QualityIndicatorController::class, 'update'])->name('update');
         Route::delete('/{indicator}', [App\Http\Controllers\QualityIndicatorController::class, 'destroy'])->name('destroy');
@@ -448,12 +450,12 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::post('/sync-dispense', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'syncDispense'])->name('sync-dispense');
         Route::patch('/balances/{balance}/threshold', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'updateThreshold'])->name('balances.threshold');
 
-        Route::get('/settings/template', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'downloadStockTemplate'])->name('settings.template');
-        Route::post('/settings/import-preview', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'previewStockImport'])->name('settings.import-preview');
-        Route::post('/settings/import-commit', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'commitStockImport'])->name('settings.import-commit');
-        Route::post('/settings/packaging', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'storePackagingType'])->name('settings.packaging.store');
-        Route::match(['put', 'patch'], '/settings/packaging/{type}', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'updatePackagingType'])->name('settings.packaging.update');
-        Route::delete('/settings/packaging/{type}', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'destroyPackagingType'])->name('settings.packaging.destroy');
+        Route::get('/settings/template', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'downloadStockTemplate'])->name('settings.stock-template');
+        Route::post('/settings/import-preview', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'previewStockImport'])->name('settings.stock-import.preview');
+        Route::post('/settings/import-commit', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'commitStockImport'])->name('settings.stock-import.commit');
+        Route::post('/settings/packaging', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'storePackagingType'])->name('settings.packaging-types.store');
+        Route::match(['put', 'patch'], '/settings/packaging/{type}', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'updatePackagingType'])->name('settings.packaging-types.update');
+        Route::delete('/settings/packaging/{type}', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'destroyPackagingType'])->name('settings.packaging-types.destroy');
         Route::post('/settings/locations', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'storeLocation'])->name('settings.locations.store');
         Route::match(['put', 'patch'], '/settings/locations/{location}', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'updateLocation'])->name('settings.locations.update');
         Route::delete('/settings/locations/{location}', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'destroyLocation'])->name('settings.locations.destroy');
@@ -485,7 +487,9 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
 
         // Admin Controller
         Route::get('/settings', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'settings'])->name('settings');
-        Route::post('/settings/batch', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'saveBatchSettings'])->name('settings.batch');
+        Route::post('/settings/batch', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'saveBatchSettings'])->name('settings.values.batch');
+        Route::post('/settings/batch-save', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'saveBatchSettings'])->name('settings.batch');
+        Route::post('/settings/test-telegram', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'testTelegramAlert'])->name('settings.test-telegram');
         Route::get('/items', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'items'])->name('items');
         Route::post('/items/import', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'importItems'])->name('items.import');
         Route::match(['put', 'patch'], '/items/{item}', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'updateItem'])->name('items.update');
@@ -949,7 +953,15 @@ Route::middleware(['web', 'auth'])->group(function () {
 
         Route::get('rooms/{boardKey?}', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'index'])->name('rooms.index');
         Route::post('rooms/{boardKey?}', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'store'])->name('rooms.store');
+        Route::patch('rooms/{room}/toggle', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'toggle'])->name('rooms.toggle');
+        Route::delete('rooms/{room}', [App\Http\Controllers\Admin\TvClinicRoomController::class, 'destroy'])->name('rooms.destroy');
     });
+});
+
+Route::get('/dev/config-cache', function () {
+    \Illuminate\Support\Facades\Artisan::call('config:clear');
+    \Illuminate\Support\Facades\Artisan::call('config:cache');
+    return response('Config cache cleared & cached successfully.');
 });
 
 

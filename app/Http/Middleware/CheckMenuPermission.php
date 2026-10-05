@@ -25,6 +25,7 @@ class CheckMenuPermission
             'dashboard.stats',
             'dashboard.monthly-visits',
             'dashboard.pdf',
+            'dashboard.department-daily-pdf',
             'dashboard.cv-risk-report',
         ], true)) {
             return $next($request);

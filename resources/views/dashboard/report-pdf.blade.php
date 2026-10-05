@@ -245,6 +245,11 @@
     $totalVisits = (float) ($summary['opd'] ?? 0) + (float) ($summary['ipd'] ?? 0) + (float) ($summary['er'] ?? 0);
     $departmentTotal = max(1, (float) $departments->sum(fn ($row) => (float) $get($row, 'total', 0)));
     $departmentMax = max(1, (float) $departments->max(fn ($row) => (float) $get($row, 'total', 0)));
+    $daily = $charts['department_daily_average'] ?? [];
+    $dailyRows = collect($daily['departments'] ?? [])->take(5)->values();
+    $dailyTotal = (float) ($daily['total'] ?? 0);
+    $dailyDays = (int) ($daily['days'] ?? 0);
+    $dailyAvg = (float) ($daily['avg_per_day'] ?? 0);
     $paymentTotal = max(1, (float) ($payment['total'] ?? 0));
     $freeBeds = (float) ($beds['free'] ?? 0);
     $totalBeds = max(1, (float) ($beds['total'] ?? 0));
@@ -370,6 +375,33 @@
             </td>
         </tr>
     </table>
+</div>
+
+<div class="section">
+    <div class="panel">
+        <h2>เฉลี่ยผู้มารับบริการต่อวันรายแผนก</h2>
+        <div class="muted" style="margin-bottom: 6px;">{{ $startDate }} - {{ $endDate }} · จำนวนครั้ง ÷ จำนวนวัน</div>
+        <table class="grid-3">
+            <tr>
+                <td><div class="card card-blue"><div class="kpi-label">รวมจำนวนครั้ง</div><div class="kpi-value">{{ $fmt($dailyTotal) }}</div></div></td>
+                <td><div class="card card-violet"><div class="kpi-label">จำนวนวัน</div><div class="kpi-value">{{ $fmt($dailyDays) }}</div></div></td>
+                <td><div class="card card-green"><div class="kpi-label">เฉลี่ยทั้งโรงพยาบาล</div><div class="kpi-value">{{ number_format($dailyAvg, 1) }}</div><div class="kpi-sub">ครั้งต่อวัน</div></div></td>
+            </tr>
+        </table>
+        <table class="data">
+            <tr><th>แผนกที่เฉลี่ยต่อวันสูงสุด</th><th class="num">จำนวนครั้ง</th><th class="num">เฉลี่ย/วัน</th></tr>
+            @forelse ($dailyRows as $row)
+                <tr>
+                    <td>{{ $row['department'] ?? '-' }}</td>
+                    <td class="num">{{ $fmt($row['total'] ?? 0) }}</td>
+                    <td class="num">{{ number_format((float) ($row['avg_per_day'] ?? 0), 1) }}</td>
+                </tr>
+            @empty
+                <tr><td colspan="3">ไม่พบข้อมูลในช่วงวันที่ที่เลือก</td></tr>
+            @endforelse
+        </table>
+        <div class="muted" style="margin-top: 5px;">ตารางครบทุกแผนกอยู่ในรายงาน PDF แยก “รายงานเฉลี่ยต่อวัน”</div>
+    </div>
 </div>
 
 <div class="section section-break">

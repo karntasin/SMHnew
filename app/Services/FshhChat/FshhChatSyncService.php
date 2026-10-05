@@ -80,8 +80,15 @@ class FshhChatSyncService
             ->all();
 
         $avatar = (string) ($user->avatar_url ?? '');
+        if ($avatar !== '' && ! str_starts_with($avatar, 'http')) {
+            $avatar = url(ltrim($avatar, '/'));
+        }
         if ($avatar === '' || ! str_starts_with($avatar, 'http')) {
             $avatar = (string) ($user->line_picture_url ?? '');
+        }
+        if ($avatar === '') {
+            $name = urlencode($user->chat_name ?: $user->display_name ?: 'User');
+            $avatar = "https://ui-avatars.com/api/?name={$name}&background=0D8ABC&color=fff&size=200";
         }
 
         return [

@@ -63,6 +63,8 @@ return [
         'chat_id' => env('TELEGRAM_CHAT_ID'),
         'egfr_alerts' => [
             'enabled' => filter_var(env('TELEGRAM_EGFR_ALERTS_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+            'bot_token' => env('TELEGRAM_EGFR_BOT_TOKEN'),
+            'chat_id' => env('TELEGRAM_EGFR_CHAT_ID'),
             /** จำนวนวันย้อนหลังที่สแกน (ค่าเริ่มต้น = วันนี้) */
             'lookback_days' => (int) env('TELEGRAM_EGFR_ALERTS_LOOKBACK_DAYS', 0),
             /**
@@ -76,6 +78,8 @@ return [
         ],
         'stock_alerts' => [
             'enabled' => filter_var(env('TELEGRAM_STOCK_ALERTS_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+            'bot_token' => env('TELEGRAM_STOCK_BOT_TOKEN'),
+            'chat_id' => env('TELEGRAM_STOCK_CHAT_ID'),
         ],
     ],
 

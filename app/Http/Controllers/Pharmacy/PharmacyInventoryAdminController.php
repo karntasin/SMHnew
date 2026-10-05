@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Services\Pharmacy\PharmacyInventoryService;
 use App\Services\Pharmacy\PharmacyStockExcelService;
 use App\Services\Pharmacy\PharmacyUnitService;
+use App\Services\Telegram\TelegramBotService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -188,10 +189,66 @@ class PharmacyInventoryAdminController extends Controller
         $settingsData = $request->input('settings', []);
         foreach ($settingsData as $key => $val) {
             $valStr = is_bool($val) ? ($val ? '1' : '0') : (is_null($val) ? '' : (string) $val);
-            PharmacySetting::query()->where('key', $key)->update(['value' => $valStr]);
+
+            if ($key === 'telegram_bot_token' && $valStr !== '' && ! TelegramBotService::isLikelyBotToken($valStr)) {
+                return back()->with('error', 'รูปแบบ Telegram Bot Token ไม่ถูกต้อง (ต้องเป็นตัวเลข:อักขระ จาก BotFather)');
+            }
+            if (in_array($key, ['telegram_stock_chat_id', 'telegram_egfr_chat_id', 'telegram_chat_id'], true)
+                && $valStr !== ''
+                && ! TelegramBotService::isLikelyChatId($valStr)) {
+                return back()->with('error', 'รูปแบบ Telegram Chat ID ไม่ถูกต้อง (ต้องเป็นตัวเลข เช่น -1001234567890)');
+            }
+
+            PharmacySetting::query()->updateOrCreate(['key' => $key], ['value' => $valStr]);
         }
 
         return back()->with('success', 'บันทึกการตั้งค่าระบบเรียบร้อยแล้ว');
+    }
+
+    public function testTelegramAlert(Request $request, TelegramBotService $telegram)
+    {
+        $target = $request->input('target', 'stock'); // 'stock' or 'egfr'
+        $token = TelegramBotService::firstLikelyBotToken(
+            (string) $request->input('telegram_bot_token', ''),
+            (string) PharmacySetting::query()->where('key', 'telegram_bot_token')->value('value'),
+            (string) config('services.telegram.bot_token', ''),
+        );
+
+        if ($target === 'stock') {
+            $chatId = TelegramBotService::firstLikelyChatId(
+                (string) $request->input('telegram_stock_chat_id', ''),
+                (string) PharmacySetting::query()->where('key', 'telegram_stock_chat_id')->value('value'),
+                (string) config('services.telegram.stock_alerts.chat_id', ''),
+            );
+            $groupLabel = 'กลุ่มคลังยา';
+            $title = '📦 ทดสอบการแจ้งเตือน Telegram [กลุ่มคลังยา]';
+            $body = "การเชื่อมต่อแจ้งเตือนสต็อกยาสำเร็จ!\nเวลาทดสอบ: ".now('Asia/Bangkok')->format('d/m/Y H:i:s');
+        } else {
+            $chatId = TelegramBotService::firstLikelyChatId(
+                (string) $request->input('telegram_egfr_chat_id', ''),
+                (string) PharmacySetting::query()->where('key', 'telegram_egfr_chat_id')->value('value'),
+                (string) config('services.telegram.egfr_alerts.chat_id', ''),
+            );
+            $groupLabel = 'กลุ่ม Drug&egfr';
+            $title = '🩺 ทดสอบการแจ้งเตือน Telegram [กลุ่ม Drug&egfr]';
+            $body = "การเชื่อมต่อแจ้งเตือนสั่งยาตามช่วง eGFR สำเร็จ!\nเวลาทดสอบ: ".now('Asia/Bangkok')->format('d/m/Y H:i:s');
+        }
+
+        if ($token === null) {
+            return back()->with('error', 'ยังไม่ได้กำหนด Telegram Bot Token');
+        }
+        if ($chatId === null) {
+            return back()->with('error', "ยังไม่ได้กำหนด Chat ID สำหรับ{$groupLabel}");
+        }
+
+        $msg = "<b>{$title}</b>\n\n{$body}";
+        $res = $telegram->sendMessage($chatId, $msg, true, 'HTML', $token);
+
+        if ($res['ok'] ?? false) {
+            return back()->with('success', "ส่งข้อความทดสอบไปยัง{$groupLabel} สำเร็จแล้ว!");
+        }
+
+        return back()->with('error', 'ส่งข้อความไม่สำเร็จ: '.($res['message'] ?? 'ข้อผิดพลาดไม่ทราบสาเหตุ'));
     }
 
     private function ensureDefaultSettings(): void
@@ -205,9 +262,12 @@ class PharmacyInventoryAdminController extends Controller
             ['key' => 'dos_reorder_days', 'value' => '15', 'type' => 'integer', 'label' => 'เกณฑ์จุดสั่งซื้อ (วันคงเหลือ < วันที่กำหนด)', 'group' => 'alerts', 'description' => 'เกณฑ์ Days of Supply ที่ต้องเริ่มทำใบสั่งซื้อเติมคลัง (วัน)'],
             ['key' => 'dos_overstock_days', 'value' => '180', 'type' => 'integer', 'label' => 'เกณฑ์สต็อกเกิน (วันคงเหลือ > วันที่กำหนด)', 'group' => 'alerts', 'description' => 'เกณฑ์ Days of Supply ที่ถือว่าสต็อกค้างเกินไป (วัน)'],
             ['key' => 'dead_stock_days', 'value' => '90', 'type' => 'integer', 'label' => 'ระยะประเมินยาไม่เคลื่อนไหว (Dead Stock)', 'group' => 'alerts', 'description' => 'จำนวนวันย้อนหลังที่ไม่มีการจ่ายยาเลย แต่ยังมียอดคงเหลือ (วัน)'],
-            ['key' => 'telegram_stock_alerts_enabled', 'value' => '0', 'type' => 'boolean', 'label' => 'เปิดแจ้งเตือนสต็อกผ่าน Telegram', 'group' => 'alerts', 'description' => 'ส่งสรุปสต็อกเหลือน้อยและยาใกล้หมดอายุไปยัง Telegram'],
+            ['key' => 'telegram_stock_alerts_enabled', 'value' => '0', 'type' => 'boolean', 'label' => 'เปิดแจ้งเตือนสต็อกผ่าน Telegram', 'group' => 'alerts', 'description' => 'ส่งสรุปสต็อกเหลือน้อยและยาใกล้หมดอายุไปยัง Telegram กลุ่มคลังยา'],
             ['key' => 'telegram_bot_token', 'value' => '', 'type' => 'string', 'label' => 'Telegram Bot Token', 'group' => 'alerts', 'description' => 'Token ของ Telegram Bot สำหรับส่งการแจ้งเตือน'],
-            ['key' => 'telegram_chat_id', 'value' => '', 'type' => 'string', 'label' => 'Telegram Chat ID / Group ID', 'group' => 'alerts', 'description' => 'ID กลุ่มหรือแชท Telegram ที่รับข้อความเตือน'],
+            ['key' => 'telegram_chat_id', 'value' => '', 'type' => 'string', 'label' => 'Telegram Chat ID (ทั่วไป — ไม่ใช้กับคลังยา/eGFR)', 'group' => 'alerts', 'description' => 'ไม่ใช้เป็นปลายทางของแจ้งเตือนคลังยาหรือ Drug&egfr'],
+            ['key' => 'telegram_stock_chat_id', 'value' => '', 'type' => 'string', 'label' => 'Telegram Chat ID (กลุ่มคลังยา)', 'group' => 'alerts', 'description' => 'ID กลุ่ม Telegram รับแจ้งเตือนสต็อกยาต่ำ/หมด/ใกล้หมดอายุ'],
+            ['key' => 'telegram_egfr_alerts_enabled', 'value' => '1', 'type' => 'boolean', 'label' => 'เปิดแจ้งเตือนขนาดยาตาม eGFR ผ่าน Telegram', 'group' => 'alerts', 'description' => 'ส่งแจ้งเตือนการสั่งยาเกินขนาดยาตามค่าไต eGFR ไปยัง Telegram กลุ่ม Drug&egfr'],
+            ['key' => 'telegram_egfr_chat_id', 'value' => '', 'type' => 'string', 'label' => 'Telegram Chat ID (กลุ่ม Drug&egfr)', 'group' => 'alerts', 'description' => 'ID กลุ่ม Telegram รับแจ้งเตือนสั่งยาตามช่วง eGFR (Drug&egfr)'],
             
             // ha standards
             ['key' => 'had_default_warning', 'value' => 'High Alert Drug: ยาความเสี่ยงสูง ต้องตรวจสอบซ้ำ (Double Check)', 'type' => 'string', 'label' => 'ข้อความเตือนมาตรฐานยา HAD', 'group' => 'ha', 'description' => 'ข้อความเตือนที่แสดงบนหน้าจอและบัตรคุมยา'],
@@ -233,7 +293,20 @@ class PharmacyInventoryAdminController extends Controller
         ];
 
         foreach ($defaults as $d) {
-            PharmacySetting::query()->firstOrCreate(['key' => $d['key']], $d);
+            $existing = PharmacySetting::query()->where('key', $d['key'])->first();
+            if (! $existing) {
+                // ถ้าเป็นคีย์ของ telegram ให้ดึงค่าจาก config/env เป็นค่าเริ่มต้น
+                if ($d['key'] === 'telegram_stock_chat_id' && filled(config('services.telegram.stock_alerts.chat_id'))) {
+                    $d['value'] = (string) config('services.telegram.stock_alerts.chat_id');
+                } elseif ($d['key'] === 'telegram_egfr_chat_id' && filled(config('services.telegram.egfr_alerts.chat_id'))) {
+                    $d['value'] = (string) config('services.telegram.egfr_alerts.chat_id');
+                } elseif ($d['key'] === 'telegram_chat_id' && filled(config('services.telegram.chat_id'))) {
+                    $d['value'] = (string) config('services.telegram.chat_id');
+                } elseif ($d['key'] === 'telegram_bot_token' && filled(config('services.telegram.bot_token'))) {
+                    $d['value'] = (string) config('services.telegram.bot_token');
+                }
+                PharmacySetting::query()->create($d);
+            }
         }
     }
 
