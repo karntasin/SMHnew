@@ -71,6 +71,10 @@ interface WorkOrder {
         name: string;
     };
     images?: MaintenanceImage[];
+    pm_work_order?: {
+        id: number;
+        wo_number: string;
+    } | null;
 }
 
 interface WorkOrdersProps {
@@ -378,6 +382,14 @@ export default function WorkOrders({ workOrders, stats, filters, userPositions, 
                                                                     <AlertTriangle className="w-4 h-4" />
                                                                     {order.priority.name}
                                                                 </div>
+                                                            )}
+                                                            {order.pm_work_order && (
+                                                                <Link
+                                                                    href={route('env.pm.work-orders.show', order.pm_work_order.id)}
+                                                                    className="text-teal-700 underline"
+                                                                >
+                                                                    PM {order.pm_work_order.wo_number}
+                                                                </Link>
                                                             )}
                                                         </div>
                                                     </div>

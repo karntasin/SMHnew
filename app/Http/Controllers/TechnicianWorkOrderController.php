@@ -29,7 +29,7 @@ class TechnicianWorkOrderController extends Controller
             abort(403, 'คุณไม่มีสิทธิ์เข้าถึงหน้านี้');
         }
 
-        $query = MaintenanceRequest::with(['category', 'priority', 'requester', 'images', 'technician'])
+        $query = MaintenanceRequest::with(['category', 'priority', 'requester', 'images', 'technician', 'pmWorkOrder:id,wo_number'])
             ->latest();
 
         // Filter by status
@@ -120,7 +120,7 @@ class TechnicianWorkOrderController extends Controller
      */
     public function show(MaintenanceRequest $workOrder)
     {
-        $workOrder->load(['category', 'priority', 'requester', 'technician', 'images', 'timeline.user']);
+        $workOrder->load(['category', 'priority', 'requester', 'technician', 'images', 'timeline.user', 'pmWorkOrder:id,wo_number']);
 
         return Inertia::render('maintenance/WorkOrderDetail', [
             'workOrder' => $workOrder,

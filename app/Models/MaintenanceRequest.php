@@ -21,6 +21,8 @@ class MaintenanceRequest extends Model
         'location',
         'status',
         'technician_id',
+        'env_asset_id',
+        'pm_work_order_id',
         'assigned_at',
         'started_at',
         'completed_at',
@@ -68,6 +70,16 @@ class MaintenanceRequest extends Model
     public function technician()
     {
         return $this->belongsTo(User::class, 'technician_id');
+    }
+
+    public function envAsset()
+    {
+        return $this->belongsTo(EnvAsset::class, 'env_asset_id');
+    }
+
+    public function pmWorkOrder()
+    {
+        return $this->belongsTo(EnvPmWorkOrder::class, 'pm_work_order_id');
     }
 
     public function images()

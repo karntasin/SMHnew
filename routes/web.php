@@ -662,6 +662,34 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         // PM Tracking
         Route::get('/pm', [App\Http\Controllers\EnvPmController::class, 'index'])->name('pm.index');
         Route::post('/pm', [App\Http\Controllers\EnvPmController::class, 'store'])->name('pm.store');
+        Route::post('/pm/settings', [App\Http\Controllers\EnvPmController::class, 'updateSettings'])->name('pm.settings');
+        Route::post('/pm/generate', [App\Http\Controllers\EnvPmController::class, 'generate'])->name('pm.generate');
+        Route::get('/pm/calendar', [App\Http\Controllers\EnvPmController::class, 'calendar'])->name('pm.calendar');
+        Route::get('/pm/standards', [App\Http\Controllers\EnvPmStandardController::class, 'index'])->name('pm.standards.index');
+        Route::post('/pm/standards', [App\Http\Controllers\EnvPmStandardController::class, 'store'])->name('pm.standards.store');
+        Route::put('/pm/standards/{standard}', [App\Http\Controllers\EnvPmStandardController::class, 'update'])->name('pm.standards.update');
+        Route::delete('/pm/standards/{standard}', [App\Http\Controllers\EnvPmStandardController::class, 'destroy'])->name('pm.standards.destroy');
+        Route::get('/pm/parts', [App\Http\Controllers\EnvPmSparePartController::class, 'index'])->name('pm.parts.index');
+        Route::post('/pm/parts', [App\Http\Controllers\EnvPmSparePartController::class, 'store'])->name('pm.parts.store');
+        Route::put('/pm/parts/{part}', [App\Http\Controllers\EnvPmSparePartController::class, 'update'])->name('pm.parts.update');
+        Route::post('/pm/parts/{part}/receive', [App\Http\Controllers\EnvPmSparePartController::class, 'receive'])->name('pm.parts.receive');
+        Route::post('/pm/parts/{part}/adjust', [App\Http\Controllers\EnvPmSparePartController::class, 'adjust'])->name('pm.parts.adjust');
+        Route::delete('/pm/parts/{part}', [App\Http\Controllers\EnvPmSparePartController::class, 'destroy'])->name('pm.parts.destroy');
+        Route::get('/pm/asset-options', [App\Http\Controllers\EnvPmWorkOrderController::class, 'assetOptions'])->name('pm.asset-options');
+        Route::get('/pm/work-orders', [App\Http\Controllers\EnvPmWorkOrderController::class, 'index'])->name('pm.work-orders.index');
+        Route::post('/pm/work-orders', [App\Http\Controllers\EnvPmWorkOrderController::class, 'store'])->name('pm.work-orders.store');
+        Route::get('/pm/work-orders/{workOrder}', [App\Http\Controllers\EnvPmWorkOrderController::class, 'show'])->name('pm.work-orders.show');
+        Route::post('/pm/work-orders/{workOrder}/assign', [App\Http\Controllers\EnvPmWorkOrderController::class, 'assign'])->name('pm.work-orders.assign');
+        Route::post('/pm/work-orders/{workOrder}/start', [App\Http\Controllers\EnvPmWorkOrderController::class, 'start'])->name('pm.work-orders.start');
+        Route::post('/pm/work-orders/{workOrder}/complete', [App\Http\Controllers\EnvPmWorkOrderController::class, 'complete'])->name('pm.work-orders.complete');
+        Route::post('/pm/work-orders/{workOrder}/photos', [App\Http\Controllers\EnvPmWorkOrderController::class, 'photos'])->name('pm.work-orders.photos');
+        Route::delete('/pm/work-orders/{workOrder}/photos/{photo}', [App\Http\Controllers\EnvPmWorkOrderController::class, 'destroyPhoto'])->name('pm.work-orders.photos.destroy');
+        Route::post('/pm/work-orders/{workOrder}/cancel', [App\Http\Controllers\EnvPmWorkOrderController::class, 'cancel'])->name('pm.work-orders.cancel');
+        Route::get('/pm/assets/{asset}', [App\Http\Controllers\EnvPmAssetPlanController::class, 'show'])->name('pm.assets.show');
+        Route::put('/pm/assets/{asset}', [App\Http\Controllers\EnvPmAssetPlanController::class, 'update'])->name('pm.assets.update');
+        Route::post('/pm/assets/{asset}/schedules', [App\Http\Controllers\EnvPmAssetPlanController::class, 'storeSchedule'])->name('pm.assets.schedules.store');
+        Route::delete('/pm/assets/{asset}/schedules/{schedule}', [App\Http\Controllers\EnvPmAssetPlanController::class, 'destroySchedule'])->name('pm.assets.schedules.destroy');
+        Route::post('/pm/assets/{asset}/meter', [App\Http\Controllers\EnvPmAssetPlanController::class, 'meter'])->name('pm.assets.meter');
 
         // Incidents
         Route::get('/incidents', [App\Http\Controllers\EnvIncidentController::class, 'index'])->name('incidents.index');

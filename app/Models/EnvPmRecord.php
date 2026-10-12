@@ -10,6 +10,7 @@ class EnvPmRecord extends Model
     protected $fillable = [
         'asset_id',
         'schedule_id',
+        'work_order_id',
         'performed_by',
         'result',
         'findings',
@@ -30,5 +31,10 @@ class EnvPmRecord extends Model
     public function schedule(): BelongsTo
     {
         return $this->belongsTo(EnvPmSchedule::class, 'schedule_id');
+    }
+
+    public function workOrder(): BelongsTo
+    {
+        return $this->belongsTo(EnvPmWorkOrder::class, 'work_order_id');
     }
 }

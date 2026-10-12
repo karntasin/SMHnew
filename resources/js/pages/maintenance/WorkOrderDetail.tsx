@@ -73,6 +73,10 @@ interface WorkOrder {
         color?: string;
         level?: number;
     };
+    pm_work_order?: {
+        id: number;
+        wo_number: string;
+    } | null;
     requester?: {
         id: number;
         name: string;
@@ -187,6 +191,14 @@ export default function WorkOrderDetail({ workOrder }: WorkOrderDetailProps) {
                                 </Badge>
                             </div>
                             <p className="text-muted-foreground mt-1">{workOrder.title}</p>
+                            {workOrder.pm_work_order && (
+                                <Link
+                                    href={route('env.pm.work-orders.show', workOrder.pm_work_order.id)}
+                                    className="text-sm text-teal-700 underline"
+                                >
+                                    จากใบ PM {workOrder.pm_work_order.wo_number}
+                                </Link>
+                            )}
                         </div>
                     </div>
                     

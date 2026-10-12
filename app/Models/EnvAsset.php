@@ -58,12 +58,14 @@ class EnvAsset extends Model
         'model',
         'serial_number',
         'price',
+        'annual_pm_budget',
         'location',
         'owner',
         'risk_level',
         'inspection_status',
         'status',
         'purchase_date',
+        'install_date',
         'warranty_expiry',
         'stock_number',
         'condition_code',
@@ -97,7 +99,9 @@ class EnvAsset extends Model
 
     protected $casts = [
         'purchase_date' => 'date',
+        'install_date' => 'date',
         'warranty_expiry' => 'date',
+        'annual_pm_budget' => 'float',
         'sent_at' => 'date',
         'status_changed_at' => 'date',
         'price' => 'float',
@@ -111,7 +115,17 @@ class EnvAsset extends Model
 
     public function schedule(): HasOne
     {
-        return $this->hasOne(EnvPmSchedule::class, 'asset_id');
+        return $this->hasOne(EnvPmSchedule::class, 'asset_id')->oldestOfMany();
+    }
+
+    public function schedules(): HasMany
+    {
+        return $this->hasMany(EnvPmSchedule::class, 'asset_id');
+    }
+
+    public function pmWorkOrders(): HasMany
+    {
+        return $this->hasMany(EnvPmWorkOrder::class, 'asset_id');
     }
 
     public function records(): HasMany

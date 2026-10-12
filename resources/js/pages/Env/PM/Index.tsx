@@ -1,71 +1,108 @@
-import React, { useState } from 'react';
-import { useForm } from '@inertiajs/react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { router, useForm } from '@inertiajs/react';
+import { AlertTriangle, CalendarClock, CircleDollarSign, History, Timer, Wrench } from 'lucide-react';
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { Wrench, AlertTriangle, History } from 'lucide-react';
-import { format } from 'date-fns';
-import { cn } from '@/lib/utils';
-import {
+    EmptyState,
+    Field,
+    Panel,
     QualityPage,
     StatCard,
-    Panel,
-    Modal,
-    Field,
     StatusPill,
-    EmptyState,
 } from '@/components/quality/quality-ui';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import EnvSubNav from '@/pages/Env/EnvSubNav';
+import CreateWorkOrderButton, { GenerateDueButton } from '@/pages/Env/PM/CreateWorkOrderButton';
+import PmSubNav, { criticalityLabel } from '@/pages/Env/PM/PmSubNav';
+import { format } from 'date-fns';
+
+interface UpcomingOrder {
+    id: number;
+    wo_number: string;
+    status: string;
+    due_date: string;
+    result?: string | null;
+    asset?: {
+        name: string;
+        location?: string | null;
+        issue_location?: string | null;
+        risk_level?: string | null;
+        stock_number?: string | null;
+    } | null;
+}
+
+interface HistoryRow {
+    id: number;
+    result: string;
+    performed_by: string;
+    performed_at: string;
+    findings?: string | null;
+    asset?: { name: string } | null;
+}
+
+interface Kpi {
+    compliance_rate: number | null;
+    compliance_on_time: number;
+    compliance_total: number;
+    overdue: number;
+    mttr_hours: number | null;
+    mttr_samples: number;
+    mtbf_hours: number | null;
+    mtbf_samples: number;
+    labor_cost: number;
+    parts_cost: number;
+    cost: number;
+    budget: number;
+    budget_for_period: number;
+    by_asset: {
+        asset_id: number;
+        name: string;
+        stock_number?: string | null;
+        cost: number;
+        labor_cost: number;
+        parts_cost: number;
+        budget?: number | null;
+    }[];
+}
 
 const breadcrumbs = [
     { title: 'ศูนย์พัฒนาคุณภาพ', href: '/quality' },
-    { title: 'ENV', href: route('env.index') },
-    { title: 'แผนบำรุงรักษา (PM)', href: route('env.pm.index') },
+    { title: 'ENV', href: '/env' },
+    { title: 'แผนบำรุงรักษา (PM)', href: '/env/pm' },
 ];
 
-export default function Index({ dueSchedules, history }: { dueSchedules: any[]; history: any[] }) {
-    const [isOpen, setIsOpen] = useState(false);
-    const [selectedSchedule, setSelectedSchedule] = useState<any>(null);
+function money(value: number) {
+    return Number(value || 0).toLocaleString('th-TH', { maximumFractionDigits: 2 });
+}
 
-    const { data, setData, post, processing } = useForm({
-        asset_id: '',
-        schedule_id: '',
-        performed_by: '',
-        result: 'Pass',
-        findings: '',
-        performed_at: new Date().toISOString().split('T')[0],
-    });
+function hours(value: number | null, samples: number) {
+    if (value === null) return 'ยังคำนวณไม่ได้';
+    return `${value} ชม. (${samples})`;
+}
 
-    const handlePerformPM = (schedule: any) => {
-        setSelectedSchedule(schedule);
-        setData({
-            asset_id: schedule.asset_id,
-            schedule_id: schedule.id,
-            performed_by: '',
-            result: 'Pass',
-            findings: '',
-            performed_at: new Date().toISOString().split('T')[0],
-        });
-        setIsOpen(true);
+export default function Index({
+    kpi,
+    filters,
+    years,
+    upcoming,
+    history,
+    laborRate,
+}: {
+    kpi: Kpi;
+    filters: { year: number; month: number | null };
+    years: number[];
+    upcoming: UpcomingOrder[];
+    history: HistoryRow[];
+    laborRate: string;
+}) {
+    const rateForm = useForm({ labor_rate_per_hour: laborRate || '0' });
+
+    const applyFilter = (year: number, month: string) => {
+        router.get(
+            route('env.pm.index'),
+            { year, month: month || undefined },
+            { preserveState: true, replace: true },
+        );
     };
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        post(route('env.pm.store'), {
-            onSuccess: () => setIsOpen(false),
-        });
-    };
-
-    const overdueCount = dueSchedules.filter(
-        (s) => new Date(s.next_pm_date) < new Date(),
-    ).length;
 
     return (
         <QualityPage
@@ -73,178 +110,200 @@ export default function Index({ dueSchedules, history }: { dueSchedules: any[]; 
             icon={Wrench}
             badge="ศูนย์พัฒนาคุณภาพ · ENV"
             title="การติดตามการบำรุงรักษา (PM Tracking)"
-            subtitle="ติดตามและบันทึกผลการบำรุงรักษาเครื่องมือแพทย์"
+            subtitle="ความครบถ้วนของแผน งานค้าง ค่าซ่อมเฉลี่ย และต้นทุนเทียบงบ"
             breadcrumbs={breadcrumbs}
             headTitle="PM Tracking"
-            subNav={<EnvSubNav active="env.pm.index" />}
+            subNav={
+                <>
+                    <EnvSubNav active="env.pm.index" />
+                    <PmSubNav active="dashboard" />
+                </>
+            }
+            actions={
+                <div className="flex flex-wrap gap-2">
+                    <CreateWorkOrderButton />
+                    <GenerateDueButton />
+                </div>
+            }
         >
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="flex flex-wrap items-end gap-3">
+                <Field label="ปี">
+                    <select
+                        className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm"
+                        value={filters.year}
+                        onChange={(e) => applyFilter(Number(e.target.value), filters.month ? String(filters.month) : '')}
+                    >
+                        {years.map((year) => (
+                            <option key={year} value={year}>
+                                {year}
+                            </option>
+                        ))}
+                    </select>
+                </Field>
+                <Field label="เดือน">
+                    <select
+                        className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm"
+                        value={filters.month || ''}
+                        onChange={(e) => applyFilter(filters.year, e.target.value)}
+                    >
+                        <option value="">ทั้งปี</option>
+                        {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
+                            <option key={month} value={month}>
+                                {month}
+                            </option>
+                        ))}
+                    </select>
+                </Field>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
                 <StatCard
-                    label="รายการที่ต้องทำ PM"
-                    value={dueSchedules.length}
-                    sub="Upcoming/Overdue"
-                    icon={AlertTriangle}
-                    tone={dueSchedules.length ? 'amber' : 'teal'}
-                />
-                <StatCard
-                    label="เกินกำหนด"
-                    value={overdueCount}
-                    sub="รายการ"
-                    icon={AlertTriangle}
-                    tone={overdueCount ? 'rose' : 'emerald'}
-                />
-                <StatCard
-                    label="ประวัติล่าสุด"
-                    value={history.length}
-                    sub="รายการบันทึก"
-                    icon={History}
+                    label="PM Compliance"
+                    value={kpi.compliance_rate === null ? '-' : `${kpi.compliance_rate}%`}
+                    sub={`${kpi.compliance_on_time}/${kpi.compliance_total} ทำทันกำหนด`}
+                    icon={CalendarClock}
                     tone="teal"
+                />
+                <StatCard
+                    label="PM Overdue"
+                    value={kpi.overdue}
+                    sub="ใบงานที่ยังไม่ปิด"
+                    icon={AlertTriangle}
+                    tone={kpi.overdue ? 'rose' : 'emerald'}
+                />
+                <StatCard
+                    label="MTTR"
+                    value={kpi.mttr_hours === null ? '-' : kpi.mttr_hours}
+                    sub={hours(kpi.mttr_hours, kpi.mttr_samples)}
+                    icon={Timer}
+                    tone="amber"
+                />
+                <StatCard
+                    label="MTBF"
+                    value={kpi.mtbf_hours === null ? '-' : kpi.mtbf_hours}
+                    sub={hours(kpi.mtbf_hours, kpi.mtbf_samples)}
+                    icon={History}
+                    tone="violet"
+                />
+                <StatCard
+                    label="ต้นทุน PM"
+                    value={money(kpi.cost)}
+                    sub={`งบช่วงนี้ ${money(kpi.budget_for_period)}`}
+                    icon={CircleDollarSign}
+                    tone="sky"
                 />
             </div>
 
-            <div className="grid gap-6 md:grid-cols-2">
-                <Panel
-                    title="รายการที่ต้องทำ PM"
-                    description="Upcoming และ Overdue"
-                >
-                    {dueSchedules.length === 0 ? (
-                        <EmptyState text="ไม่มีรายการที่ต้องทำเร็วๆ นี้" />
+            <div className="grid gap-6 lg:grid-cols-3">
+                <Panel title="งานใกล้ถึงและเลยกำหนด" description="ภายใน 30 วัน และรายการค้าง" className="lg:col-span-2">
+                    {upcoming.length === 0 ? (
+                        <EmptyState text="ยังไม่มีใบงานในช่วงนี้ กดสร้างใบงานแล้วเลือกเครื่อง" />
                     ) : (
                         <div className="space-y-3">
-                            {dueSchedules.map((schedule) => {
-                                const isOverdue = new Date(schedule.next_pm_date) < new Date();
+                            {upcoming.map((order) => {
+                                const overdue = new Date(order.due_date) < new Date(new Date().toDateString());
                                 return (
-                                    <div
-                                        key={schedule.id}
-                                        className="flex items-center justify-between rounded-2xl border border-slate-200 p-4"
+                                    <button
+                                        key={order.id}
+                                        type="button"
+                                        className="flex w-full items-center justify-between rounded-2xl border border-slate-200 p-4 text-left hover:border-teal-200"
+                                        onClick={() => router.get(route('env.pm.work-orders.show', order.id))}
                                     >
                                         <div>
-                                            <div className="font-semibold text-slate-800">{schedule.asset.name}</div>
-                                            <div className="text-sm text-slate-500">
-                                                Due:{' '}
-                                                <span className={cn(isOverdue && 'font-bold text-rose-600')}>
-                                                    {format(new Date(schedule.next_pm_date), 'dd MMM yyyy')}
-                                                </span>
+                                            <div className="font-semibold text-slate-800">
+                                                {order.asset?.name}{' '}
+                                                <span className="font-mono text-xs text-slate-400">{order.wo_number}</span>
                                             </div>
-                                            <div className="mt-1 text-xs text-slate-400">
-                                                Loc: {schedule.asset.location} | Risk: {schedule.asset.risk_level}
+                                            <div className="text-sm text-slate-500">
+                                                กำหนด{' '}
+                                                <span className={overdue ? 'font-semibold text-rose-600' : ''}>
+                                                    {format(new Date(order.due_date), 'dd MMM yyyy')}
+                                                </span>
+                                                {' · '}
+                                                {order.asset?.issue_location || order.asset?.location || '-'}
+                                                {' · '}
+                                                {order.asset?.risk_level} {criticalityLabel(order.asset?.risk_level)}
                                             </div>
                                         </div>
-                                        <Button
-                                            size="sm"
-                                            className="rounded-xl bg-teal-600 hover:bg-teal-700"
-                                            onClick={() => handlePerformPM(schedule)}
-                                        >
-                                            บันทึกผล
-                                        </Button>
-                                    </div>
+                                        <StatusPill
+                                            label={order.status}
+                                            className="border-slate-200 bg-slate-50 text-slate-700"
+                                        />
+                                    </button>
                                 );
                             })}
                         </div>
                     )}
                 </Panel>
 
-                <Panel title="ประวัติการทำ PM ล่าสุด" description="บันทึกผลการบำรุงรักษาย้อนหลัง">
-                    {history.length === 0 ? (
-                        <EmptyState text="ยังไม่มีประวัติการทำ PM" />
-                    ) : (
-                        <div className="max-h-[500px] space-y-3 overflow-y-auto pr-2">
-                            {history.map((record) => (
-                                <div
-                                    key={record.id}
-                                    className="flex items-start justify-between border-b border-slate-50 pb-3 last:border-0"
-                                >
-                                    <div>
-                                        <div className="font-medium text-slate-800">{record.asset.name}</div>
-                                        <div className="text-xs text-slate-400">
-                                            {format(new Date(record.performed_at), 'dd MMM yyyy HH:mm')} by{' '}
-                                            {record.performed_by}
-                                        </div>
-                                        {record.findings && (
-                                            <div className="mt-1 rounded-xl bg-slate-50 p-2 text-xs text-slate-600">
-                                                Note: {record.findings}
-                                            </div>
-                                        )}
-                                    </div>
-                                    <StatusPill
-                                        label={record.result}
-                                        className={
-                                            record.result === 'Pass'
-                                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                                                : 'border-rose-200 bg-rose-50 text-rose-700'
-                                        }
-                                    />
-                                </div>
-                            ))}
+                <div className="space-y-6">
+                    <Panel title="ต้นทุนเทียบงบ" description="ค่าแรงและอะไหล่ของงานที่ปิดในช่วงที่เลือก">
+                        <div className="mb-3 text-sm text-slate-600">
+                            ค่าแรง {money(kpi.labor_cost)} · อะไหล่ {money(kpi.parts_cost)} · งบทั้งปี {money(kpi.budget)}
                         </div>
-                    )}
-                </Panel>
+                        {kpi.by_asset.length === 0 ? (
+                            <EmptyState text="ยังไม่มีต้นทุนในช่วงนี้" />
+                        ) : (
+                            <div className="space-y-2">
+                                {kpi.by_asset.map((row) => (
+                                    <div key={row.asset_id} className="flex items-center justify-between text-sm">
+                                        <span className="truncate text-slate-700">{row.name}</span>
+                                        <span className="font-medium tabular-nums">{money(row.cost)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        <form
+                            className="mt-4 space-y-2 border-t border-slate-100 pt-4"
+                            onSubmit={(e) => {
+                                e.preventDefault();
+                                rateForm.post(route('env.pm.settings'));
+                            }}
+                        >
+                            <Field label="อัตราค่าแรงต่อชั่วโมง (บาท)">
+                                <Input
+                                    type="number"
+                                    min={0}
+                                    step="0.01"
+                                    value={rateForm.data.labor_rate_per_hour}
+                                    onChange={(e) => rateForm.setData('labor_rate_per_hour', e.target.value)}
+                                />
+                            </Field>
+                            <Button type="submit" size="sm" className="rounded-xl" disabled={rateForm.processing}>
+                                บันทึกอัตราค่าแรง
+                            </Button>
+                        </form>
+                    </Panel>
+                </div>
             </div>
 
-            <Modal
-                open={isOpen}
-                onClose={() => setIsOpen(false)}
-                title="บันทึกผลการบำรุงรักษา (PM)"
-                footer={
-                    <>
-                        <Button variant="outline" className="rounded-xl" onClick={() => setIsOpen(false)}>
-                            ยกเลิก
-                        </Button>
-                        <Button
-                            className="rounded-xl bg-teal-600 hover:bg-teal-700"
-                            onClick={handleSubmit}
-                            disabled={processing}
-                        >
-                            บันทึกผล
-                        </Button>
-                    </>
-                }
-            >
-                <div className="rounded-xl bg-slate-50 p-3">
-                    <h4 className="font-medium text-slate-800">{selectedSchedule?.asset?.name}</h4>
-                    <p className="text-sm text-slate-500">
-                        Model: {selectedSchedule?.asset?.model} | SN:{' '}
-                        {selectedSchedule?.asset?.serial_number}
-                    </p>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                    <Field label="วันที่ดำเนินการ">
-                        <Input
-                            type="date"
-                            value={data.performed_at}
-                            onChange={(e) => setData('performed_at', e.target.value)}
-                            className="rounded-xl"
-                            required
-                        />
-                    </Field>
-                    <Field label="ผู้ดำเนินการ">
-                        <Input
-                            value={data.performed_by}
-                            onChange={(e) => setData('performed_by', e.target.value)}
-                            className="rounded-xl"
-                            required
-                        />
-                    </Field>
-                </div>
-                <Field label="ผลการตรวจสอบ">
-                    <Select value={data.result} onValueChange={(v) => setData('result', v)}>
-                        <SelectTrigger className="rounded-xl">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="Pass">Pass (ผ่าน)</SelectItem>
-                            <SelectItem value="Fail">Fail (ไม่ผ่าน)</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </Field>
-                <Field label="ข้อค้นพบ/การแก้ไข (Findings)">
-                    <Textarea
-                        value={data.findings}
-                        onChange={(e) => setData('findings', e.target.value)}
-                        className="rounded-xl"
-                    />
-                </Field>
-            </Modal>
+            <Panel title="ประวัติการทำ PM ล่าสุด">
+                {history.length === 0 ? (
+                    <EmptyState text="ยังไม่มีประวัติการทำ PM" />
+                ) : (
+                    <div className="space-y-3">
+                        {history.map((record) => (
+                            <div key={record.id} className="flex items-start justify-between border-b border-slate-100 pb-3 last:border-0">
+                                <div>
+                                    <div className="font-medium text-slate-800">{record.asset?.name}</div>
+                                    <div className="text-xs text-slate-400">
+                                        {format(new Date(record.performed_at), 'dd MMM yyyy HH:mm')} · {record.performed_by}
+                                    </div>
+                                    {record.findings && <div className="mt-1 text-xs text-slate-600">{record.findings}</div>}
+                                </div>
+                                <StatusPill
+                                    label={record.result}
+                                    className={
+                                        record.result === 'Pass'
+                                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                            : 'border-rose-200 bg-rose-50 text-rose-700'
+                                    }
+                                />
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </Panel>
         </QualityPage>
     );
 }
