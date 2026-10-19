@@ -62,7 +62,7 @@ class UserLineAccountMergeService
         try {
             $this->fshhChat->syncUser($keep);
         } catch (\Throwable $e) {
-            Log::warning('FSHH Chat sync after LINE stub merge failed: '.$e->getMessage());
+            Log::warning('S-Chat sync after LINE stub merge failed: '.$e->getMessage());
         }
 
         return $keep;

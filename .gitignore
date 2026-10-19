@@ -4,6 +4,7 @@
 .env.backup
 .env.production
 organization-chat/.chat-sync-secret
+organization-chat/.dev.vars
 .phpactor.json
 .phpunit.result.cache
 /.fleet

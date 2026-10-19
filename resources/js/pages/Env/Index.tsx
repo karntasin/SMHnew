@@ -10,6 +10,7 @@ import {
     FileSpreadsheet,
     Plus,
     RefreshCw,
+    BookOpen,
 } from 'lucide-react';
 import { QualityPage, StatCard, Panel, StatusPill } from '@/components/quality/quality-ui';
 import EnvSubNav from '@/pages/Env/EnvSubNav';
@@ -85,6 +86,12 @@ export default function Index({ dashboard }: Props) {
             subNav={<EnvSubNav active="env.index" />}
             actions={
                 <div className="flex flex-wrap gap-2">
+                    <Button asChild variant="outline" className="rounded-xl">
+                        <Link href={route('env.guide')}>
+                            <BookOpen className="mr-2 h-4 w-4" />
+                            คู่มือใช้งาน
+                        </Link>
+                    </Button>
                     <Button asChild variant="outline" className="rounded-xl">
                         <Link href={route('env.assets.report')}>
                             <FileSpreadsheet className="mr-2 h-4 w-4" />

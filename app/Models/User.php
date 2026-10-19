@@ -54,6 +54,12 @@ class User extends Authenticatable implements HasMedia
         return $this->belongsToMany(TeamHa::class, 'teamha_user', 'user_id', 'teamha_id')
                     ->withTimestamps();
     }
+
+    public function departmentLeaders()
+    {
+        return $this->hasMany(DepartmentLeader::class);
+    }
+
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable, HasRoles, InteractsWithMedia;
 
@@ -121,9 +127,9 @@ class User extends Authenticatable implements HasMedia
     public function getAvatarUrlAttribute(): ?string
     {
         if ($this->avatar && !str_starts_with($this->avatar, 'http')) {
-            return asset('storage/' . $this->avatar);
+            return url('storage/' . ltrim($this->avatar, '/'));
         }
-        return $this->avatar ?? $this->line_picture_url;
+        return $this->avatar ?: $this->line_picture_url;
     }
 
     /**
@@ -135,7 +141,7 @@ class User extends Authenticatable implements HasMedia
     }
 
     /**
-     * ชื่อที่แสดงใน FSHH Chat — ถ้าว่างใช้ชื่อจริง / ชื่อ LINE
+     * ชื่อที่แสดงใน S-Chat — ถ้าว่างใช้ชื่อจริง / ชื่อ LINE
      */
     public function getChatNameAttribute(): string
     {

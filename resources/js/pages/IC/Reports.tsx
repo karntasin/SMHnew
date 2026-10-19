@@ -9,14 +9,12 @@ import {
     FileBarChart,
     Download,
     Calendar,
-    TrendingUp,
-    TrendingDown,
     Activity,
     Users,
     Pill,
     HandMetal,
 } from 'lucide-react';
-import { appPath } from '@/lib/asset';
+import { IcCharts, IcPdfButton, icPdfUrl, type IcChart } from '@/pages/IC/ic-ui';
 
 interface MonthlyData {
     month: string;
@@ -65,9 +63,11 @@ interface Props {
         hand_hygiene: number;
         antibiotic_appropriate: number;
     };
+    charts?: IcChart[];
+    modules?: { key: string; label: string; value: string; hint: string; met: boolean }[];
 }
 
-export default function Reports({ period, monthly_hai, hygiene_compliance, antibiotic_stats, summary, targets }: Props) {
+export default function Reports({ period, monthly_hai, hygiene_compliance, antibiotic_stats, summary, targets, charts, modules }: Props) {
     const [reportPeriod, setReportPeriod] = useState({
         start_date: period.start_date,
         end_date: period.end_date,
@@ -77,17 +77,8 @@ export default function Reports({ period, monthly_hai, hygiene_compliance, antib
         router.get('/ic/reports', reportPeriod, { preserveState: true });
     };
 
-    const handleExport = (format: 'pdf' | 'excel') => {
-        window.open(appPath(`/ic/reports/export?format=${format}&start_date=${reportPeriod.start_date}&end_date=${reportPeriod.end_date}`), '_blank');
-    };
-
-    const getTrend = (current: number, previous: number) => {
-        if (current > previous) {
-            return <TrendingUp className="h-4 w-4 text-red-500" />;
-        } else if (current < previous) {
-            return <TrendingDown className="h-4 w-4 text-green-500" />;
-        }
-        return null;
+    const handleExport = (module: string) => {
+        window.open(icPdfUrl(module, reportPeriod.start_date, reportPeriod.end_date), '_blank');
     };
 
     return (
@@ -105,14 +96,7 @@ export default function Reports({ period, monthly_hai, hygiene_compliance, antib
             ]}
             subNav={<IcSubNav active="ic.reports" />}
             actions={
-                <div className="flex gap-2">
-                    <Button variant="outline" className="gap-2 rounded-xl" onClick={() => handleExport('excel')}>
-                        <Download className="h-4 w-4" /> Excel
-                    </Button>
-                    <Button className="gap-2 rounded-xl bg-rose-600 hover:bg-rose-700" onClick={() => handleExport('pdf')}>
-                        <Download className="h-4 w-4" /> PDF
-                    </Button>
-                </div>
+                <IcPdfButton module="overview" start={reportPeriod.start_date} end={reportPeriod.end_date} label="PDF ภาพรวม" />
             }
         >
             <Panel title="ช่วงเวลารายงาน" description="เลือกช่วงวันที่แล้วกดสร้างรายงาน">
@@ -138,6 +122,28 @@ export default function Reports({ period, monthly_hai, hygiene_compliance, antib
                     </Button>
                 </div>
             </Panel>
+
+            {modules && modules.length > 0 && (
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    {modules.map((item) => (
+                        <button
+                            key={item.key}
+                            type="button"
+                            onClick={() => handleExport(item.key)}
+                            className="rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-rose-200"
+                        >
+                            <div className="text-xs text-slate-500">{item.label}</div>
+                            <div className={`mt-1 text-2xl font-semibold ${item.met ? 'text-emerald-700' : 'text-rose-700'}`}>{item.value}</div>
+                            <div className="mt-1 flex items-center justify-between text-xs text-slate-500">
+                                <span>{item.hint}</span>
+                                <span className="inline-flex items-center gap-1 text-rose-600"><Download className="h-3 w-3" /> PDF</span>
+                            </div>
+                        </button>
+                    ))}
+                </div>
+            )}
+
+            <IcCharts charts={charts} />
 
             <div className="grid gap-4 md:grid-cols-4">
                 <StatCard
@@ -188,7 +194,7 @@ export default function Reports({ period, monthly_hai, hygiene_compliance, antib
                                         {monthly_hai.length === 0 ? (
                                             <tr><td colSpan={7}><EmptyState text="ไม่มีข้อมูลในช่วงเวลาที่เลือก" /></td></tr>
                                         ) : (
-                                            monthly_hai.map((row, index) => (
+                                            monthly_hai.map((row) => (
                                                 <tr key={row.month} className="border-t border-slate-100 hover:bg-slate-50/60">
                                                     <td className="p-3 font-medium">{row.month}</td>
                                                     <td className="p-3 text-right">{row.patient_days.toLocaleString()}</td>
@@ -197,7 +203,6 @@ export default function Reports({ period, monthly_hai, hygiene_compliance, antib
                                                         <span className={`font-medium ${row.hai_rate > targets.hai_rate ? 'text-rose-600' : 'text-emerald-600'}`}>
                                                             {row.hai_rate.toFixed(2)}
                                                         </span>
-                                                        {index > 0 && getTrend(row.hai_rate, monthly_hai[index - 1].hai_rate)}
                                                     </td>
                                                     <td className="p-3 text-right">{row.cauti_count} ({row.cauti_rate.toFixed(2)})</td>
                                                     <td className="p-3 text-right">{row.clabsi_count} ({row.clabsi_rate.toFixed(2)})</td>

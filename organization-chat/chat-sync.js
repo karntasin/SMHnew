@@ -39,11 +39,19 @@ async function ensureSystemUser(env) {
   let row = await env.DB.prepare('SELECT * FROM users WHERE line_user_id = ?')
     .bind(SYSTEM_LINE_ID)
     .first();
-  if (row) return row;
+  if (row) {
+    if (row.display_name === 'ระบบ FSHH') {
+      await env.DB.prepare('UPDATE users SET display_name = ? WHERE line_user_id = ?')
+        .bind('ระบบ S-Chat', SYSTEM_LINE_ID)
+        .run();
+      row.display_name = 'ระบบ S-Chat';
+    }
+    return row;
+  }
   const ts = nowIso();
   const result = await env.DB.prepare(
     `INSERT INTO users (line_user_id, display_name, department, email, avatar, last_login, created_at)
-     VALUES (?, 'ระบบ FSHH', '', '', '', ?, ?)`
+     VALUES (?, 'ระบบ S-Chat', '', '', '', ?, ?)`
   )
     .bind(SYSTEM_LINE_ID, ts, ts)
     .run();
@@ -294,7 +302,7 @@ async function notifyUser(env, params) {
     .bind(lineUserId)
     .first();
   if (!user) {
-    return { success: false, error: 'ยังไม่มีผู้ใช้นี้ใน FSHH Chat' };
+    return { success: false, error: 'ยังไม่มีผู้ใช้นี้ใน S-Chat' };
   }
   const system = await ensureSystemUser(env);
   const conv = await getOrCreateConversation(env, system.id, user.id);

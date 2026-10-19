@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useForm } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/select';
 import { QualityPage, Panel, EmptyState } from '@/components/quality/quality-ui';
 import IcSubNav from '@/pages/IC/IcSubNav';
+import { IcCharts, IcEditButton, IcPdfButton, dateTimeInput, type IcChart } from '@/pages/IC/ic-ui';
 import { AlertTriangle, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -30,6 +31,9 @@ interface Incident {
   location: string;
   severity: string;
   status: string;
+  description?: string;
+  action_taken?: string | null;
+  can_edit?: boolean;
   reporter: { name: string };
 }
 
@@ -38,6 +42,7 @@ interface Props {
     data: Incident[];
     links: any[];
   };
+  charts?: IcChart[];
 }
 
 const IC_BREADCRUMBS = [
@@ -46,24 +51,48 @@ const IC_BREADCRUMBS = [
   { title: 'อุบัติการณ์', href: '/ic/incidents' },
 ];
 
-export default function IcIncidents({ incidents }: Props) {
-  const { data, setData, post, processing, reset, errors } = useForm({
+export default function IcIncidents({ incidents, charts }: Props) {
+  const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const { data, setData, post, put, processing, reset, errors } = useForm({
     incident_date: new Date().toISOString().slice(0, 16),
     location: '',
     incident_type: '',
     description: '',
     severity: 'low',
+    status: 'reported',
     action_taken: '',
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    post('/ic/incidents', {
+    const options = {
       onSuccess: () => {
-        toast.success('รายงานอุบัติการณ์เรียบร้อย');
+        toast.success(editingId ? 'อัปเดตอุบัติการณ์เรียบร้อย' : 'รายงานอุบัติการณ์เรียบร้อย');
         reset();
+        setEditingId(null);
+        setOpen(false);
       },
+    };
+    if (editingId) {
+      put(`/ic/incidents/${editingId}`, options);
+      return;
+    }
+    post('/ic/incidents', options);
+  };
+
+  const openEdit = (item: Incident) => {
+    setEditingId(item.id);
+    setData({
+      incident_date: dateTimeInput(item.incident_date),
+      location: item.location || '',
+      incident_type: item.incident_type || '',
+      description: item.description || '',
+      severity: item.severity || 'low',
+      status: item.status || 'reported',
+      action_taken: item.action_taken || '',
     });
+    setOpen(true);
   };
 
   return (
@@ -77,15 +106,23 @@ export default function IcIncidents({ incidents }: Props) {
       breadcrumbs={IC_BREADCRUMBS}
       subNav={<IcSubNav active="ic.incidents" />}
       actions={
-        <Dialog>
+        <div className="flex flex-wrap gap-2">
+          <IcPdfButton module="incidents" />
+          <Dialog open={open} onOpenChange={(next) => {
+            setOpen(next);
+            if (!next) {
+              reset();
+              setEditingId(null);
+            }
+          }}>
           <DialogTrigger asChild>
-            <Button className="rounded-xl bg-rose-600 hover:bg-rose-700">
+            <Button className="rounded-xl bg-rose-600 hover:bg-rose-700" onClick={() => setEditingId(null)}>
               <AlertTriangle className="mr-2 h-4 w-4" /> แจ้งเหตุใหม่
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-lg">
             <DialogHeader>
-              <DialogTitle>แจ้งอุบัติการณ์ IC</DialogTitle>
+              <DialogTitle>{editingId ? 'แก้ไขอุบัติการณ์' : 'แจ้งอุบัติการณ์ IC'}</DialogTitle>
             </DialogHeader>
 
             <form onSubmit={handleSubmit} className="space-y-4 py-4">
@@ -160,14 +197,30 @@ export default function IcIncidents({ incidents }: Props) {
                 />
               </div>
 
+              <div className="space-y-2">
+                <Label>สถานะ</Label>
+                <Select value={data.status} onValueChange={(v) => setData('status', v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="เลือกสถานะ" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="reported">แจ้งแล้ว</SelectItem>
+                    <SelectItem value="investigating">กำลังสอบสวน</SelectItem>
+                    <SelectItem value="resolved">ปิดเรื่อง</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <Button type="submit" className="w-full rounded-xl bg-rose-600 hover:bg-rose-700" disabled={processing}>
-                ส่งรายงาน
+                {editingId ? 'บันทึกการแก้ไข' : 'ส่งรายงาน'}
               </Button>
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       }
     >
+      <IcCharts charts={charts} />
       <Panel title="ประวัติอุบัติการณ์" description="รายการอุบัติการณ์ที่รายงานในระบบ">
         <div className="overflow-hidden rounded-xl border border-slate-200">
           <table className="w-full text-sm">
@@ -179,12 +232,13 @@ export default function IcIncidents({ incidents }: Props) {
                 <th className="p-3">ความรุนแรง</th>
                 <th className="p-3">สถานะ</th>
                 <th className="p-3">ผู้รายงาน</th>
+                <th className="p-3"></th>
               </tr>
             </thead>
             <tbody>
               {incidents.data.length === 0 ? (
                 <tr>
-                  <td colSpan={6}>
+                  <td colSpan={7}>
                     <EmptyState text="ไม่พบข้อมูลอุบัติการณ์" />
                   </td>
                 </tr>
@@ -211,6 +265,7 @@ export default function IcIncidents({ incidents }: Props) {
                     </td>
                     <td className="p-3">{item.status}</td>
                     <td className="p-3">{item.reporter?.name}</td>
+                    <td className="p-3">{item.can_edit && <IcEditButton onClick={() => openEdit(item)} />}</td>
                   </tr>
                 ))
               )}

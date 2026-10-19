@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\QualityIndicator;
 use App\Models\QualityIndicatorEntry;
 use App\Models\QualityIndicatorFamily;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -19,6 +20,7 @@ class QualityIndicatorFamilyService
         'target_operator',
         'frequency',
         'formula_description',
+        'series',
     ];
 
     public function ensureFamily(QualityIndicator $indicator): QualityIndicatorFamily
@@ -186,10 +188,12 @@ class QualityIndicatorFamilyService
             foreach ($copies as $entry) {
                 QualityIndicatorEntry::create([
                     'quality_indicator_id' => $indicator->id,
+                    'series_key' => $entry->series_key ?? '',
                     'period_date' => $entry->period_date,
                     'numerator' => $entry->numerator,
                     'denominator' => $entry->denominator,
                     'result_value' => $entry->result_value,
+                    'is_na' => (bool) $entry->is_na,
                     'notes' => $entry->notes,
                     'created_by' => $entry->created_by,
                 ]);
@@ -204,29 +208,58 @@ class QualityIndicatorFamilyService
         $family = $indicator->family_id ? $indicator->family : null;
 
         DB::transaction(function () use ($indicator, $family) {
-            if (! $family) {
-                $indicator->delete();
+            if ($family) {
+                $members = $family->indicators()->orderBy('id')->get();
 
-                return;
-            }
-
-            $members = $family->indicators()->orderBy('id')->get();
-
-            if ($members->count() <= 1) {
-                $indicator->delete();
-                $family->delete();
-
-                return;
-            }
-
-            if ($this->isMaster($indicator)) {
-                $next = $members->first(fn (QualityIndicator $item) => $item->id !== $indicator->id);
-                if ($next) {
-                    $this->promote($next);
+                if ($members->count() > 1 && $this->isMaster($indicator)) {
+                    $next = $members->first(fn (QualityIndicator $item) => $item->id !== $indicator->id);
+                    if ($next) {
+                        $this->promote($next);
+                    }
                 }
             }
 
+            $indicator->forceFill([
+                'deleted_by' => Auth::id(),
+            ])->save();
+
             $indicator->delete();
+        });
+    }
+
+    public function restoreIndicator(QualityIndicator $indicator): QualityIndicator
+    {
+        if (! $indicator->trashed()) {
+            return $indicator;
+        }
+
+        $code = trim((string) $indicator->code);
+        if ($code !== '') {
+            $conflict = QualityIndicator::query()
+                ->where('code', $code)
+                ->where('id', '!=', $indicator->id)
+                ->exists();
+
+            if ($conflict) {
+                throw ValidationException::withMessages([
+                    'code' => "ไม่สามารถกู้คืนได้ เพราะรหัส \"{$code}\" ถูกใช้อยู่แล้วโดยตัวชี้วัดอื่น — แก้รหัสของตัวที่ใช้งานอยู่ก่อน หรือลบตัวที่ชน",
+                ]);
+            }
+        }
+
+        return DB::transaction(function () use ($indicator) {
+            $indicator->restore();
+
+            $indicator->forceFill([
+                'restored_by' => Auth::id(),
+                'restored_at' => now(),
+            ])->save();
+
+            if (! $indicator->family_id || ! $indicator->family) {
+                $this->ensureFamily($indicator->fresh());
+            }
+
+            return $indicator->fresh(['family', 'department', 'team', 'deletedBy', 'restoredBy']);
         });
     }
 

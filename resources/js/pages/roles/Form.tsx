@@ -20,6 +20,7 @@ import {
 import { isViewPermission } from '@/lib/permission-labels';
 import {
     AccessMenuNode,
+    MenuCoverage,
     RoleAccessMenuPicker,
     collectNodePermissions,
 } from '@/components/roles/role-access-menu-picker';
@@ -49,6 +50,7 @@ interface Props {
     extraPermissions?: Permission[];
     validPermissionNames?: string[];
     roleTemplates?: RoleTemplate[];
+    menuCoverage?: MenuCoverage | null;
 }
 
 export default function RoleForm({
@@ -57,6 +59,7 @@ export default function RoleForm({
     extraPermissions = [],
     validPermissionNames = [],
     roleTemplates = [],
+    menuCoverage = null,
 }: Props) {
     const isEdit = !!role;
 
@@ -148,7 +151,7 @@ export default function RoleForm({
                                 {isEdit ? 'แก้ไขบทบาท' : 'สร้างบทบาทใหม่'}
                             </h1>
                             <p className="text-muted-foreground mt-1">
-                                เลือกสิทธิ์ตามโครงสร้างเมนู — โมดูลหลักและเมนูย่อยเหมือน Sidebar
+                                เลือกสิทธิ์ตามโครงสร้างเมนูทั้งหมด (เก่าและใหม่) — ซิงก์กับ Sidebar อัตโนมัติ
                             </p>
                         </div>
                         <div className="flex gap-3">
@@ -196,6 +199,20 @@ export default function RoleForm({
                                             <span className="text-muted-foreground">จากทั้งหมด</span>
                                             <span className="font-medium">{allPermissionNames.length}</span>
                                         </div>
+                                        {menuCoverage && (
+                                            <>
+                                                <div className="flex justify-between text-sm">
+                                                    <span className="text-muted-foreground">เมนูในระบบ</span>
+                                                    <span className="font-medium">{menuCoverage.total_menus}</span>
+                                                </div>
+                                                <div className="flex justify-between text-sm">
+                                                    <span className="text-muted-foreground">เมนูกำหนดสิทธิ์ได้</span>
+                                                    <span className="font-medium">
+                                                        {menuCoverage.assignable_menus}/{menuCoverage.navigable_menus}
+                                                    </span>
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
                                 </CardContent>
                             </Card>
@@ -272,13 +289,14 @@ export default function RoleForm({
                                 <CardHeader className="pb-4">
                                     <CardTitle>เลือกการเข้าถึงเมนู</CardTitle>
                                     <CardDescription>
-                                        ติ๊กที่โมดูลหลักเพื่อเลือกทั้งกลุ่ม — ขยายเมนูย่อยเพื่อเลือกรายการเฉพาะ
+                                        ครอบคลุมทุกเมนูในระบบ — ติ๊กโมดูลหลักเพื่อเลือกทั้งกลุ่ม หรือขยายเลือกทีละรายการ
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent>
                                     <RoleAccessMenuPicker
                                         menuTree={accessMenuTree}
                                         extraPermissions={extraPermissions}
+                                        menuCoverage={menuCoverage}
                                         selected={data.permissions}
                                         onChange={(permissions) => setData('permissions', permissions)}
                                     />

@@ -31,6 +31,16 @@ class QualityIndicatorGuide extends Model
         $guide = static::query()->where('slug', 'quality-indicators')->first();
 
         if ($guide) {
+            if ($guide->updated_by === null && count($guide->sections ?? []) < count(QualityIndicatorGuideData::sections())) {
+                $defaults = QualityIndicatorGuideData::defaults();
+                $guide->update([
+                    'title' => $defaults['title'],
+                    'subtitle' => $defaults['subtitle'],
+                    'intro' => $defaults['intro'],
+                    'sections' => $defaults['sections'],
+                ]);
+            }
+
             return $guide;
         }
 

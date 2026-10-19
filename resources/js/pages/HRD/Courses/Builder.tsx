@@ -42,12 +42,6 @@ interface Props {
     errors?: Record<string, string>;
 }
 
-const breadcrumbs = [
-    { title: 'KM', href: '/km/dashboard' },
-    { title: 'ระบบการเรียนรู้ (E-Learning)', href: '/km/learn/dashboard' },
-    { title: 'จัดการเนื้อหาหลักสูตร', href: '#' },
-];
-
 const LESSON_ICON: Record<string, typeof FileText> = {
     text: Type,
     file: FileUp,
@@ -58,7 +52,8 @@ const LESSON_ICON: Record<string, typeof FileText> = {
 const emptyQuiz = (title: string) => ({
     title: title || 'แบบทดสอบ',
     description: '',
-    passing_score: 70,
+    passing_score: 80,
+    purpose: 'lesson',
     questions: [],
 });
 
@@ -82,7 +77,8 @@ export default function CourseBuilder({ course, errors = {} }: Props) {
                         ? {
                               title: l.quiz?.title || l.title,
                               description: l.quiz?.description || '',
-                              passing_score: l.quiz?.passing_score ?? 70,
+                              passing_score: l.quiz?.passing_score ?? 80,
+                              purpose: l.quiz?.purpose || 'lesson',
                               questions: l.quiz?.questions || [],
                               id: l.quiz?.id,
                           }
@@ -112,6 +108,9 @@ export default function CourseBuilder({ course, errors = {} }: Props) {
         hours: course.hours || 0,
         location: course.location || '',
         status: course.status || 'draft',
+        is_mandatory: Boolean(course.is_mandatory),
+        expiration_days: course.expiration_days || '',
+        track_behavior: Boolean(course.track_behavior),
     });
 
     const setInfoData = (key: any, value: any) => {
@@ -312,7 +311,12 @@ export default function CourseBuilder({ course, errors = {} }: Props) {
     };
 
     return (
-        <AppLayout breadcrumbs={breadcrumbs}>
+        <AppLayout breadcrumbs={[
+            { title: 'พัฒนาบุคลากร', href: '/km/learn/hub' },
+            { title: 'หลักสูตร', href: '/km/learn/courses' },
+            { title: course.title, href: `/km/learn/courses/${course.id}` },
+            { title: 'จัดการเนื้อหา', href: '#' },
+        ]}>
             <Head title={`จัดเนื้อหา: ${course.title}`} />
 
             <div className="flex min-h-[calc(100vh-4rem)] flex-col">
@@ -594,6 +598,36 @@ export default function CourseBuilder({ course, errors = {} }: Props) {
                                                 value={infoData.location}
                                                 onChange={(e) => setInfoData('location', e.target.value)}
                                             />
+                                        </div>
+                                        <div className="grid gap-4 sm:grid-cols-2">
+                                            <div className="space-y-2">
+                                                <Label>อายุใบรับรอง (วัน)</Label>
+                                                <Input
+                                                    type="number"
+                                                    min={1}
+                                                    value={infoData.expiration_days}
+                                                    onChange={(e) => setInfoData('expiration_days', e.target.value)}
+                                                    placeholder="เว้นว่างถ้าไม่มีวันหมดอายุ"
+                                                />
+                                            </div>
+                                            <div className="flex items-center gap-2 pt-7">
+                                                <input
+                                                    id="is_mandatory"
+                                                    type="checkbox"
+                                                    checked={infoData.is_mandatory}
+                                                    onChange={(e) => setInfoData('is_mandatory', e.target.checked)}
+                                                />
+                                                <Label htmlFor="is_mandatory">หลักสูตรบังคับ</Label>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <input
+                                                id="track_behavior"
+                                                type="checkbox"
+                                                checked={infoData.track_behavior}
+                                                onChange={(e) => setInfoData('track_behavior', e.target.checked)}
+                                            />
+                                            <Label htmlFor="track_behavior">ติดตามการนำไปใช้หลังครบ 3 เดือน</Label>
                                         </div>
                                     </CardContent>
                                     <CardFooter>

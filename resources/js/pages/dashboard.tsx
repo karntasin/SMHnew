@@ -121,6 +121,16 @@ interface DashboardProps {
         department: string;
         total: number;
       }>;
+      department_daily_average?: {
+        days: number;
+        total: number;
+        avg_per_day: number;
+        departments: Array<{
+          department: string;
+          total: number;
+          avg_per_day: number;
+        }>;
+      };
       visits_year_trend?: Array<{
         y: number;
         m: number;
@@ -242,6 +252,13 @@ export default function Dashboard({ filter, stats, hosxp_error }: DashboardProps
     return new Intl.NumberFormat('th-TH').format(value);
   };
 
+  const formatAvg = (value: number) => {
+    return new Intl.NumberFormat('th-TH', {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    }).format(value);
+  };
+
   const formatPercent = (value: number | null | undefined) => {
     if (value === null || value === undefined) return '—';
     return `${new Intl.NumberFormat('th-TH', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value)}%`;
@@ -252,6 +269,9 @@ export default function Dashboard({ filter, stats, hosxp_error }: DashboardProps
   const departmentTotal = departmentDonut.reduce((sum, row) => sum + Number(row.total || 0), 0);
   const departmentYearDonut = stats?.charts?.department_visits_this_year || [];
   const departmentYearTotal = departmentYearDonut.reduce((sum, row) => sum + Number(row.total || 0), 0);
+  const departmentDaily = stats?.charts?.department_daily_average;
+  const departmentDailyRows = departmentDaily?.departments || [];
+  const departmentDailyTotal = Number(departmentDaily?.total || 0);
   const yearTrend = stats?.charts?.visits_year_trend || [];
   const maxYearOpd = Math.max(...yearTrend.map((row) => Number(row.opd || 0)), 1);
   const maxYearIpd = Math.max(...yearTrend.map((row) => Number(row.ipd || 0)), 1);
@@ -424,14 +444,24 @@ export default function Dashboard({ filter, stats, hosxp_error }: DashboardProps
                   {t('Show Data')}
                 </Button>
                 {stats?.summary && (
-                  <a
-                    href={route('dashboard.pdf', { start_date: startDate, end_date: endDate })}
-                    onClick={refreshPdfDownloadUrl}
-                    className="inline-flex h-10 items-center justify-center rounded-md bg-gradient-to-r from-rose-600 to-orange-600 px-4 py-2 text-sm font-medium text-white shadow hover:from-rose-700 hover:to-orange-700"
-                  >
-                    <FileDown className="mr-2 h-4 w-4" />
-                    สรุป Dashboard PDF
-                  </a>
+                  <>
+                    <a
+                      href={route('dashboard.pdf', { start_date: startDate, end_date: endDate })}
+                      onClick={refreshPdfDownloadUrl}
+                      className="inline-flex h-10 items-center justify-center rounded-md bg-gradient-to-r from-rose-600 to-orange-600 px-4 py-2 text-sm font-medium text-white shadow hover:from-rose-700 hover:to-orange-700"
+                    >
+                      <FileDown className="mr-2 h-4 w-4" />
+                      สรุป Dashboard PDF
+                    </a>
+                    <a
+                      href={route('dashboard.department-daily-pdf', { start_date: startDate, end_date: endDate })}
+                      onClick={refreshPdfDownloadUrl}
+                      className="inline-flex h-10 items-center justify-center rounded-md bg-gradient-to-r from-indigo-600 to-sky-600 px-4 py-2 text-sm font-medium text-white shadow hover:from-indigo-700 hover:to-sky-700"
+                    >
+                      <FileDown className="mr-2 h-4 w-4" />
+                      รายงานเฉลี่ยต่อวัน PDF
+                    </a>
+                  </>
                 )}
               </form>
               {filterLabel && (
@@ -925,6 +955,69 @@ export default function Dashboard({ filter, stats, hosxp_error }: DashboardProps
                     )}
                   </div>
 
+                  {departmentDaily && (
+                    <Card className="shadow-lg border-t-4 border-t-sky-500">
+                      <CardHeader className="bg-gradient-to-r from-sky-50 to-indigo-50">
+                        <div className="flex items-center gap-2">
+                          <Users className="h-5 w-5 text-sky-600" />
+                          <CardTitle>เฉลี่ยผู้มารับบริการต่อวันรายแผนก</CardTitle>
+                        </div>
+                        <CardDescription>
+                          ช่วงวันที่ที่เลือก · จำนวนครั้ง ÷ จำนวนวัน
+                          {filterLabel ? ` (${filterLabel})` : ''}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4 pt-6">
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <div className="rounded-lg bg-sky-50 p-3">
+                            <div className="text-xs font-medium text-sky-700">รวมจำนวนครั้ง</div>
+                            <div className="text-lg font-bold text-sky-900">{formatNumber(departmentDailyTotal)}</div>
+                          </div>
+                          <div className="rounded-lg bg-indigo-50 p-3">
+                            <div className="text-xs font-medium text-indigo-700">จำนวนวัน</div>
+                            <div className="text-lg font-bold text-indigo-900">{formatNumber(Number(departmentDaily.days || 0))}</div>
+                          </div>
+                          <div className="rounded-lg bg-emerald-50 p-3">
+                            <div className="text-xs font-medium text-emerald-700">เฉลี่ยทั้งโรงพยาบาลต่อวัน</div>
+                            <div className="text-lg font-bold text-emerald-900">{formatAvg(Number(departmentDaily.avg_per_day || 0))}</div>
+                          </div>
+                        </div>
+                        <div className="max-h-96 overflow-auto rounded-lg border">
+                          <table className="w-full text-sm">
+                            <thead className="sticky top-0 bg-slate-50 text-left">
+                              <tr>
+                                <th className="px-3 py-2 font-medium">แผนก</th>
+                                <th className="px-3 py-2 text-right font-medium">จำนวนครั้ง</th>
+                                <th className="px-3 py-2 text-right font-medium">เฉลี่ย/วัน</th>
+                                <th className="px-3 py-2 text-right font-medium">สัดส่วน</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {departmentDailyRows.length === 0 && (
+                                <tr>
+                                  <td colSpan={4} className="px-3 py-6 text-center text-muted-foreground">
+                                    ไม่พบข้อมูลผู้มารับบริการในช่วงวันที่ที่เลือก
+                                  </td>
+                                </tr>
+                              )}
+                              {departmentDailyRows.map((row) => {
+                                const share = departmentDailyTotal > 0 ? (Number(row.total) / departmentDailyTotal) * 100 : 0;
+                                return (
+                                  <tr key={row.department} className="border-t">
+                                    <td className="px-3 py-2 font-medium">{row.department}</td>
+                                    <td className="px-3 py-2 text-right">{formatNumber(Number(row.total))}</td>
+                                    <td className="px-3 py-2 text-right font-semibold text-sky-700">{formatAvg(Number(row.avg_per_day))}</td>
+                                    <td className="px-3 py-2 text-right text-muted-foreground">{share.toFixed(1)}%</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
                     {yearTrend.length > 0 && (
                       <div className="space-y-4">
                         <div>
@@ -1128,6 +1221,14 @@ export default function Dashboard({ filter, stats, hosxp_error }: DashboardProps
                     >
                       <FileDown className="h-4 w-4" />
                       <span>สรุป Dashboard PDF</span>
+                    </a>
+                    <a
+                      href={route('dashboard.department-daily-pdf', { start_date: startDate, end_date: endDate })}
+                      onClick={refreshPdfDownloadUrl}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-sky-600 text-white rounded-lg hover:from-indigo-700 hover:to-sky-700 transition-all shadow-md hover:shadow-lg"
+                    >
+                      <FileDown className="h-4 w-4" />
+                      <span>รายงานเฉลี่ยต่อวัน PDF</span>
                     </a>
                     <a
                       href={route('dashboard.cv-risk-report', { format: 'excel', start_date: startDate, end_date: endDate })}

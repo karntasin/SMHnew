@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import PharmacySubNav, { pharmacyBreadcrumbs } from '@/pages/Pharmacy/PharmacySubNav';
 import InlineBarcodeScanner from '@/components/pharmacy/InlineBarcodeScanner';
 import { inventoryFormShell, inventorySelectClass } from '@/pages/Pharmacy/Inventory/ui-classes';
+import { warehouseActive, warehouseHome, warehouseSupply, wh } from '@/pages/Pharmacy/inventoryCatalog';
 
 type ScanResult = {
     code: string;
@@ -32,7 +33,7 @@ export default function Scanner({ locations }: { locations: Location[] }) {
         if (!normalized) return;
         setError('');
         try {
-            const response = await axios.get(route('pharmacy.inventory.scan.resolve'), { params: { code: normalized } });
+            const response = await axios.get(wh('scan.resolve'), { params: { code: normalized } });
             setResult(response.data?.data ?? null);
             setCode(normalized);
         } catch (scanError) {
@@ -43,12 +44,12 @@ export default function Scanner({ locations }: { locations: Location[] }) {
 
     return (
         <AppLayout breadcrumbs={pharmacyBreadcrumbs([
-            { title: 'คลังยา / ห้องยา', href: route('pharmacy.inventory.index') },
+            { title: warehouseHome(), href: wh('index') },
             { title: 'สแกนบาร์โค้ด' },
         ])}>
-            <Head title="สแกนบาร์โค้ดยา" />
+            <Head title={warehouseSupply() ? "สแกนบาร์โค้ดเวชภัณฑ์" : "สแกนบาร์โค้ดยา"} />
             <div className="container mx-auto space-y-5 px-4 py-6">
-                <PharmacySubNav active="pharmacy.inventory.index" />
+                <PharmacySubNav active={warehouseActive()} />
                 {(flash?.success || flash?.error) && (
                     <div className={`mx-auto max-w-3xl rounded-2xl p-3 text-sm ${flash.error ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'}`}>
                         {flash.error || flash.success}
@@ -60,7 +61,7 @@ export default function Scanner({ locations }: { locations: Location[] }) {
                             <ScanLine className="h-6 w-6" />
                         </span>
                         <div>
-                            <h1 className="text-xl font-bold text-foreground">สแกนบาร์โค้ดยา</h1>
+                            <h1 className="text-xl font-bold text-foreground">{warehouseSupply() ? "สแกนบาร์โค้ดเวชภัณฑ์" : "สแกนบาร์โค้ดยา"}</h1>
                             <p className="text-sm text-muted-foreground">
                                 เล็งบาร์โค้ดผ่านกล้องเลเซอร์แดง หรือใช้เครื่องยิง หรือถ่ายรูปบาร์โค้ด
                             </p>
@@ -114,17 +115,17 @@ export default function Scanner({ locations }: { locations: Location[] }) {
 
                         <div className="mt-4 flex flex-wrap gap-2">
                             <Button asChild className="rounded-xl bg-violet-700 hover:bg-violet-800 text-white">
-                                <Link href={route('pharmacy.inventory.receive', { barcode: result.code })}>
+                                <Link href={wh('receive', { barcode: result.code })}>
                                     <PackagePlus className="mr-2 h-4 w-4" />รับเข้าด้วยรายการนี้
                                 </Link>
                             </Button>
                             <Button asChild variant="secondary" className="rounded-xl">
-                                <Link href={route('pharmacy.inventory.transfer', { barcode: result.code })}>
+                                <Link href={wh('transfer', { barcode: result.code })}>
                                     <ArrowRightLeft className="mr-2 h-4 w-4" />เบิกเข้าห้องยา
                                 </Link>
                             </Button>
                             <Button asChild variant="outline" className="rounded-xl">
-                                <Link href={route('pharmacy.inventory.items', { q: result.item.icode })}>
+                                <Link href={wh('items', { q: result.item.icode })}>
                                     จัดการยา / หน่วยบรรจุ
                                 </Link>
                             </Button>
@@ -155,7 +156,7 @@ export default function Scanner({ locations }: { locations: Location[] }) {
                                     <Button
                                         type="button"
                                         className="bg-amber-600 hover:bg-amber-700 text-white rounded-xl"
-                                        onClick={() => router.post(route('pharmacy.inventory.dispense.manual'), {
+                                        onClick={() => router.post(wh('dispense.manual'), {
                                             location_id: locationId,
                                             icode: result.item.icode,
                                             unit_id: result.unit?.id,

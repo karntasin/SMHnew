@@ -8,6 +8,7 @@ use App\Models\HrdLesson;
 use App\Models\HrdQuiz;
 use App\Models\HrdQuestion;
 use App\Models\HrdAnswer;
+use App\Services\Hrd\HrdCompletionService;
 use App\Services\Hrd\HrdQuizExcelService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -19,7 +20,7 @@ class HrdCourseBuilderController extends Controller
 {
     public function edit(HrdCourse $course)
     {
-        if (!auth()->user()->hasRole(['admin', 'header', 'Admin', 'Header'])) {
+        if (! app(HrdCompletionService::class)->isEditor(auth()->user())) {
             abort(403, 'Unauthorized action.');
         }
 
@@ -32,7 +33,7 @@ class HrdCourseBuilderController extends Controller
 
     public function update(Request $request, HrdCourse $course)
     {
-        if (!auth()->user()->hasRole(['admin', 'header', 'Admin', 'Header'])) {
+        if (! app(HrdCompletionService::class)->isEditor(auth()->user())) {
             abort(403, 'Unauthorized action.');
         }
 
@@ -106,7 +107,9 @@ class HrdCourseBuilderController extends Controller
                             
                             $quiz->title = $quizData['title'] ?? $lesson->title;
                             $quiz->description = $quizData['description'] ?? '';
-                            $quiz->passing_score = $quizData['passing_score'] ?? 70;
+                            $quiz->passing_score = $quizData['passing_score'] ?? 80;
+                            $purpose = $quizData['purpose'] ?? 'lesson';
+                            $quiz->purpose = in_array($purpose, ['lesson', 'pre', 'post'], true) ? $purpose : 'lesson';
                             $quiz->randomize_questions = array_key_exists('randomize_questions', $quizData)
                                 ? (bool) $quizData['randomize_questions']
                                 : true;
@@ -190,7 +193,7 @@ class HrdCourseBuilderController extends Controller
 
     public function upload(Request $request, HrdCourse $course)
     {
-        if (! auth()->user()->hasRole(['admin', 'header', 'Admin', 'Header'])) {
+        if (! app(HrdCompletionService::class)->isEditor(auth()->user())) {
             abort(403, 'Unauthorized action.');
         }
 
@@ -210,7 +213,7 @@ class HrdCourseBuilderController extends Controller
 
     public function downloadQuizTemplate(HrdQuizExcelService $excel): StreamedResponse
     {
-        if (! auth()->user()->hasRole(['admin', 'header', 'Admin', 'Header'])) {
+        if (! app(HrdCompletionService::class)->isEditor(auth()->user())) {
             abort(403, 'Unauthorized action.');
         }
 
@@ -219,7 +222,7 @@ class HrdCourseBuilderController extends Controller
 
     public function importQuiz(Request $request, HrdCourse $course, HrdQuizExcelService $excel)
     {
-        if (! auth()->user()->hasRole(['admin', 'header', 'Admin', 'Header'])) {
+        if (! app(HrdCompletionService::class)->isEditor(auth()->user())) {
             abort(403, 'Unauthorized action.');
         }
 

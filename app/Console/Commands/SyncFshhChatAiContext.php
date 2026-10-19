@@ -9,11 +9,11 @@ class SyncFshhChatAiContext extends Command
 {
     protected $signature = 'fshh-chat:sync-ai';
 
-    protected $description = 'Push a privacy-filtered web-app snapshot to FSHH Chat AI (no HOSxP, no patient PII)';
+    protected $description = 'Push a privacy-filtered web-app snapshot to S-Chat AI (no HOSxP, no patient PII)';
 
     public function handle(FshhChatSyncService $sync): int
     {
-        $this->info('Syncing sanitized AI context to FSHH Chat...');
+        $this->info('Syncing sanitized AI context to S-Chat...');
         $result = $sync->syncAiContext();
         $error = (string) ($result['error'] ?? '');
         if (($result['success'] ?? false) !== true && str_contains($error, 'SSL certificate')) {

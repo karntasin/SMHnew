@@ -11,7 +11,7 @@ class ListenFortiGateSyslog extends Command
     protected $signature = 'fortigate:syslog-listen
                             {--host= : Bind address (default from config)}
                             {--port= : UDP port (default from config)}
-                            {--no-notify : Do not send FSHH Chat alerts}';
+                            {--no-notify : Do not send S-Chat alerts}';
 
     protected $description = 'Receive FortiGate syslog (UDP) and store usage/security logs into the web app database';
 

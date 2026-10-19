@@ -30,6 +30,6 @@ class FshhChatController extends Controller
         }
 
         return redirect()->away(url('/dashboard'))
-            ->with('error', $result['error'] ?? 'เปิด FSHH Chat ไม่สำเร็จ กรุณาผูก LINE ที่โปรไฟล์แล้วลองใหม่');
+            ->with('error', $result['error'] ?? 'เปิด S-Chat ไม่สำเร็จ กรุณาผูก LINE ที่โปรไฟล์แล้วลองใหม่');
     }
 }

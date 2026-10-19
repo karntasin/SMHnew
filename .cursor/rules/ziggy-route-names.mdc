@@ -1,0 +1,23 @@
+---
+description: Ziggy route() names must be registered Laravel routes before any page calls them
+alwaysApply: true
+---
+
+# Ziggy route names
+
+`route('name')` throws during render when the name is missing from Laravel's route list. `@routes` only includes names registered in `routes/web.php`, `routes/settings.php`, or `routes/auth.php`.
+
+- Register the named route in the same change as any `route('name')`, `router.get/post/put/delete(route('name'))`, or `QualitySubNav` / `*SubNav` tab `key` that is passed to `route()`. A controller method and an Inertia page are not enough.
+- Put static paths (`/coverage`, `/directory`, `/hub`, `/bulk-roles`) before `Route::resource` and before `/{param}` in the same group.
+- When a route is renamed, update every JSX call to the registered name. Do not leave the old name in the page.
+
+```php
+// static path first, then the wildcard
+Route::get('/users/directory', [UserController::class, 'directory'])->name('users.directory');
+Route::resource('users', UserController::class);
+```
+
+```tsx
+// key is passed to route() unless href is set
+{ key: 'quality-indicators.coverage', label: 'จำนวนรายส่วน', icon: Hash }
+```

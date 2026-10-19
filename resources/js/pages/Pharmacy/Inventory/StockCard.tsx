@@ -4,6 +4,7 @@ import AppLayout from '@/layouts/app-layout';
 import PharmacySubNav, { pharmacyBreadcrumbs } from '@/pages/Pharmacy/PharmacySubNav';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { ThaiDatePicker } from '@/components/ui/thai-date-picker';
 import QRCode from 'qrcode';
 import {
     ArrowDownLeft,
@@ -18,6 +19,7 @@ import {
     ShieldAlert,
     Snowflake,
 } from 'lucide-react';
+import { warehouseActive, warehouseHome, wh } from '@/pages/Pharmacy/inventoryCatalog';
 
 type MovementRow = {
     id: number;
@@ -111,7 +113,7 @@ export default function StockCard({
     const handleSearch = (e: FormEvent) => {
         e.preventDefault();
         router.get(
-            route('pharmacy.inventory.stock-card'),
+            wh('stock-card'),
             {
                 icode: icode.trim() || undefined,
                 location_id: locationId || undefined,
@@ -129,7 +131,7 @@ export default function StockCard({
     return (
         <AppLayout
             breadcrumbs={pharmacyBreadcrumbs([
-                { title: 'คลังยา / ห้องยา', href: route('pharmacy.inventory.index') },
+                { title: warehouseHome(), href: wh('index') },
                 { title: 'บัตรคุมยา (Stock Card)' },
             ])}
         >
@@ -137,7 +139,7 @@ export default function StockCard({
 
             <div className="container mx-auto space-y-6 px-4 py-6 print:p-0 print:space-y-3">
                 <div className="print:hidden">
-                    <PharmacySubNav active="pharmacy.inventory.index" />
+                    <PharmacySubNav active={warehouseActive()} />
                 </div>
 
                 {/* Filter and Query Form */}
@@ -177,21 +179,21 @@ export default function StockCard({
 
                         <div>
                             <label className="mb-1 block text-xs font-medium text-muted-foreground">ตั้งแต่วันที่</label>
-                            <Input
-                                type="date"
+                            <ThaiDatePicker
+                                label="ตั้งแต่วันที่"
                                 value={startDate}
-                                onChange={(e) => setStartDate(e.target.value)}
-                                className="w-38"
+                                onChange={setStartDate}
+                                className="w-56"
                             />
                         </div>
 
                         <div>
                             <label className="mb-1 block text-xs font-medium text-muted-foreground">ถึงวันที่</label>
-                            <Input
-                                type="date"
+                            <ThaiDatePicker
+                                label="ถึงวันที่"
                                 value={endDate}
-                                onChange={(e) => setEndDate(e.target.value)}
-                                className="w-38"
+                                onChange={setEndDate}
+                                className="w-56"
                             />
                         </div>
 
@@ -234,7 +236,7 @@ export default function StockCard({
                         </p>
                         <div className="mt-4">
                             <Button asChild variant="outline" className="rounded-xl">
-                                <Link href={route('pharmacy.inventory.stock')}>
+                                <Link href={wh('stock')}>
                                     <Boxes className="mr-1.5 h-4 w-4" />
                                     ไปที่หน้าคงเหลือยา
                                 </Link>

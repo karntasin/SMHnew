@@ -13,7 +13,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { formatThaiMonthYearFromIso } from '@/components/ui/thai-date-picker';
+import { formatIndicatorPeriod } from '@/components/ui/thai-date-picker';
 
 const formatNum = (value: number | string | null | undefined, digits = 2): string => {
     if (value === null || value === undefined || value === '') return '-';
@@ -28,7 +28,9 @@ const formatNum = (value: number | string | null | undefined, digits = 2): strin
 interface Entry {
     id: number;
     period_date: string;
-    result_value: number;
+    series_key?: string | null;
+    result_value: number | null;
+    is_na?: boolean;
 }
 
 interface Department {
@@ -50,6 +52,8 @@ interface Indicator {
     target_value: number;
     target_operator: string;
     unit: string;
+    frequency?: string;
+    series?: Array<{ key: string; label: string; target_operator?: string | null; target_value?: number | null }> | null;
     entries: Entry[];
     department?: Department | null;
     team?: Team | null;
@@ -113,14 +117,16 @@ export default function Dashboard({
         );
     };
 
-    const isPass = (indicator: Indicator, value: number) => {
-        const target = indicator.target_value;
+    const isPass = (indicator: Indicator, value: number | string | null) => {
+        const result = Number(value);
+        const target = Number(indicator.target_value);
+        if (Number.isNaN(result) || Number.isNaN(target)) return false;
         switch (indicator.target_operator) {
-            case '<': return value < target;
-            case '<=': return value <= target;
-            case '>': return value > target;
-            case '>=': return value >= target;
-            case '=': return value === target;
+            case '<': return result < target;
+            case '<=': return result <= target;
+            case '>': return result > target;
+            case '>=': return result >= target;
+            case '=': return result === target;
             default: return false;
         }
     };
@@ -134,8 +140,11 @@ export default function Dashboard({
         return 'ระดับองค์กร';
     };
 
-    const withData = filteredIndicators.filter((i) => i.entries[0]);
-    const passCount = withData.filter((i) => isPass(i, i.entries[0].result_value)).length;
+    const withData = filteredIndicators.flatMap((indicator) => {
+        const entry = indicator.entries.find((row) => !row.is_na && row.result_value !== null && row.result_value !== undefined);
+        return entry ? [{ indicator, entry }] : [];
+    });
+    const passCount = withData.filter((row) => isPass(row.indicator, row.entry.result_value)).length;
     const failCount = withData.length - passCount;
 
     const groupPdfHref = (() => {
@@ -342,10 +351,24 @@ export default function Dashboard({
                 ) : (
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                         {filteredIndicators.map((indicator) => {
+                            const series = indicator.series ?? [];
                             const latestEntry = indicator.entries[0];
+                            const latestIsNa = Boolean(latestEntry?.is_na);
+                            const measurable = indicator.entries.find((entry) => !entry.is_na && entry.result_value !== null && entry.result_value !== undefined);
                             const hasData = !!latestEntry;
-                            const value = hasData ? latestEntry.result_value : 0;
-                            const pass = hasData ? isPass(indicator, value) : false;
+                            const value = measurable ? measurable.result_value : null;
+                            const hasTarget = indicator.target_value !== null && indicator.target_value !== undefined;
+                            const pass = measurable && hasTarget ? isPass(indicator, value) : false;
+                            const latestPeriod = latestEntry ? String(latestEntry.period_date).slice(0, 10) : '';
+                            const seriesRows = series
+                                .map((item) => {
+                                    const found = indicator.entries.find(
+                                        (entry) => String(entry.period_date).slice(0, 10) === latestPeriod && (entry.series_key || '') === item.key,
+                                    );
+                                    if (!found) return null;
+                                    return `${item.label} ${found.is_na ? 'N/A' : formatNum(found.result_value)}`;
+                                })
+                                .filter((row): row is string => row !== null);
 
                             return (
                                 <Link key={indicator.id} href={route('quality-indicators.show', { indicator: indicator.id })}>
@@ -354,7 +377,13 @@ export default function Dashboard({
                                             <span className="truncate text-sm font-semibold text-slate-700" title={indicator.name}>
                                                 {indicator.code}
                                             </span>
-                                            {hasData ? (
+                                            {seriesRows.length > 0 ? (
+                                                <StatusPill label="เทียบชุด" className="border-sky-200 bg-sky-50 text-sky-700" />
+                                            ) : latestIsNa ? (
+                                                <StatusPill label="N/A" className="border-slate-200 bg-slate-50 text-slate-500" />
+                                            ) : hasData && !hasTarget ? (
+                                                <StatusPill label="บันทึกแล้ว" className="border-slate-200 bg-slate-50 text-slate-500" />
+                                            ) : hasData ? (
                                                 <StatusPill
                                                     label={pass ? 'PASS' : 'FAIL'}
                                                     className={
@@ -367,9 +396,17 @@ export default function Dashboard({
                                                 <StatusPill label="NO DATA" className="border-slate-200 bg-slate-50 text-slate-500" />
                                             )}
                                         </div>
-                                        <div className="text-2xl font-bold text-slate-900">
-                                            {hasData ? `${formatNum(value)} ${indicator.unit}` : '-'}
-                                        </div>
+                                        {seriesRows.length > 0 ? (
+                                            <div className="space-y-0.5 text-sm font-semibold text-slate-900">
+                                                {seriesRows.map((row) => (
+                                                    <p key={row}>{row}</p>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="text-2xl font-bold text-slate-900">
+                                                {latestIsNa ? 'N/A' : hasData ? `${formatNum(latestEntry.result_value)} ${indicator.unit}` : '-'}
+                                            </div>
+                                        )}
                                         <p className="mt-1 line-clamp-1 text-xs text-slate-500">{indicator.name}</p>
                                         <p className={cn('mt-1 text-[11px] font-medium text-emerald-700')}>{ownerLabel(indicator)}</p>
                                         {indicator.is_master === false && indicator.master_code ? (
@@ -377,9 +414,15 @@ export default function Dashboard({
                                         ) : null}
                                         <div className="mt-4 flex justify-between text-xs text-slate-400">
                                             <span>
-                                                เป้าหมาย: {indicator.target_operator} {formatNum(indicator.target_value)}
+                                                เป้าหมาย: {series.length > 0
+                                                    ? series.map((item) => item.target_value == null
+                                                        ? item.label
+                                                        : `${item.target_operator} ${formatNum(item.target_value)}`).join(' · ')
+                                                    : hasTarget
+                                                        ? `${indicator.target_operator} ${formatNum(indicator.target_value)}`
+                                                        : '-'}
                                             </span>
-                                            <span>{hasData ? formatThaiMonthYearFromIso(latestEntry.period_date) : '-'}</span>
+                                            <span>{hasData ? formatIndicatorPeriod(latestEntry.period_date, indicator.frequency) : '-'}</span>
                                         </div>
                                     </div>
                                 </Link>

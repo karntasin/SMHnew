@@ -19,6 +19,7 @@ import {
     Snowflake,
     Zap,
 } from 'lucide-react';
+import { warehouseActive, warehouseHome, wh } from '@/pages/Pharmacy/inventoryCatalog';
 
 type ItemAnalysis = {
     item_id: number;
@@ -109,14 +110,14 @@ export default function Analytics({
     return (
         <AppLayout
             breadcrumbs={pharmacyBreadcrumbs([
-                { title: 'คลังยา / ห้องยา', href: route('pharmacy.inventory.index') },
+                { title: warehouseHome(), href: wh('index') },
                 { title: 'วิเคราะห์คลังยา & ABC/VEN Matrix' },
             ])}
         >
             <Head title="วิเคราะห์คลังยาและห่วงโซ่อุปทาน (Analytics & ABC/VEN)" />
 
             <div className="container mx-auto space-y-6 px-4 py-6">
-                <PharmacySubNav active="pharmacy.inventory.index" />
+                <PharmacySubNav active={warehouseActive()} />
 
                 {/* KPI Header Cards */}
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -482,7 +483,7 @@ export default function Analytics({
                                         </td>
                                         <td className="px-4 py-3 text-center">
                                             <Button asChild variant="ghost" size="sm" className="h-8 rounded-lg text-xs text-violet-700 hover:bg-violet-50">
-                                                <Link href={route('pharmacy.inventory.stock-card', { icode: it.icode })}>
+                                                <Link href={wh('stock-card', { icode: it.icode })}>
                                                     บัตรคุม
                                                 </Link>
                                             </Button>

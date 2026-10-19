@@ -12,7 +12,15 @@ import {
 
 interface ThaiDatePickerProps {
   value?: string
-  onChange: (date: string) => void
+  defaultValue?: string
+  onChange?: (date: string) => void
+  /** ชื่อช่องในฟอร์ม ส่งค่าเป็น YYYY-MM-DD */
+  name?: string
+  required?: boolean
+  /** วันที่เร็วสุดที่เลือกได้ เป็น YYYY-MM-DD */
+  min?: string
+  /** วันที่ช้าสุดที่เลือกได้ เป็น YYYY-MM-DD */
+  max?: string
   placeholder?: string
   className?: string
   showQuickSelect?: boolean
@@ -73,6 +81,17 @@ export function formatThaiMonthYearFromIso(value?: string): string {
   return formatThaiMonthYear(parseIsoDate(value))
 }
 
+export function formatIndicatorPeriod(value?: string, frequency?: string): string {
+  if (!value) return ""
+  if (frequency === "Yearly") {
+    const year = Number(value.slice(0, 4))
+    if (!Number.isNaN(year) && year > 0) {
+      return `ปี ${year + 543}`
+    }
+  }
+  return formatThaiMonthYearFromIso(value)
+}
+
 function parseIsoDate(value: string): Date | undefined {
   const date = new Date(`${value.slice(0, 10)}T00:00:00`)
   return isNaN(date.getTime()) ? undefined : date
@@ -102,19 +121,40 @@ const calendarFormatters = {
   formatYearDropdown: (date: Date) => `พ.ศ. ${toBuddhistYear(date.getFullYear())}`,
 }
 
+function startOfDay(date: Date): number {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+}
+
+function isWithinRange(date: Date, minDate?: Date, maxDate?: Date): boolean {
+  const day = startOfDay(date)
+  if (minDate && day < startOfDay(minDate)) return false
+  if (maxDate && day > startOfDay(maxDate)) return false
+  return true
+}
+
 export function ThaiDatePicker({
   value,
+  defaultValue = "",
   onChange,
+  name,
+  required = false,
+  min,
+  max,
   placeholder = "เลือกวันที่",
   className,
   showQuickSelect = true,
   label = "วันที่",
   closeOnSelect = true,
 }: ThaiDatePickerProps) {
+  const isControlled = value !== undefined
+  const [uncontrolled, setUncontrolled] = React.useState(defaultValue)
+  const currentValue = isControlled ? (value ?? "") : uncontrolled
+  const minDate = React.useMemo(() => (min ? parseIsoDate(min) : undefined), [min])
+  const maxDate = React.useMemo(() => (max ? parseIsoDate(max) : undefined), [max])
   const [open, setOpen] = React.useState(false)
   const dateValue = React.useMemo(
-    () => (value ? parseIsoDate(value) : undefined),
-    [value],
+    () => (currentValue ? parseIsoDate(currentValue) : undefined),
+    [currentValue],
   )
   const [month, setMonth] = React.useState<Date>(() => dateValue ?? new Date())
   const [pendingDate, setPendingDate] = React.useState<Date | undefined>(dateValue)
@@ -124,7 +164,7 @@ export function ThaiDatePicker({
     if (dateValue) {
       setMonth(dateValue)
     }
-  }, [value, dateValue])
+  }, [currentValue, dateValue])
 
   const handleOpenChange = (nextOpen: boolean) => {
     setOpen(nextOpen)
@@ -134,13 +174,19 @@ export function ThaiDatePicker({
     }
   }
 
+  const commit = (next: string) => {
+    if (!isControlled) setUncontrolled(next)
+    onChange?.(next)
+  }
+
   const applyDate = (date: Date | undefined, close = true) => {
     if (date) {
-      onChange(toIsoDate(date))
+      if (!isWithinRange(date, minDate, maxDate)) return
+      commit(toIsoDate(date))
       setMonth(date)
       setPendingDate(date)
     } else {
-      onChange("")
+      commit("")
       setPendingDate(undefined)
     }
     if (close) setOpen(false)
@@ -162,12 +208,31 @@ export function ThaiDatePicker({
     a.getDate() === b.getDate()
 
   const isActiveQuick = (resolve: () => Date) => isSameDay(dateValue, resolve())
+  const quickOptions = QUICK_OPTIONS.filter((opt) => isWithinRange(opt.resolve(), minDate, maxDate))
+  const disabledDays = [
+    ...(minDate ? [{ before: minDate }] : []),
+    ...(maxDate ? [{ after: maxDate }] : []),
+  ]
 
   return (
+    <>
+    {name ? (
+      <input
+        className="sr-only"
+        name={name}
+        value={currentValue}
+        required={required}
+        readOnly
+        tabIndex={-1}
+        aria-hidden="true"
+        onChange={() => undefined}
+      />
+    ) : null}
     <Popover modal open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <button
           type="button"
+          aria-required={required}
           className={cn(
             "group flex h-11 w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3",
             "text-left shadow-sm transition-all duration-200",
@@ -247,9 +312,9 @@ export function ThaiDatePicker({
           </button>
         </div>
 
-        {showQuickSelect && (
+        {showQuickSelect && quickOptions.length > 0 && (
           <div className="flex flex-wrap gap-1.5 border-b border-slate-100 bg-slate-50/70 px-3 py-2.5">
-            {QUICK_OPTIONS.map((opt) => (
+            {quickOptions.map((opt) => (
               <button
                 key={opt.key}
                 type="button"
@@ -282,8 +347,9 @@ export function ThaiDatePicker({
             month={month}
             onMonthChange={setMonth}
             captionLayout="dropdown"
-            startMonth={CALENDAR_START_MONTH}
-            endMonth={CALENDAR_END_MONTH}
+            disabled={disabledDays.length > 0 ? disabledDays : undefined}
+            startMonth={minDate ? new Date(minDate.getFullYear(), minDate.getMonth()) : CALENDAR_START_MONTH}
+            endMonth={maxDate ? new Date(maxDate.getFullYear(), maxDate.getMonth()) : CALENDAR_END_MONTH}
             formatters={calendarFormatters}
             className="rounded-2xl [--cell-size:2.35rem]"
             classNames={{
@@ -305,7 +371,7 @@ export function ThaiDatePicker({
               size="sm"
               className="h-8 gap-1 rounded-xl text-slate-500 hover:text-rose-600"
               onClick={() => applyDate(undefined)}
-              disabled={!value && !pendingDate}
+              disabled={!currentValue && !pendingDate}
             >
               <X className="size-3.5" />
               ล้าง
@@ -331,7 +397,7 @@ export function ThaiDatePicker({
               size="sm"
               className="h-8 gap-1 rounded-xl text-slate-500 hover:text-rose-600"
               onClick={() => applyDate(undefined)}
-              disabled={!value}
+              disabled={!currentValue}
             >
               <X className="size-3.5" />
               ล้างวันที่
@@ -341,5 +407,6 @@ export function ThaiDatePicker({
         )}
       </PopoverContent>
     </Popover>
+    </>
   )
 }

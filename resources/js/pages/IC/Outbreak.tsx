@@ -42,6 +42,7 @@ import {
     CheckCircle2,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { IcCharts, IcPdfButton, dateInput, type IcChart } from '@/pages/IC/ic-ui';
 
 interface Outbreak {
     id: number;
@@ -56,6 +57,9 @@ interface Outbreak {
     staff_cases: number;
     patient_cases: number;
     control_measures: string | null;
+    source_investigation?: string | null;
+    lessons_learned?: string | null;
+    can_edit?: boolean;
     cases?: OutbreakCase[];
 }
 
@@ -68,6 +72,7 @@ interface OutbreakCase {
     symptoms: string | null;
     outcome: 'recovered' | 'ongoing' | 'deceased' | 'transferred';
     is_index_case?: boolean;
+    can_edit?: boolean;
 }
 
 interface Stats {
@@ -86,6 +91,7 @@ interface Props {
     filters: {
         status?: string;
     };
+    charts?: IcChart[];
 }
 
 const defaultStats: Stats = {
@@ -95,22 +101,27 @@ const defaultStats: Stats = {
     by_type: [],
 };
 
-export default function OutbreakPage({ outbreaks, stats: rawStats, filters }: Props) {
+export default function OutbreakPage({ outbreaks, stats: rawStats, filters, charts }: Props) {
     const stats = { ...defaultStats, ...rawStats, by_type: rawStats?.by_type ?? [] };
     const outbreakRows = outbreaks?.data ?? [];
     const [isOpen, setIsOpen] = useState(false);
     const [isCaseOpen, setIsCaseOpen] = useState(false);
     const [selectedOutbreak, setSelectedOutbreak] = useState<Outbreak | null>(null);
     const [viewingOutbreak, setViewingOutbreak] = useState<Outbreak | null>(null);
+    const [editingId, setEditingId] = useState<number | null>(null);
+    const [editingCaseId, setEditingCaseId] = useState<number | null>(null);
 
-    const { data, setData, post, processing, reset } = useForm({
+    const { data, setData, post, put, processing, reset } = useForm({
         outbreak_name: '',
         detection_date: new Date().toISOString().split('T')[0],
         pathogen: '',
         affected_area: '',
         severity: 'moderate',
+        status: 'investigating',
+        resolved_date: '',
         source_investigation: '',
         control_measures: '',
+        lessons_learned: '',
     });
 
     const caseForm = useForm({
@@ -119,21 +130,60 @@ export default function OutbreakPage({ outbreaks, stats: rawStats, filters }: Pr
         onset_date: new Date().toISOString().split('T')[0],
         symptoms: '',
         is_index_case: false as boolean,
+        outcome: 'ongoing',
     });
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        post('/ic/outbreak', {
+        const options = {
             onSuccess: () => {
-                toast.success('บันทึก Outbreak เรียบร้อยแล้ว');
+                toast.success(editingId ? 'อัปเดต Outbreak เรียบร้อยแล้ว' : 'บันทึก Outbreak เรียบร้อยแล้ว');
                 reset();
+                setEditingId(null);
                 setIsOpen(false);
             },
+        };
+        if (editingId) {
+            put(`/ic/outbreak/${editingId}`, options);
+            return;
+        }
+        post('/ic/outbreak', options);
+    };
+
+    const openEdit = (outbreak: Outbreak) => {
+        setEditingId(outbreak.id);
+        setData({
+            outbreak_name: outbreak.outbreak_name || '',
+            detection_date: dateInput(outbreak.detection_date),
+            pathogen: outbreak.pathogen || '',
+            affected_area: outbreak.affected_area || '',
+            severity: outbreak.severity || 'moderate',
+            status: outbreak.status || 'investigating',
+            resolved_date: dateInput(outbreak.resolved_date),
+            source_investigation: outbreak.source_investigation || '',
+            control_measures: outbreak.control_measures || '',
+            lessons_learned: outbreak.lessons_learned || '',
         });
+        setIsOpen(true);
+    };
+
+    const openEditCase = (outbreak: Outbreak, item: OutbreakCase) => {
+        setSelectedOutbreak(outbreak);
+        setEditingCaseId(item.id);
+        caseForm.setData({
+            hn: item.hn || '',
+            patient_name: item.patient_name || '',
+            onset_date: dateInput(item.symptom_onset_date),
+            symptoms: item.symptoms || '',
+            is_index_case: Boolean(item.is_index_case),
+            outcome: item.outcome || 'ongoing',
+        });
+        setIsCaseOpen(true);
     };
 
     const handleAddCase = (outbreak: Outbreak) => {
         setSelectedOutbreak(outbreak);
+        setEditingCaseId(null);
         caseForm.reset();
         setIsCaseOpen(true);
     };
@@ -141,13 +191,19 @@ export default function OutbreakPage({ outbreaks, stats: rawStats, filters }: Pr
     const submitCase = (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedOutbreak) return;
-        caseForm.post(`/ic/outbreak/${selectedOutbreak.id}/case`, {
+        const options = {
             onSuccess: () => {
-                toast.success('เพิ่ม Case เรียบร้อยแล้ว');
+                toast.success(editingCaseId ? 'อัปเดต Case เรียบร้อยแล้ว' : 'เพิ่ม Case เรียบร้อยแล้ว');
                 setIsCaseOpen(false);
+                setEditingCaseId(null);
                 setSelectedOutbreak(null);
             },
-        });
+        };
+        if (editingCaseId) {
+            caseForm.put(`/ic/outbreak/${selectedOutbreak.id}/case/${editingCaseId}`, options);
+            return;
+        }
+        caseForm.post(`/ic/outbreak/${selectedOutbreak.id}/case`, options);
     };
 
     const getStatusBadge = (status: string) => {
@@ -178,15 +234,21 @@ export default function OutbreakPage({ outbreaks, stats: rawStats, filters }: Pr
     const outbreakLabel = (id: number) => `OB-${String(id).padStart(4, '0')}`;
 
     const newOutbreakDialog = (
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <Dialog open={isOpen} onOpenChange={(open) => {
+            setIsOpen(open);
+            if (!open) {
+                setEditingId(null);
+                reset();
+            }
+        }}>
             <DialogTrigger asChild>
-                <Button className="gap-2 rounded-xl bg-rose-600 hover:bg-rose-700">
+                <Button className="gap-2 rounded-xl bg-rose-600 hover:bg-rose-700" onClick={() => setEditingId(null)}>
                     <Plus className="h-4 w-4" /> แจ้ง Outbreak ใหม่
                 </Button>
             </DialogTrigger>
                                 <DialogContent className="max-w-lg">
                                     <DialogHeader>
-                                        <DialogTitle>แจ้ง Outbreak ใหม่</DialogTitle>
+                                        <DialogTitle>{editingId ? 'แก้ไข Outbreak' : 'แจ้ง Outbreak ใหม่'}</DialogTitle>
                                     </DialogHeader>
                                     <form onSubmit={handleSubmit} className="space-y-4 py-4">
                                         <div className="space-y-2">
@@ -258,8 +320,29 @@ export default function OutbreakPage({ outbreaks, stats: rawStats, filters }: Pr
                                             />
                                         </div>
 
+                                        {editingId && (
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="space-y-2">
+                                                    <Label>สถานะ</Label>
+                                                    <Select value={data.status} onValueChange={(v) => setData('status', v)}>
+                                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="investigating">กำลังสอบสวน</SelectItem>
+                                                            <SelectItem value="active">กำลังระบาด</SelectItem>
+                                                            <SelectItem value="controlled">ควบคุมได้</SelectItem>
+                                                            <SelectItem value="resolved">ยุติแล้ว</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label>วันที่ยุติ</Label>
+                                                    <Input type="date" value={data.resolved_date} onChange={(e) => setData('resolved_date', e.target.value)} />
+                                                </div>
+                                            </div>
+                                        )}
+
                                         <Button type="submit" className="w-full rounded-xl bg-rose-600 hover:bg-rose-700" disabled={processing}>
-                                            แจ้ง Outbreak
+                                            {editingId ? 'บันทึกการแก้ไข' : 'แจ้ง Outbreak'}
                                         </Button>
                                     </form>
                                 </DialogContent>
@@ -280,8 +363,14 @@ export default function OutbreakPage({ outbreaks, stats: rawStats, filters }: Pr
                 { title: 'ระบาด', href: '/ic/outbreak' },
             ]}
             subNav={<IcSubNav active="ic.outbreak" />}
-            actions={newOutbreakDialog}
+            actions={
+                <div className="flex flex-wrap gap-2">
+                    <IcPdfButton module="outbreak" />
+                    {newOutbreakDialog}
+                </div>
+            }
         >
+            <IcCharts charts={charts} />
             {(stats.active_outbreaks ?? 0) > 0 && (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
                     <div className="flex items-center gap-3">
@@ -381,6 +470,11 @@ export default function OutbreakPage({ outbreaks, stats: rawStats, filters }: Pr
                                         )}
 
                                         <div className="flex gap-2">
+                                            {outbreak.can_edit && (
+                                                <Button variant="outline" size="sm" onClick={() => openEdit(outbreak)}>
+                                                    แก้ไข
+                                                </Button>
+                                            )}
                                             <Button 
                                                 variant="outline" 
                                                 size="sm" 
@@ -409,7 +503,7 @@ export default function OutbreakPage({ outbreaks, stats: rawStats, filters }: Pr
                     <Dialog open={isCaseOpen} onOpenChange={setIsCaseOpen}>
                         <DialogContent>
                             <DialogHeader>
-                                <DialogTitle>เพิ่ม Case ใน Outbreak</DialogTitle>
+                                <DialogTitle>{editingCaseId ? 'แก้ไข Case' : 'เพิ่ม Case ใน Outbreak'}</DialogTitle>
                             </DialogHeader>
                             {selectedOutbreak && (
                                 <form onSubmit={submitCase} className="space-y-4 py-4">
@@ -462,8 +556,21 @@ export default function OutbreakPage({ outbreaks, stats: rawStats, filters }: Pr
                                         <span>Index Case (ผู้ป่วยรายแรก)</span>
                                     </label>
 
+                                    <div className="space-y-2">
+                                        <Label>ผลลัพธ์</Label>
+                                        <Select value={caseForm.data.outcome} onValueChange={(v) => caseForm.setData('outcome', v)}>
+                                            <SelectTrigger><SelectValue /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="ongoing">กำลังรักษา</SelectItem>
+                                                <SelectItem value="recovered">หาย</SelectItem>
+                                                <SelectItem value="deceased">เสียชีวิต</SelectItem>
+                                                <SelectItem value="transferred">ส่งต่อ</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
                                     <Button type="submit" className="w-full" disabled={caseForm.processing}>
-                                        เพิ่ม Case
+                                        {editingCaseId ? 'บันทึกการแก้ไข' : 'เพิ่ม Case'}
                                     </Button>
                                 </form>
                             )}
@@ -562,6 +669,11 @@ export default function OutbreakPage({ outbreaks, stats: rawStats, filters }: Pr
                                                                     {c.outcome === 'ongoing' && <Badge variant="outline">กำลังรักษา</Badge>}
                                                                     {c.outcome === 'deceased' && <Badge variant="destructive">เสียชีวิต</Badge>}
                                                                     {c.outcome === 'transferred' && <Badge variant="secondary">ส่งต่อ</Badge>}
+                                                                    {viewingOutbreak.can_edit && (
+                                                                        <Button variant="ghost" size="sm" className="ml-2" onClick={() => openEditCase(viewingOutbreak, c)}>
+                                                                            แก้ไข
+                                                                        </Button>
+                                                                    )}
                                                                 </TableCell>
                                                             </TableRow>
                                                         ))}

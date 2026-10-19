@@ -617,12 +617,24 @@ class EnvAssetController extends Controller
         $asset = EnvAsset::create($payload);
         $this->storeUploadedImage($request, $asset, $line);
 
+        $frequencyType = $validated['frequency_type'] ?? 'month';
+        $frequencyValue = (int) ($validated['frequency_value'] ?? 12);
+        $nextPm = ! empty($validated['next_pm_date'])
+            ? Carbon::parse($validated['next_pm_date'])
+            : match ($frequencyType) {
+                'day' => Carbon::now()->addDays($frequencyValue),
+                'week' => Carbon::now()->addWeeks($frequencyValue),
+                'year' => Carbon::now()->addYears($frequencyValue),
+                default => Carbon::now()->addMonths($frequencyValue),
+            };
+
         EnvPmSchedule::create([
             'asset_id' => $asset->id,
-            'frequency_type' => $validated['frequency_type'] ?? 'month',
-            'frequency_value' => (int) ($validated['frequency_value'] ?? 12),
-            'next_pm_date' => $validated['next_pm_date']
-                ?? Carbon::now()->addMonths((int) ($validated['frequency_value'] ?? 12)),
+            'frequency_type' => $frequencyType,
+            'frequency_value' => $frequencyValue,
+            'basis' => 'time',
+            'lead_days' => EnvPmSchedule::leadDaysForRisk($asset->risk_level),
+            'next_pm_date' => $nextPm,
             'checklist_template' => [],
         ]);
 
@@ -643,6 +655,7 @@ class EnvAssetController extends Controller
         $payload = $this->assetPayloadFromValidated($validated, $registryStatus, $line);
         $asset->update($payload);
         $this->storeUploadedImage($request, $asset->fresh(), $line);
+        $this->syncDefaultSchedule($asset->fresh(), $validated);
 
         return redirect()->back()->with('success', 'อัปเดตครุภัณฑ์เรียบร้อย');
     }
@@ -774,8 +787,10 @@ class EnvAssetController extends Controller
             'inspection_status' => ['required', Rule::in(array_keys(EnvAsset::INSPECTION_STATUSES))],
             'registry_status' => [$creating ? 'nullable' : 'nullable', Rule::in(array_keys(EnvAsset::REGISTRY_STATUSES))],
             'purchase_date' => 'nullable|date',
+            'install_date' => 'nullable|date',
+            'annual_pm_budget' => 'nullable|numeric|min:0',
             'warranty_expiry' => 'nullable|date',
-            'frequency_type' => 'nullable|in:month,year',
+            'frequency_type' => 'nullable|in:day,week,month,year',
             'frequency_value' => 'nullable|integer|min:1',
             'next_pm_date' => 'nullable|date',
             'image' => 'nullable|image|max:8192',
@@ -816,6 +831,8 @@ class EnvAssetController extends Controller
             'risk_level' => $validated['risk_level'] ?? 'C',
             'inspection_status' => $validated['inspection_status'] ?? 'not_inspect',
             'purchase_date' => $validated['purchase_date'] ?? null,
+            'install_date' => $validated['install_date'] ?? null,
+            'annual_pm_budget' => $validated['annual_pm_budget'] ?? null,
             'warranty_expiry' => $validated['warranty_expiry'] ?? null,
             'registry_status' => $registryStatus,
             'status' => EnvAsset::operationalStatusForRegistry($registryStatus),
@@ -909,6 +926,8 @@ class EnvAssetController extends Controller
                 ?? ($asset->inspection_status ?: 'ไม่สอบเทียบ'),
             'status' => $asset->status,
             'purchase_date' => optional($asset->purchase_date)->format('Y-m-d'),
+            'install_date' => optional($asset->install_date)->format('Y-m-d'),
+            'annual_pm_budget' => $asset->annual_pm_budget,
             'warranty_expiry' => optional($asset->warranty_expiry)->format('Y-m-d'),
             'image_path' => $asset->image_path,
             'image_ref' => $asset->image_ref,
@@ -924,10 +943,35 @@ class EnvAssetController extends Controller
             'writeoff_doc' => $asset->writeoff_doc,
             'scrap_return_doc' => $asset->scrap_return_doc,
             'schedule' => $asset->schedule ? [
+                'id' => $asset->schedule->id,
                 'frequency_type' => $asset->schedule->frequency_type,
                 'frequency_value' => $asset->schedule->frequency_value,
+                'basis' => $asset->schedule->basis,
                 'next_pm_date' => optional($asset->schedule->next_pm_date)->format('Y-m-d'),
             ] : null,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     */
+    private function syncDefaultSchedule(EnvAsset $asset, array $validated): void
+    {
+        if (empty($validated['frequency_value'])) {
+            return;
+        }
+
+        $schedule = $asset->schedules()->whereNull('standard_id')->orderBy('id')->first()
+            ?? $asset->schedule;
+        if (! $schedule || $schedule->standard_id) {
+            return;
+        }
+
+        $schedule->update([
+            'frequency_type' => $validated['frequency_type'] ?? $schedule->frequency_type,
+            'frequency_value' => (int) $validated['frequency_value'],
+            'next_pm_date' => $validated['next_pm_date'] ?? $schedule->next_pm_date,
+            'lead_days' => EnvPmSchedule::leadDaysForRisk($asset->risk_level),
+        ]);
     }
 }

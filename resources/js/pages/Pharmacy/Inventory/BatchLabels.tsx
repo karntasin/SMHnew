@@ -15,6 +15,7 @@ import {
     Snowflake,
     Square,
 } from 'lucide-react';
+import { warehouseActive, warehouseHome, wh } from '@/pages/Pharmacy/inventoryCatalog';
 
 type Lot = {
     id: number;
@@ -88,7 +89,7 @@ export default function BatchLabels({
     const handleSearch = (e: FormEvent) => {
         e.preventDefault();
         router.get(
-            route('pharmacy.inventory.labels'),
+            wh('labels'),
             {
                 q: q.trim() || undefined,
                 location_id: locationId || undefined,
@@ -128,7 +129,7 @@ export default function BatchLabels({
     return (
         <AppLayout
             breadcrumbs={pharmacyBreadcrumbs([
-                { title: 'คลังยา / ห้องยา', href: route('pharmacy.inventory.index') },
+                { title: warehouseHome(), href: wh('index') },
                 { title: 'พิมพ์สติ๊กเกอร์บาร์โค้ด / QR เป็นชุด' },
             ])}
         >
@@ -136,7 +137,7 @@ export default function BatchLabels({
 
             <div className="container mx-auto space-y-6 px-4 py-6 print:p-0 print:space-y-0">
                 <div className="print:hidden">
-                    <PharmacySubNav active="pharmacy.inventory.index" />
+                    <PharmacySubNav active={warehouseActive()} />
                 </div>
 
                 {/* Filter and Print Settings Bar */}

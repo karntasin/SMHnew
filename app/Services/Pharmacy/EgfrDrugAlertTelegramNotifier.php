@@ -13,10 +13,35 @@ class EgfrDrugAlertTelegramNotifier
         private readonly TelegramBotService $telegram,
     ) {}
 
+    public function getBotToken(): ?string
+    {
+        $dbToken = \App\Models\Pharmacy\PharmacySetting::query()->where('key', 'telegram_bot_token')->value('value');
+
+        return TelegramBotService::firstLikelyBotToken(
+            (string) $dbToken,
+            (string) config('services.telegram.egfr_alerts.bot_token', ''),
+            (string) config('services.telegram.bot_token', ''),
+        );
+    }
+
+    public function getChatId(): ?string
+    {
+        $dbEgfrChat = \App\Models\Pharmacy\PharmacySetting::query()->where('key', 'telegram_egfr_chat_id')->value('value');
+
+        return TelegramBotService::firstLikelyChatId(
+            (string) $dbEgfrChat,
+            (string) config('services.telegram.egfr_alerts.chat_id', ''),
+        );
+    }
+
     public function isEnabled(): bool
     {
-        return (bool) config('services.telegram.egfr_alerts.enabled', false)
-            && $this->telegram->isConfigured();
+        $dbEnabled = \App\Models\Pharmacy\PharmacySetting::query()->where('key', 'telegram_egfr_alerts_enabled')->value('value');
+        $enabled = $dbEnabled !== null
+            ? (bool) (int) $dbEnabled
+            : (bool) config('services.telegram.egfr_alerts.enabled', false);
+
+        return $enabled && filled($this->getBotToken()) && filled($this->getChatId());
     }
 
     /**
@@ -31,22 +56,25 @@ class EgfrDrugAlertTelegramNotifier
      */
     public function notify(bool $force = false, ?int $lookbackDays = null): array
     {
+        $token = $this->getBotToken();
+        $chatId = $this->getChatId();
+
         if (! $this->isEnabled() && ! $force) {
             return [
                 'ok' => false,
                 'skipped' => true,
-                'message' => 'ยังไม่ได้เปิด TELEGRAM_EGFR_ALERTS_ENABLED หรือยังไม่ตั้งค่า bot/chat',
+                'message' => 'ยังไม่ได้เปิด TELEGRAM_EGFR_ALERTS_ENABLED หรือยังไม่ตั้งค่า bot token/Chat ID กลุ่ม Drug&egfr',
                 'scanned' => 0,
                 'new' => 0,
                 'sent' => 0,
             ];
         }
 
-        if (! $this->telegram->isConfigured()) {
+        if (! filled($token) || ! filled($chatId)) {
             return [
                 'ok' => false,
                 'skipped' => true,
-                'message' => 'ยังไม่ได้ตั้งค่า TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID',
+                'message' => 'ยังไม่ได้ตั้งค่า Telegram bot token หรือ Chat ID สำหรับกลุ่ม Drug&egfr',
                 'scanned' => 0,
                 'new' => 0,
                 'sent' => 0,
@@ -107,7 +135,7 @@ class EgfrDrugAlertTelegramNotifier
             $extra = count($fresh) - count($toSend);
             $text = $this->formatDigest($toSend, $extra, $start, $end);
             foreach ($this->telegram->chunkText($text) as $chunk) {
-                $res = $this->telegram->sendMessage(null, $chunk);
+                $res = $this->telegram->sendMessage($chatId, $chunk, true, 'HTML', $token);
                 if (! ($res['ok'] ?? false)) {
                     Log::warning('Egfr Telegram notify failed: '.($res['message'] ?? ''));
 
@@ -129,7 +157,7 @@ class EgfrDrugAlertTelegramNotifier
             // แจ้งทีละใบสั่ง — ใกล้เคียง “ทุกครั้งที่แพทย์สั่งยาแล้วเข้าเงื่อนไข”
             foreach ($toSend as $row) {
                 $text = $this->formatSingle($row);
-                $res = $this->telegram->sendMessage(null, $text);
+                $res = $this->telegram->sendMessage($chatId, $text, true, 'HTML', $token);
                 if (! ($res['ok'] ?? false)) {
                     Log::warning('Egfr Telegram notify failed: '.($res['message'] ?? ''));
 

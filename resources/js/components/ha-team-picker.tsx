@@ -130,7 +130,7 @@ export default function HaTeamPicker({
             </div>
 
             <p className="text-xs text-muted-foreground">
-                เลือกแล้ว {selectedIds.length} ทีม — สมาชิกจะถูกเพิ่มเข้ากลุ่มสนทนาของทีมใน FSHH Chat อัตโนมัติ
+                เลือกแล้ว {selectedIds.length} ทีม — สมาชิกจะถูกเพิ่มเข้ากลุ่มสนทนาของทีมใน S-Chat อัตโนมัติ
             </p>
 
             {error && <InputError message={error} />}

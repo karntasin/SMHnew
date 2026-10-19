@@ -1,0 +1,25 @@
+---
+description: Date fields in the web app use the shared Thai calendar picker
+alwaysApply: true
+globs: resources/js/**/*.tsx
+---
+
+# Thai date picker
+
+New and edited date fields in this web app use `ThaiDatePicker` from `@/components/ui/thai-date-picker`. Do not add `type="date"`.
+
+The control shows a Buddhist-era date such as `10 ตุลาคม 2569`. The value sent to the server stays `YYYY-MM-DD`.
+
+- Controlled field: pass `value` and `onChange`.
+- FormData field: pass `name`. Add `required`, `min`, or `max` when the field needs them. `min` and `max` are ISO dates.
+- Display a stored date with `formatThaiDateFromIso`.
+
+```tsx
+<ThaiDatePicker
+  name="received_at"
+  label="วันที่รับ"
+  required
+  defaultValue={today}
+  max={today}
+/>
+```

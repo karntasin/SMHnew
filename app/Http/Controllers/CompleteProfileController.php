@@ -203,7 +203,7 @@ class CompleteProfileController extends Controller
 
         $push = ['ok' => false, 'message' => ''];
         if ($user->line_id) {
-            $chatHint = "\n\nเข้ากลุ่มแผนก/ฝ่ายใน FSHH Chat:\n".(string) config('services.fshh_chat.liff_url');
+            $chatHint = "\n\nเข้ากลุ่มแผนก/ฝ่ายใน S-Chat:\n".(string) config('services.fshh_chat.liff_url');
             $push = $this->messaging->pushText(
                 $user->line_id,
                 $this->messaging->welcomeText($user->display_name).$chatHint

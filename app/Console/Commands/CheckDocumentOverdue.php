@@ -13,7 +13,7 @@ class CheckDocumentOverdue extends Command
 {
     protected $signature = 'documents:check-deadlines';
 
-    protected $description = 'Check document due dates and send warnings/overdue alerts via FSHH Chat';
+    protected $description = 'Check document due dates and send warnings/overdue alerts via S-Chat';
 
     public function handle(FshhChatSyncService $fshhChat)
     {

@@ -3,13 +3,19 @@
 namespace App\Http\Controllers;
 
 use App\Models\Menu;
-use Inertia\Inertia;
-use Illuminate\Http\Request;
-use Spatie\Permission\Models\Permission;
 use App\Models\User;
+use App\Services\MenuPermissionSyncService;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\PermissionRegistrar;
 
 class MenuController extends Controller
 {
+    public function __construct(
+        private readonly MenuPermissionSyncService $menuPermissionSync,
+    ) {}
+
     public function index(Request $request)
     {
         /** @var User $user */
@@ -48,16 +54,17 @@ class MenuController extends Controller
             'route' => 'nullable|string',
             'parent_id' => 'nullable|exists:menus,id',
             'order' => 'nullable|integer',
-            'permission_name' => 'nullable|string|exists:permissions,name',
+            'permission_name' => 'nullable|string|max:255',
         ]);
 
-        if (!isset($data['order'])) {
+        if (! isset($data['order'])) {
             $data['order'] = Menu::where('parent_id', $data['parent_id'] ?? null)->max('order') + 1;
         }
 
+        $data = $this->normalizeMenuPermissions($data);
         Menu::create($data);
 
-        return redirect()->route('menus.index')->with('success', 'Menu berhasil ditambahkan.');
+        return redirect()->route('menus.index')->with('success', 'เพิ่มเมนูแล้ว');
     }
 
     public function edit(Menu $menu)
@@ -78,18 +85,52 @@ class MenuController extends Controller
             'title' => 'required|string',
             'icon' => 'nullable|string',
             'route' => 'nullable|string',
-            'parent_id' => 'nullable|exists:menus,id|not_in:' . $menu->id,
+            'parent_id' => 'nullable|exists:menus,id|not_in:'.$menu->id,
             'order' => 'nullable|integer',
-            'permission_name' => 'nullable|string|exists:permissions,name',
+            'permission_name' => 'nullable|string|max:255',
         ]);
 
-        if (!isset($data['order'])) {
+        if (! isset($data['order'])) {
             $data['order'] = Menu::where('parent_id', $data['parent_id'] ?? null)->max('order') + 1;
         }
 
+        $data = $this->normalizeMenuPermissions($data);
         $menu->update($data);
 
-        return redirect()->route('menus.index')->with('success', 'Menu berhasil diperbarui.');
+        return redirect()->route('menus.index')->with('success', 'อัปเดตเมนูแล้ว');
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function normalizeMenuPermissions(array $data): array
+    {
+        $route = trim((string) ($data['route'] ?? ''));
+        $permission = trim((string) ($data['permission_name'] ?? ''));
+
+        if ($permission === '' && $route !== '') {
+            $permission = $this->menuPermissionSync->permissionNameFromRoute(
+                $route,
+                (string) ($data['title'] ?? ''),
+            );
+            $data['permission_name'] = $permission;
+        }
+
+        if ($permission !== '') {
+            $parentTitle = null;
+            if (! empty($data['parent_id'])) {
+                $parentTitle = Menu::query()->whereKey($data['parent_id'])->value('title');
+            }
+
+            Permission::firstOrCreate(
+                ['name' => $permission, 'guard_name' => 'web'],
+                ['group' => $parentTitle ?: 'เมนู'],
+            );
+            app(PermissionRegistrar::class)->forgetCachedPermissions();
+        }
+
+        return $data;
     }
 
     public function destroy(Menu $menu)

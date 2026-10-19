@@ -81,8 +81,12 @@ class RoleController extends Controller
      */
     private function formPayload(): array
     {
+        $prepared = $this->accessMenuService->prepareForRoleForm();
+
         return [
-            'accessMenuTree' => $this->accessMenuService->buildTree(),
+            'accessMenuTree' => $prepared['tree'],
+            'menuCoverage' => $prepared['coverage'],
+            'menuSync' => $prepared['sync'],
             'extraPermissions' => $this->accessMenuService->extraPermissions(),
             'validPermissionNames' => $this->accessMenuService->validPermissionNames(),
             'roleTemplates' => Role::query()

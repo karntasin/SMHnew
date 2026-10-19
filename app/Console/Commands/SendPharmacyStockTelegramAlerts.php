@@ -9,7 +9,7 @@ class SendPharmacyStockTelegramAlerts extends Command
 {
     protected $signature = 'pharmacy:send-stock-telegram-alerts {--force}';
 
-    protected $description = 'แจ้งเตือนสต็อกยาต่ำ/หมด/ใกล้หมดอายุ เข้า Telegram';
+    protected $description = 'แจ้งเตือนสต็อกยาและเวชภัณฑ์มิใช่ยาที่ต่ำ หมด หรือใกล้หมดอายุ เข้า Telegram';
 
     public function handle(PharmacyStockTelegramNotifier $notifier): int
     {

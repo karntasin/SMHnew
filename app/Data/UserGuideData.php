@@ -244,12 +244,13 @@ class UserGuideData
                 'audience' => 'งานอาคารสถานที่',
                 'path' => '/env',
                 'illus' => 'env',
-                'features' => ['ทรัพย์สิน', 'PM Tracking', 'เหตุการณ์', 'ตรวจสาธารณูปโภค'],
+                'features' => ['ทรัพย์สิน', 'PM Tracking', 'เหตุการณ์', 'ตรวจสาธารณูปโภค', 'คู่มือใช้งาน'],
                 'steps' => [
                     ['title' => 'ภาพรวม ENV', 'description' => 'ดู Dashboard'],
                     ['title' => 'จัดการทรัพย์สิน', 'description' => 'เพิ่ม/แก้ไข'],
                     ['title' => 'PM และเหตุการณ์', 'description' => 'บันทึกตามแผน'],
                 ],
+                'tips' => ['อ่านคู่มือฉบับเต็มได้ที่ /env/guide'],
             ],
             [
                 'id' => 'admin-hub',

@@ -52,7 +52,8 @@ import {
   Trash2, 
   KeyRound,
   Mail,
-  Shield
+  Shield,
+  ClipboardList,
 } from 'lucide-react';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -189,6 +190,11 @@ export default function UserIndex({ users, filters, allRoles }: Props) {
             <p className="text-muted-foreground">จัดการบัญชีผู้ใช้ บทบาท และสิทธิ์การเข้าถึง</p>
           </div>
           <div className="flex flex-col md:flex-row gap-2">
+            <Link href={route('users.directory')}>
+              <Button variant="outline" className="w-full md:w-auto">
+                <ClipboardList className="mr-2 h-4 w-4" /> รายงานรายชื่อ
+              </Button>
+            </Link>
             <Link href={route('users.bulk-roles')}>
               <Button variant="outline" className="w-full md:w-auto">
                 <Shield className="mr-2 h-4 w-4" /> จัดการบทบาทแบบกลุ่ม

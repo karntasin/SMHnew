@@ -28,6 +28,7 @@ import {
     Trash2,
     XCircle,
 } from 'lucide-react';
+import { warehouseActive, warehouseHome, warehouseSupply, wh } from '@/pages/Pharmacy/inventoryCatalog';
 
 type LotInfo = {
     id: number;
@@ -81,16 +82,27 @@ type ServerStats = {
     nondrug_items?: number;
 };
 
+type HosxpMatch = {
+    icode: string;
+    name: string;
+    unit?: string | null;
+    strength?: string | null;
+    item_type?: string;
+    income_name?: string | null;
+};
+
 export default function Stock({
     rows,
     locations,
     filters,
     stats: serverStats,
+    hosxpMatches = [],
 }: {
     rows: Row[];
     locations: Array<{ id: number; name: string; type: string }>;
     filters: { location_id?: number | null; q?: string; special_type?: string; item_type?: string; expiry?: string };
     stats?: ServerStats;
+    hosxpMatches?: HosxpMatch[];
 }) {
     const [q, setQ] = useState(filters.q || '');
     const [locationId, setLocationId] = useState(filters.location_id ? String(filters.location_id) : '');
@@ -137,7 +149,7 @@ export default function Stock({
             item_type: newParams?.item_type !== undefined ? newParams.item_type : itemType,
             expiry: newParams?.expiry !== undefined ? newParams.expiry : expiry,
         };
-        router.get(route('pharmacy.inventory.stock'), {
+        router.get(wh('stock'), {
             q: p.q || undefined,
             location_id: p.location_id || undefined,
             special_type: p.special_type || undefined,
@@ -155,7 +167,7 @@ export default function Stock({
         if (isReconciling) return;
         setIsReconciling(true);
         router.post(
-            route('pharmacy.inventory.stock.reconcile'),
+            wh('stock.reconcile'),
             { location_id: locationId || undefined },
             {
                 preserveScroll: true,
@@ -177,7 +189,7 @@ export default function Stock({
         if (!editingRow) return;
         setIsSaving(true);
         router.patch(
-            route('pharmacy.inventory.balances.update', editingRow.id),
+            wh('balances.update', editingRow.id),
             {
                 qty_on_hand: parseFloat(editQty) || 0,
                 min_level: parseFloat(editMinLevel) || 0,
@@ -201,7 +213,7 @@ export default function Stock({
         if (!deletingRow) return;
         setIsDeleting(true);
         router.delete(
-            route('pharmacy.inventory.balances.destroy', deletingRow.id),
+            wh('balances.destroy', deletingRow.id),
             {
                 preserveScroll: true,
                 onSuccess: () => {
@@ -217,12 +229,12 @@ export default function Stock({
 
     return (
         <AppLayout breadcrumbs={pharmacyBreadcrumbs([
-            { title: 'คลังยา / ห้องยา', href: route('pharmacy.inventory.index') },
+            { title: warehouseHome(), href: wh('index') },
             { title: 'คงเหลือ' },
         ])}>
-            <Head title="คงเหลือยา & Lot" />
+            <Head title={warehouseSupply() ? "คงเหลือเวชภัณฑ์" : "คงเหลือยา & Lot"} />
             <div className="container mx-auto space-y-6 px-4 py-6">
-                <PharmacySubNav active="pharmacy.inventory.index" />
+                <PharmacySubNav active={warehouseActive()} />
 
                 {/* Stat Cards */}
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
@@ -303,22 +315,10 @@ export default function Stock({
                             <Input
                                 value={q}
                                 onChange={(e) => setQ(e.target.value)}
-                                placeholder="ค้นหาชื่อยา หรือ icode..."
+                                placeholder={warehouseSupply() ? 'ค้นหาชื่อเวชภัณฑ์ หรือ icode...' : 'ค้นหาชื่อยา หรือ icode...'}
                                 className="pl-9"
                             />
                         </div>
-                        <select
-                            value={itemType}
-                            onChange={(e) => {
-                                setItemType(e.target.value);
-                                executeSearch({ item_type: e.target.value });
-                            }}
-                            className="h-10 rounded-md border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring font-medium"
-                        >
-                            <option value="all">ประเภท: ทั้งหมด</option>
-                            <option value="drug">💊 เฉพาะยา</option>
-                            <option value="nondrug">📦 ค่าเวชภัณฑ์ที่มิใช่ยา</option>
-                        </select>
                         <select
                             value={locationId}
                             onChange={(e) => {
@@ -371,7 +371,7 @@ export default function Stock({
                                     setSpecialType('');
                                     setItemType('all');
                                     setExpiry('all');
-                                    router.get(route('pharmacy.inventory.stock'), {}, { preserveState: true });
+                                    router.get(wh('stock'), {}, { preserveState: true });
                                 }}
                             >
                                 ล้างค้นหา
@@ -391,13 +391,13 @@ export default function Stock({
                             {isReconciling ? 'กำลังซิงก์...' : 'ซิงก์สต็อก & Lot'}
                         </Button>
                         <Button asChild variant="outline" className="rounded-xl">
-                            <Link href={route('pharmacy.inventory.movements')}>
+                            <Link href={wh('movements')}>
                                 <History className="mr-1.5 h-4 w-4" />
                                 ประวัติเคลื่อนไหว
                             </Link>
                         </Button>
                         <Button asChild className="rounded-xl bg-violet-700 hover:bg-violet-800">
-                            <Link href={route('pharmacy.inventory.receive')}>
+                            <Link href={wh('receive')}>
                                 <PlusCircle className="mr-1.5 h-4 w-4" />
                                 รับเข้ายา/เวชภัณฑ์
                             </Link>
@@ -549,7 +549,7 @@ export default function Stock({
                                                 className="h-8 rounded-lg px-2 text-xs font-medium hover:bg-violet-50 hover:text-violet-700 dark:hover:bg-violet-950/50"
                                                 title="ดูบัตรคุมยา (Stock Card)"
                                             >
-                                                <Link href={route('pharmacy.inventory.stock-card', { icode: r.item.icode, location_id: r.location_id })}>
+                                                <Link href={wh('stock-card', { icode: r.item.icode, location_id: r.location_id })}>
                                                     บัตรคุม
                                                 </Link>
                                             </Button>
@@ -582,13 +582,39 @@ export default function Stock({
                                 <tr>
                                     <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
                                         <Package className="mx-auto h-8 w-8 opacity-40 mb-2" />
-                                        ไม่พบข้อมูลคงเหลือยาในเกณฑ์ที่ค้นหา
+                                        {warehouseSupply() ? 'ไม่พบยอดคงเหลือเวชภัณฑ์ในเกณฑ์ที่ค้นหา' : 'ไม่พบข้อมูลคงเหลือยาในเกณฑ์ที่ค้นหา'}
                                     </td>
                                 </tr>
                             )}
                         </tbody>
                     </table>
                 </div>
+
+                {hosxpMatches.length > 0 && (
+                    <section className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4 shadow-xs dark:border-amber-900/40 dark:bg-amber-950/20">
+                        <h2 className="text-sm font-semibold text-amber-950 dark:text-amber-100">
+                            {warehouseSupply() ? 'พบใน HOSxP แต่ยังไม่มีสต็อกในคลังเวชภัณฑ์' : 'พบใน HOSxP แต่ยังไม่มีสต็อกในคลังยา'}
+                        </h2>
+                        <div className="mt-3 space-y-2">
+                            {hosxpMatches.map((hit) => (
+                                <div key={hit.icode} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-100 bg-white px-3 py-2 dark:border-amber-900/40 dark:bg-background">
+                                    <div>
+                                        <div className="font-medium text-foreground">{hit.name}</div>
+                                        <div className="text-xs text-muted-foreground">
+                                            {hit.icode}
+                                            {hit.strength ? ` · ${hit.strength}` : ''}
+                                            {hit.unit ? ` · ${hit.unit}` : ''}
+                                            {hit.income_name ? ` · ${hit.income_name}` : ''}
+                                        </div>
+                                    </div>
+                                    <Button asChild size="sm" className="rounded-lg bg-violet-700 hover:bg-violet-800">
+                                        <Link href={wh('receive', { icode: hit.icode })}>รับเข้า</Link>
+                                    </Button>
+                                </div>
+                            ))}
+                        </div>
+                    </section>
+                )}
             </div>
 
             {/* Modal: ดูรายการ Lot ทั้งหมดของยา */}
@@ -643,7 +669,7 @@ export default function Stock({
                                             <div className="text-right font-medium text-foreground">
                                                 <div>{lot.qty_remaining} {viewingLotsRow.item.unit || 'หน่วย'}</div>
                                                 <Link
-                                                    href={route('pharmacy.inventory.lots.show', lot.id)}
+                                                    href={wh('lots.show', lot.id)}
                                                     className="text-[11px] text-violet-600 hover:underline"
                                                 >
                                                     ดู QR / บาร์โค้ด →

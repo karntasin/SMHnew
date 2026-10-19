@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { QualityPage, StatCard, Panel, EmptyState } from '@/components/quality/quality-ui';
 import IcSubNav from '@/pages/IC/IcSubNav';
+import { IcCharts, type IcChart } from '@/pages/IC/ic-ui';
 import {
     Activity,
     AlertTriangle,
@@ -58,6 +59,7 @@ interface Stats {
         infections: number;
         hand_hygiene_rate: number | null;
     }[];
+    trend_charts?: IcChart[];
 }
 
 interface Props {
@@ -222,6 +224,8 @@ export default function IcIndex({ stats }: Props) {
                     </div>
                 </Panel>
             )}
+
+            <IcCharts charts={stats.trend_charts} />
 
             <div className="grid gap-6 md:grid-cols-2">
                 <Panel title="แนวโน้มรายเดือน" description="การติดเชื้อและ Hand Hygiene">

@@ -195,13 +195,15 @@ export const qualitySelect = qualityInput + ' cursor-pointer';
 /* ---------- SubNav ---------- */
 
 export interface QualityTab {
-    /* ziggy route name หรือ href ตรง ๆ (ขึ้นต้นด้วย /) */
+    /* ziggy route name หรือ key สำหรับ active matching */
     key: string;
     label: string;
     hint?: string;
     icon: LucideIcon;
     /* query params เพิ่มเติมเมื่อใช้ route name */
     params?: Record<string, string>;
+    /* ถ้ากำหนด จะใช้เป็นลิงก์แทนการคำนวณจาก key */
+    href?: string;
 }
 
 export function QualitySubNav({
@@ -234,7 +236,8 @@ export function QualitySubNav({
                 {tabs.map((tab) => {
                     const Icon = tab.icon;
                     const isActive = active === tab.key;
-                    const href = tab.key.startsWith('/') ? tab.key : route(tab.key, tab.params);
+                    const href = tab.href
+                        ?? (tab.key.startsWith('/') ? tab.key : route(tab.key, tab.params));
 
                     return (
                         <Link

@@ -24,7 +24,7 @@ import { NavFooter } from '@/components/nav-footer';
 import { NavUser } from '@/components/nav-user';
 import { iconMapper } from '@/lib/iconMapper';
 import type { LucideIcon } from 'lucide-react';
-import { ChevronRight, ExternalLink, Search, X, BookOpen } from 'lucide-react';
+import { ChevronRight, ExternalLink, Search, X, BookOpen, LayoutGrid } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { isActivePath } from '@/lib/asset';
@@ -306,6 +306,13 @@ export function AppSidebar() {
             >
               <BookOpen className="size-3.5 shrink-0" />
               คู่มือการใช้งาน
+            </Link>
+            <Link
+              href="/menus-hub"
+              className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-primary"
+            >
+              <LayoutGrid className="size-3.5 shrink-0" />
+              HUB Menu
             </Link>
           </div>
         )}

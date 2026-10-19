@@ -40,18 +40,8 @@ interface Props {
 }
 
 const breadcrumbs = [
-    {
-        title: 'KM',
-        href: '/km/dashboard',
-    },
-    {
-        title: 'ระบบการเรียนรู้ (E-Learning)',
-        href: '/km/learn/dashboard',
-    },
-    {
-        title: 'หลักสูตร',
-        href: '/km/learn/courses',
-    },
+    { title: 'พัฒนาบุคลากร', href: '/km/learn/hub' },
+    { title: 'หลักสูตร', href: '/km/learn/courses' },
 ];
 
 export default function CourseShow({ course, isEnrolled, canEdit }: Props) {
@@ -101,6 +91,11 @@ export default function CourseShow({ course, isEnrolled, canEdit }: Props) {
                                     </span>
                                     {canEdit && (
                                         <div className="flex gap-2 ml-2">
+                                            <Link href={route('km.learn.courses.evaluation', course.id)}>
+                                                <Badge className="bg-white/20 hover:bg-white/30 cursor-pointer text-white border-none">
+                                                    สรุปผลประเมิน
+                                                </Badge>
+                                            </Link>
                                             <Link href={route('km.learn.courses.builder', course.id)}>
                                                 <Badge className="bg-yellow-500/80 hover:bg-yellow-500 cursor-pointer text-white border-none">
                                                     แก้ไขหลักสูตร

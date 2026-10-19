@@ -1,5 +1,5 @@
 /**
- * FSHH Chat — Cloudflare Worker + D1
+ * S-Chat — Cloudflare Worker + D1
  * เสิร์ฟหน้า LIFF และ API ใน Worker เดียว ไม่ใช้ Laravel / GAS
  */
 
@@ -10,8 +10,8 @@ import { handleAiAsk } from './chat-ai.js';
 import { handleInternal } from './chat-sync.js';
 
 const CONFIG = {
-  VERSION: '8.4.1-d1-groups-fix',
-  SYSTEM: 'FSHH Chat',
+  VERSION: '8.5.0-push',
+  SYSTEM: 'S-Chat',
   LIFF_ID: '2011190976-nGVbTYZD',
   CHANNEL_ID: '2011190976',
 };
@@ -60,6 +60,13 @@ function wrapForLiff(action, worker, payload, ok = true) {
   );
 }
 
+function pageConfig(env) {
+  return {
+    ...CONFIG,
+    VAPID_PUBLIC_KEY: String((env && env.VAPID_PUBLIC_KEY) || ''),
+  };
+}
+
 async function dispatch(env, action, params) {
   if (!env || !env.DB) {
     return {
@@ -80,7 +87,7 @@ function liffPage(origin) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FSHH Chat — LIFF</title>
+  <title>S-Chat — LIFF</title>
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -124,7 +131,7 @@ function liffPage(origin) {
 </head>
 <body>
   <div class="card">
-    <h1>FSHH Chat</h1>
+    <h1>S-Chat</h1>
     <div class="sub">LIFF + Cloudflare Worker + D1</div>
     <div id="status" class="status warn">กำลังเริ่มระบบ...</div>
     <div class="kv"><b>Worker</b> <span id="workerUrl">-</span></div>
@@ -262,7 +269,9 @@ async function serveStaticAsset(request, env) {
     return new Response('Assets not bound', { status: 404, headers: corsHeaders() });
   }
   const url = new URL(request.url);
-  const res = await env.ASSETS.fetch(request);
+  const assetUrl = new URL(request.url);
+  if (assetUrl.pathname === '/favicon.ico') assetUrl.pathname = '/favicon.png';
+  const res = await env.ASSETS.fetch(new Request(assetUrl, request));
   const headers = new Headers(res.headers);
   headers.set('Access-Control-Allow-Origin', '*');
   if (url.pathname === '/sw.js') {
@@ -271,7 +280,13 @@ async function serveStaticAsset(request, env) {
     headers.set('Service-Worker-Allowed', '/');
   } else if (url.pathname === '/manifest.webmanifest') {
     headers.set('Content-Type', 'application/manifest+json; charset=utf-8');
-    headers.set('Cache-Control', 'public, max-age=3600');
+    headers.set('Cache-Control', 'no-cache');
+  } else if (
+    url.pathname === '/favicon.png' ||
+    url.pathname === '/favicon.ico' ||
+    url.pathname.startsWith('/icons/')
+  ) {
+    headers.set('Cache-Control', 'no-cache');
   } else {
     headers.set('Cache-Control', 'public, max-age=86400');
   }
@@ -291,7 +306,7 @@ async function router(request, env) {
 
   // PWA / static assets (must not fall through to chat HTML catch-all)
   if (
-    request.method === 'GET' &&
+    (request.method === 'GET' || request.method === 'HEAD') &&
     (
       url.pathname === '/manifest.webmanifest' ||
       url.pathname === '/sw.js' ||
@@ -300,7 +315,14 @@ async function router(request, env) {
       url.pathname.startsWith('/icons/')
     )
   ) {
-    return serveStaticAsset(request, env);
+    const assetRequest = request.method === 'HEAD'
+      ? new Request(request.url, { method: 'GET', headers: request.headers })
+      : request;
+    const assetResponse = await serveStaticAsset(assetRequest, env);
+    if (request.method === 'HEAD') {
+      return new Response(null, { status: assetResponse.status, headers: assetResponse.headers });
+    }
+    return assetResponse;
   }
 
   if (url.pathname === '/api/upload' && request.method === 'POST') {
@@ -320,7 +342,7 @@ async function router(request, env) {
   }
 
   if (url.pathname === '/' || url.pathname === '/liff' || url.pathname === '/index.html' || url.pathname === '/chat') {
-    return htmlResponse(buildChatPage(url.origin, CONFIG));
+    return htmlResponse(buildChatPage(url.origin, pageConfig(env)));
   }
 
   if (url.pathname === '/test') {
@@ -392,7 +414,7 @@ async function router(request, env) {
     !url.pathname.startsWith('/stickers/') &&
     !url.pathname.startsWith('/files/')
   ) {
-    return htmlResponse(buildChatPage(url.origin, CONFIG));
+    return htmlResponse(buildChatPage(url.origin, pageConfig(env)));
   }
 
   return jsonResponse(

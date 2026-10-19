@@ -21,6 +21,7 @@ import {
     Area,
 } from 'recharts';
 import { useTranslation } from '@/hooks/use-translation';
+import FinanceSubNav from '@/pages/Finance/FinanceSubNav';
 import {
     DollarSign,
     Stethoscope,
@@ -299,6 +300,7 @@ export default function RevenueDashboard({
             <Head title="รายได้ตามสิทธิ์การรักษา" />
 
             <div className="p-6 space-y-6">
+                <FinanceSubNav active="finance.revenue" />
                 {/* Hero */}
                 <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700 p-6 text-white shadow-xl">
                     <div className="absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/10" />

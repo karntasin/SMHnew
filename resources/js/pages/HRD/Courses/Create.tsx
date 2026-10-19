@@ -10,8 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react';
 
 const breadcrumbs = [
-    { title: 'KM', href: '/km/dashboard' },
-    { title: 'ระบบการเรียนรู้ (E-Learning)', href: '/km/learn/dashboard' },
+    { title: 'พัฒนาบุคลากร', href: '/km/learn/hub' },
+    { title: 'หลักสูตร', href: '/km/learn/courses' },
     { title: 'สร้างหลักสูตรใหม่', href: '#' },
 ];
 
@@ -38,7 +38,7 @@ export default function CreateCourse() {
 
             <div className="container mx-auto max-w-2xl p-6">
                 <Link
-                    href={route('km.learn.index')}
+                    href={route('km.learn.courses.index')}
                     className="mb-4 flex items-center text-muted-foreground hover:text-foreground"
                 >
                     <ArrowLeft className="mr-2 h-4 w-4" /> กลับไปหน้ารายการหลักสูตร

@@ -17,6 +17,8 @@ use App\Models\Ic\IcSetting;
 use App\Models\Hosxp\Ipt;
 use App\Models\Hosxp\DrugItems;
 use App\Models\Hosxp\Ward;
+use App\Services\Ic\IcReportService;
+use App\Services\ThaiPdfService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
@@ -25,6 +27,8 @@ use Carbon\Carbon;
 
 class IcController extends Controller
 {
+    public function __construct(private IcReportService $icReports) {}
+
     // ==========================================
     // DASHBOARD
     // ==========================================
@@ -115,6 +119,11 @@ class IcController extends Controller
                 ->take(5)
                 ->get(),
             'monthly_trend' => $this->getMonthlyTrend(),
+            'trend_charts' => array_slice(
+                $this->icReports->charts('overview', now()->subMonths(5)->startOfMonth()->toDateString(), now()->toDateString()),
+                0,
+                2
+            ),
         ];
 
         return Inertia::render('IC/Index', [
@@ -187,7 +196,7 @@ class IcController extends Controller
             $query->whereDate('infection_date', '<=', $request->date_to);
         }
 
-        $logs = $query->orderBy('created_at', 'desc')->paginate(15);
+        $logs = $this->icReports->decorate($query->orderBy('created_at', 'desc')->paginate(15));
 
         // Stats
         $stats = [
@@ -201,6 +210,7 @@ class IcController extends Controller
             'logs' => $logs,
             'stats' => $stats,
             'filters' => $request->only(['status', 'infection_type', 'ward', 'date_from', 'date_to']),
+            'charts' => $this->moduleCharts('surveillance', $request),
         ]);
     }
 
@@ -315,13 +325,36 @@ class IcController extends Controller
 
     public function updateSurveillance(Request $request, IcSurveillanceLog $log)
     {
+        $this->icReports->authorizeOwner($log->reporter_id);
+
         $validated = $request->validate([
+            'hn' => 'required|string',
+            'an' => 'nullable|string',
+            'patient_name' => 'required|string',
+            'admit_date' => 'nullable|date',
+            'infection_date' => 'required|date',
+            'ward_name' => 'nullable|string',
+            'infection_type' => 'required|string',
+            'device_related' => 'nullable|string',
+            'organism' => 'nullable|string',
+            'culture_date' => 'nullable|date',
+            'sensitivity_pattern' => 'nullable|string',
             'status' => 'required|in:suspected,confirmed,rejected',
+            'onset_type' => 'nullable|string',
             'outcome' => 'nullable|in:recovered,ongoing,deceased,transferred',
             'notes' => 'nullable|string',
         ]);
 
-        $log->update($validated);
+        $daysAfterAdmission = null;
+        if (! empty($validated['admit_date']) && ! empty($validated['infection_date'])) {
+            $daysAfterAdmission = Carbon::parse($validated['infection_date'])
+                ->diffInDays(Carbon::parse($validated['admit_date']));
+        }
+
+        $log->update([
+            ...$validated,
+            'days_after_admission' => $daysAfterAdmission,
+        ]);
 
         return redirect()->back()->with('success', 'อัปเดตข้อมูลเรียบร้อยแล้ว');
     }
@@ -343,7 +376,7 @@ class IcController extends Controller
             $query->where('incident_type', $request->type);
         }
 
-        $incidents = $query->orderBy('incident_date', 'desc')->paginate(15);
+        $incidents = $this->icReports->decorate($query->orderBy('incident_date', 'desc')->paginate(15));
 
         $stats = [
             'total' => IcIncident::count(),
@@ -361,6 +394,7 @@ class IcController extends Controller
             'incidents' => $incidents,
             'stats' => $stats,
             'filters' => $request->only(['status', 'severity', 'type']),
+            'charts' => $this->moduleCharts('incidents', $request),
         ]);
     }
 
@@ -390,9 +424,20 @@ class IcController extends Controller
 
     public function updateIncident(Request $request, IcIncident $incident)
     {
+        $this->icReports->authorizeOwner($incident->reporter_id);
+
         $validated = $request->validate([
+            'incident_date' => 'required|date',
+            'location' => 'required|string',
+            'incident_type' => 'required|string',
+            'source_patient_hn' => 'nullable|string',
+            'source_patient_status' => 'nullable|string',
+            'description' => 'required|string',
+            'severity' => 'required|in:low,medium,high,critical',
             'status' => 'required|in:reported,investigating,resolved',
             'action_taken' => 'nullable|string',
+            'pep_given' => 'nullable|boolean',
+            'follow_up_date' => 'nullable|date',
             'baseline_labs' => 'nullable|string',
             'outcome' => 'nullable|string',
         ]);
@@ -422,7 +467,7 @@ class IcController extends Controller
             $query->whereDate('observation_date', '<=', $request->date_to);
         }
 
-        $observations = $query->orderBy('observation_date', 'desc')->paginate(15);
+        $observations = $this->icReports->decorate($query->orderBy('observation_date', 'desc')->paginate(15));
 
         // Calculate overall compliance
         $overallStats = IcHandHygieneObservation::selectRaw('
@@ -466,6 +511,7 @@ class IcController extends Controller
             'observations' => $observations,
             'stats' => $stats,
             'filters' => $request->only(['ward', 'profession', 'date_from', 'date_to']),
+            'charts' => $this->moduleCharts('hand-hygiene', $request),
         ]);
     }
 
@@ -514,6 +560,34 @@ class IcController extends Controller
         return redirect()->back()->with('success', 'บันทึกข้อมูล Hand Hygiene เรียบร้อยแล้ว');
     }
 
+    public function updateHandHygiene(Request $request, IcHandHygieneObservation $observation)
+    {
+        $this->icReports->authorizeOwner($observation->reporter_id);
+
+        $validated = $request->validate([
+            'observation_date' => 'required|date',
+            'ward_name' => 'required|string',
+            'observer_name' => 'required|string',
+            'profession' => 'required|string',
+            'moment_1_opportunities' => 'required|integer|min:0',
+            'moment_1_compliances' => 'required|integer|min:0',
+            'moment_2_opportunities' => 'required|integer|min:0',
+            'moment_2_compliances' => 'required|integer|min:0',
+            'moment_3_opportunities' => 'required|integer|min:0',
+            'moment_3_compliances' => 'required|integer|min:0',
+            'moment_4_opportunities' => 'required|integer|min:0',
+            'moment_4_compliances' => 'required|integer|min:0',
+            'moment_5_opportunities' => 'required|integer|min:0',
+            'moment_5_compliances' => 'required|integer|min:0',
+            'hand_hygiene_method' => 'nullable|string',
+            'notes' => 'nullable|string',
+        ]);
+
+        $observation->update($validated);
+
+        return redirect()->back()->with('success', 'อัปเดตข้อมูล Hand Hygiene เรียบร้อยแล้ว');
+    }
+
     // ==========================================
     // ENVIRONMENT CHECK
     // ==========================================
@@ -531,7 +605,7 @@ class IcController extends Controller
             $query->where('result', $request->result);
         }
 
-        $checks = $query->orderBy('check_date', 'desc')->paginate(15);
+        $checks = $this->icReports->decorate($query->orderBy('check_date', 'desc')->paginate(15));
 
         $stats = [
             'total_checks' => IcEnvironmentCheck::count(),
@@ -551,6 +625,7 @@ class IcController extends Controller
             'checks' => $checks,
             'stats' => $stats,
             'filters' => $request->only(['area', 'check_type', 'result']),
+            'charts' => $this->moduleCharts('environment', $request),
         ]);
     }
 
@@ -567,6 +642,8 @@ class IcController extends Controller
 
     public function storeEnvironment(Request $request)
     {
+        $this->normalizeIndicatorPassed($request);
+
         $validated = $request->validate([
             'check_date' => 'required|date',
             'area_name' => 'required|string',
@@ -590,6 +667,31 @@ class IcController extends Controller
         return redirect()->back()->with('success', 'บันทึกข้อมูล Environment Check เรียบร้อยแล้ว');
     }
 
+    public function updateEnvironment(Request $request, IcEnvironmentCheck $check)
+    {
+        $this->icReports->authorizeOwner($check->reporter_id);
+        $this->normalizeIndicatorPassed($request);
+
+        $validated = $request->validate([
+            'check_date' => 'required|date',
+            'area_name' => 'required|string',
+            'check_type' => 'required|string',
+            'sampling_site' => 'nullable|string',
+            'organism_found' => 'nullable|string',
+            'result' => 'required|in:pass,fail,pending',
+            'cfu_count' => 'nullable|numeric',
+            'equipment_name' => 'nullable|string',
+            'sterilization_method' => 'nullable|string',
+            'indicator_passed' => 'nullable|boolean',
+            'corrective_action' => 'nullable|string',
+            'notes' => 'nullable|string',
+        ]);
+
+        $check->update($validated);
+
+        return redirect()->back()->with('success', 'อัปเดตข้อมูล Environment Check เรียบร้อยแล้ว');
+    }
+
     // ==========================================
     // DEVICE DAYS
     // ==========================================
@@ -607,7 +709,7 @@ class IcController extends Controller
             $query->whereYear('record_date', $request->year);
         }
 
-        $records = $query->orderBy('record_date', 'desc')->paginate(15);
+        $records = $this->icReports->decorate($query->orderBy('record_date', 'desc')->paginate(15));
 
         // Monthly summary
         $monthlySummary = IcDeviceDay::selectRaw('
@@ -626,6 +728,7 @@ class IcController extends Controller
             'records' => $records,
             'monthlySummary' => $monthlySummary,
             'filters' => $request->only(['ward', 'month', 'year']),
+            'charts' => $this->moduleCharts('device-days', $request),
         ]);
     }
 
@@ -657,6 +760,38 @@ class IcController extends Controller
         return redirect()->back()->with('success', 'บันทึกข้อมูล Device Days เรียบร้อยแล้ว');
     }
 
+    public function updateDeviceDays(Request $request, IcDeviceDay $deviceDay)
+    {
+        $this->icReports->authorizeOwner($deviceDay->reporter_id);
+
+        $validated = $request->validate([
+            'record_date' => 'required|date',
+            'ward_name' => 'required|string',
+            'patient_days' => 'required|integer|min:0',
+            'urinary_catheter_days' => 'required|integer|min:0',
+            'central_line_days' => 'required|integer|min:0',
+            'ventilator_days' => 'required|integer|min:0',
+            'peripheral_iv_days' => 'nullable|integer|min:0',
+            'ng_tube_days' => 'nullable|integer|min:0',
+            'notes' => 'nullable|string',
+        ]);
+
+        $duplicate = IcDeviceDay::where('record_date', $validated['record_date'])
+            ->where('ward_name', $validated['ward_name'])
+            ->where('id', '!=', $deviceDay->id)
+            ->exists();
+
+        if ($duplicate) {
+            return redirect()->back()->withErrors([
+                'record_date' => 'มีรายการของหอนี้ในวันเดียวกันอยู่แล้ว',
+            ]);
+        }
+
+        $deviceDay->update($validated);
+
+        return redirect()->back()->with('success', 'อัปเดตข้อมูล Device Days เรียบร้อยแล้ว');
+    }
+
     // ==========================================
     // ANTIBIOTIC STEWARDSHIP
     // ==========================================
@@ -674,7 +809,7 @@ class IcController extends Controller
             $query->where('ward_name', $request->ward);
         }
 
-        $records = $query->orderBy('start_date', 'desc')->paginate(15);
+        $records = $this->icReports->decorate($query->orderBy('start_date', 'desc')->paginate(15));
 
         $stats = [
             'total_records' => IcAntibioticUse::count(),
@@ -693,6 +828,7 @@ class IcController extends Controller
             'records' => $records,
             'stats' => $stats,
             'filters' => $request->only(['appropriateness', 'antibiotic_class', 'ward']),
+            'charts' => $this->moduleCharts('antibiotic', $request),
         ]);
     }
 
@@ -731,6 +867,34 @@ class IcController extends Controller
         ]);
 
         return redirect()->back()->with('success', 'บันทึกข้อมูลการใช้ยาปฏิชีวนะเรียบร้อยแล้ว');
+    }
+
+    public function updateAntibiotic(Request $request, IcAntibioticUse $antibioticUse)
+    {
+        $this->icReports->authorizeOwner($antibioticUse->reporter_id);
+
+        $validated = $request->validate([
+            'hn' => 'required|string',
+            'an' => 'nullable|string',
+            'patient_name' => 'required|string',
+            'ward_name' => 'required|string',
+            'start_date' => 'required|date',
+            'end_date' => 'nullable|date',
+            'antibiotic_name' => 'required|string',
+            'antibiotic_class' => 'nullable|string',
+            'route' => 'required|string',
+            'dose' => 'nullable|string',
+            'frequency' => 'nullable|string',
+            'indication' => 'required|string',
+            'culture_site' => 'nullable|string',
+            'organism' => 'nullable|string',
+            'sensitivity_pattern' => 'nullable|string',
+            'notes' => 'nullable|string',
+        ]);
+
+        $antibioticUse->update($validated);
+
+        return redirect()->back()->with('success', 'อัปเดตข้อมูลการใช้ยาปฏิชีวนะเรียบร้อยแล้ว');
     }
 
     public function reviewAntibiotic(Request $request, IcAntibioticUse $record)
@@ -785,7 +949,12 @@ class IcController extends Controller
             $query->where('status', $request->status);
         }
 
-        $outbreaks = $query->orderBy('detection_date', 'desc')->paginate(10);
+        $outbreaks = $this->icReports->decorate($query->orderBy('detection_date', 'desc')->paginate(10), 'reported_by');
+        $outbreaks->getCollection()->each(function ($outbreak) {
+            $outbreak->cases->each(function ($case) use ($outbreak) {
+                $case->setAttribute('can_edit', (bool) $outbreak->can_edit);
+            });
+        });
 
         $stats = [
             'total_outbreaks' => IcOutbreak::count(),
@@ -808,6 +977,7 @@ class IcController extends Controller
             'outbreaks' => $outbreaks,
             'stats' => $stats,
             'filters' => $request->only(['status']),
+            'charts' => $this->moduleCharts('outbreak', $request),
         ]);
     }
 
@@ -837,9 +1007,17 @@ class IcController extends Controller
 
     public function updateOutbreak(Request $request, IcOutbreak $outbreak)
     {
+        $this->icReports->authorizeOwner($outbreak->reported_by);
+
         $validated = $request->validate([
-            'status' => 'required|in:investigating,active,controlled,resolved',
+            'outbreak_name' => 'required|string',
+            'detection_date' => 'required|date',
             'resolved_date' => 'nullable|date',
+            'pathogen' => 'nullable|string',
+            'affected_area' => 'required|string',
+            'severity' => 'required|in:minor,moderate,major,critical',
+            'status' => 'required|in:investigating,active,controlled,resolved',
+            'source_investigation' => 'nullable|string',
             'control_measures' => 'nullable|string',
             'lessons_learned' => 'nullable|string',
         ]);
@@ -885,6 +1063,7 @@ class IcController extends Controller
             'onset_date' => 'required|date',
             'symptoms' => 'nullable|string',
             'is_index_case' => 'nullable|boolean',
+            'outcome' => 'nullable|in:recovered,ongoing,deceased,transferred',
         ]);
 
         $outbreak->cases()->create([
@@ -894,7 +1073,7 @@ class IcController extends Controller
             'symptom_onset_date' => $validated['onset_date'],
             'symptoms' => $validated['symptoms'],
             'is_index_case' => $validated['is_index_case'] ?? false,
-            'outcome' => 'ongoing',
+            'outcome' => $validated['outcome'] ?? 'ongoing',
         ]);
 
         // Update outbreak counts
@@ -904,9 +1083,31 @@ class IcController extends Controller
         return redirect()->back()->with('success', 'เพิ่ม Case เรียบร้อยแล้ว');
     }
 
-    // ==========================================
-    // EDUCATION
-    // ==========================================
+    public function updateOutbreakCase(Request $request, IcOutbreak $outbreak, IcOutbreakCase $case)
+    {
+        abort_unless($case->outbreak_id === $outbreak->id, 404);
+        $this->icReports->authorizeOwner($outbreak->reported_by);
+
+        $validated = $request->validate([
+            'hn' => 'nullable|string',
+            'patient_name' => 'required|string',
+            'onset_date' => 'required|date',
+            'symptoms' => 'nullable|string',
+            'is_index_case' => 'nullable|boolean',
+            'outcome' => 'required|in:recovered,ongoing,deceased,transferred',
+        ]);
+
+        $case->update([
+            'hn' => $validated['hn'] ?? null,
+            'patient_name' => $validated['patient_name'],
+            'symptom_onset_date' => $validated['onset_date'],
+            'symptoms' => $validated['symptoms'] ?? null,
+            'is_index_case' => $validated['is_index_case'] ?? false,
+            'outcome' => $validated['outcome'],
+        ]);
+
+        return redirect()->back()->with('success', 'อัปเดต Case เรียบร้อยแล้ว');
+    }
     public function education(Request $request)
     {
         $query = IcEducationRecord::with(['creator', 'attendees']);
@@ -926,7 +1127,12 @@ class IcController extends Controller
             $query->whereYear('training_date', (int) $year)->whereMonth('training_date', (int) $month);
         }
 
-        $records = $query->orderBy('training_date', 'desc')->paginate(10);
+        $records = $this->icReports->decorate($query->orderBy('training_date', 'desc')->paginate(10), 'created_by');
+        $records->getCollection()->each(function ($record) {
+            $record->attendees->each(function ($attendee) use ($record) {
+                $attendee->setAttribute('can_edit', (bool) $record->can_edit);
+            });
+        });
 
         $stats = [
             'total_trainings' => IcEducationRecord::count(),
@@ -968,6 +1174,7 @@ class IcController extends Controller
                 'training_type' => $request->query('training_type', ''),
                 'month' => $request->query('month', ''),
             ],
+            'charts' => $this->moduleCharts('education', $request),
         ]);
     }
 
@@ -1005,6 +1212,38 @@ class IcController extends Controller
         return redirect()->back()->with('success', 'บันทึกข้อมูลการอบรมเรียบร้อยแล้ว');
     }
 
+    public function updateEducation(Request $request, IcEducationRecord $education)
+    {
+        $this->icReports->authorizeOwner($education->created_by);
+
+        $validated = $request->validate([
+            'topic' => 'required|string',
+            'training_type' => 'required|string',
+            'target_audience' => 'required|string',
+            'trainer_name' => 'required|string',
+            'training_date' => 'required|date',
+            'duration_hours' => 'required|numeric|min:0.5',
+            'location' => 'nullable|string',
+            'objectives' => 'nullable|string',
+            'description' => 'nullable|string',
+        ]);
+
+        $education->update([
+            'training_title' => $validated['topic'],
+            'training_date' => $validated['training_date'],
+            'training_type' => $validated['training_type'],
+            'topic' => $validated['topic'],
+            'target_audience' => $validated['target_audience'],
+            'trainer_name' => $validated['trainer_name'],
+            'duration_hours' => $validated['duration_hours'],
+            'location' => $validated['location'] ?? null,
+            'content_summary' => $validated['objectives'] ?? null,
+            'notes' => $validated['description'] ?? null,
+        ]);
+
+        return redirect()->back()->with('success', 'อัปเดตข้อมูลการอบรมเรียบร้อยแล้ว');
+    }
+
     public function storeEducationAttendee(Request $request, IcEducationRecord $education)
     {
         $validated = $request->validate([
@@ -1035,6 +1274,35 @@ class IcController extends Controller
         ]);
 
         return redirect()->back()->with('success', 'เพิ่มผู้เข้าอบรมเรียบร้อยแล้ว');
+    }
+
+    public function updateEducationAttendee(Request $request, IcEducationRecord $education, IcEducationAttendee $attendee)
+    {
+        abort_unless($attendee->education_record_id === $education->id, 404);
+        $this->icReports->authorizeOwner($education->created_by);
+
+        $validated = $request->validate([
+            'employee_name' => 'required|string',
+            'department' => 'required|string',
+            'post_test_score' => 'nullable|numeric|min:0|max:100',
+        ]);
+
+        $attendee->update([
+            'attendee_name' => $validated['employee_name'],
+            'department' => $validated['department'],
+            'post_test_score' => $validated['post_test_score'] ?? null,
+            'passed' => ($validated['post_test_score'] ?? 0) >= 80,
+        ]);
+
+        $participants = $education->attendees()->count();
+        $passed = $education->attendees()->where('passed', true)->count();
+        $education->update([
+            'total_participants' => $participants,
+            'total_passed' => $passed,
+            'pass_rate' => $participants > 0 ? round(($passed / $participants) * 100, 2) : 0,
+        ]);
+
+        return redirect()->back()->with('success', 'อัปเดตผู้เข้าอบรมเรียบร้อยแล้ว');
     }
 
     // ==========================================
@@ -1084,6 +1352,8 @@ class IcController extends Controller
             'antibiotic_stats' => $antibioticStats,
             'summary' => $summary,
             'targets' => $targets,
+            'charts' => $this->icReports->charts('overview', $startDate, $endDate),
+            'modules' => $this->icReports->moduleCards($startDate, $endDate),
         ]);
     }
 
@@ -1216,10 +1486,62 @@ class IcController extends Controller
         return ($data?->total_opp ?? 0) > 0 ? round(($data->total_comp / $data->total_opp) * 100, 1) : 0;
     }
 
-    public function exportReports(Request $request)
+    public function exportReports(Request $request, ThaiPdfService $pdf)
     {
-        // For now, return a simple response - can implement PDF/Excel export later
-        return response()->json(['message' => 'Export functionality will be implemented']);
+        return $this->exportPdf($request, $pdf);
+    }
+
+    public function exportPdf(Request $request, ThaiPdfService $pdf)
+    {
+        $module = $request->input('module', 'overview');
+        if (! array_key_exists($module, IcReportService::MODULES)) {
+            $module = 'overview';
+        }
+
+        [$startDate, $endDate] = $this->icReports->resolvePeriod(
+            $request->input('start_date'),
+            $request->input('end_date')
+        );
+
+        [$fontRegularUri, $fontBoldUri] = $pdf->fontUris();
+        $document = $this->icReports->document($module, $startDate, $endDate);
+        $html = view('ic.report-pdf', [
+            'hospitalName' => IcReportService::HOSPITAL_NAME,
+            'document' => $document,
+            'fontRegularUri' => $fontRegularUri,
+            'fontBoldUri' => $fontBoldUri,
+        ])->render();
+
+        $filename = 'IC-'.$module.'-'.$startDate.'-'.$endDate.'.pdf';
+
+        return response($pdf->render($html, 'landscape', true), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="'.$filename.'"',
+        ]);
+    }
+
+    private function moduleCharts(string $module, Request $request): array
+    {
+        [$start, $end] = $this->icReports->resolvePeriod(
+            $request->input('date_from', $request->input('start_date')),
+            $request->input('date_to', $request->input('end_date'))
+        );
+
+        return $this->icReports->charts($module, $start, $end);
+    }
+
+    private function normalizeIndicatorPassed(Request $request): void
+    {
+        if (! $request->exists('indicator_passed')) {
+            return;
+        }
+
+        $raw = $request->input('indicator_passed');
+        $request->merge([
+            'indicator_passed' => ($raw === '' || $raw === null)
+                ? null
+                : filter_var($raw, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE),
+        ]);
     }
 
     // ==========================================

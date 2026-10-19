@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Pharmacy;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Pharmacy\Concerns\ResolvesPharmacyCatalog;
 use App\Models\Pharmacy\PharmacyDispenseSync;
 use App\Models\Pharmacy\PharmacyItem;
 use App\Models\Pharmacy\PharmacyItemBarcode;
@@ -24,6 +25,8 @@ use Inertia\Response;
 
 class PharmacyInventoryController extends Controller
 {
+    use ResolvesPharmacyCatalog;
+
     public function __construct(
         private readonly PharmacyInventoryService $inventory,
         private readonly PharmacyDispenseSyncService $dispenseSync,
@@ -32,7 +35,7 @@ class PharmacyInventoryController extends Controller
     public function index(): Response
     {
         return Inertia::render('Pharmacy/Inventory/Index', [
-            'summary' => $this->inventory->dashboardSummary(),
+            'summary' => $this->inventory->dashboardSummary($this->catalog()),
         ]);
     }
 
@@ -42,10 +45,11 @@ class PharmacyInventoryController extends Controller
         $locationId = $request->integer('location_id') ?: null;
         $q = trim((string) $request->query('q', ''));
         $specialType = $request->query('special_type');
-        $itemType = $request->query('item_type', 'all');
+        $itemType = $this->catalog();
         $expiryFilter = $request->query('expiry', 'all');
 
-        $query = PharmacyStockBalance::query()->with(['item', 'location']);
+        $query = PharmacyStockBalance::query()->with(['item', 'location'])
+            ->whereHas('item', fn ($item) => $item->ofCatalog($itemType));
         if ($locationId) {
             $query->where('location_id', $locationId);
         }
@@ -53,11 +57,6 @@ class PharmacyInventoryController extends Controller
             $query->whereHas('item', function ($b) use ($q) {
                 $b->where('icode', 'like', "%{$q}%")->orWhere('name', 'like', "%{$q}%");
             });
-        }
-        if ($itemType === 'drug') {
-            $query->whereHas('item', fn ($iq) => $iq->where('item_type', 'drug')->orWhereNull('item_type'));
-        } elseif ($itemType === 'nondrug') {
-            $query->whereHas('item', fn ($iq) => $iq->where('item_type', 'nondrug'));
         }
         if ($specialType === 'had') {
             $query->whereHas('item', fn ($iq) => $iq->where('is_had', true));
@@ -167,10 +166,40 @@ class PharmacyInventoryController extends Controller
             $filteredRows = $allRows->filter(fn ($r) => $r['days_until_expiry'] !== null && $r['days_until_expiry'] < 0)->values();
         }
 
+        $hosxpMatches = [];
+        if ($q !== '') {
+            $stockedIcodes = PharmacyStockBalance::query()
+                ->whereHas('item', function ($item) use ($itemType, $q) {
+                    $item->ofCatalog($itemType)->where(function ($inner) use ($q) {
+                        $inner->where('icode', 'like', "%{$q}%")->orWhere('name', 'like', "%{$q}%");
+                    });
+                })
+                ->with('item:id,icode')
+                ->get()
+                ->pluck('item.icode')
+                ->filter()
+                ->unique()
+                ->all();
+            $hosxpMatches = collect($this->inventory->searchHosxpDrugs($q, 30, $itemType))
+                ->reject(fn (array $hit) => in_array((string) ($hit['icode'] ?? ''), $stockedIcodes, true))
+                ->map(fn (array $hit) => [
+                    'icode' => (string) ($hit['icode'] ?? ''),
+                    'name' => (string) ($hit['name'] ?? ''),
+                    'unit' => $hit['unit'] ?? null,
+                    'strength' => $hit['strength'] ?? null,
+                    'item_type' => $hit['item_type'] ?? $itemType,
+                    'income_name' => $hit['income_name'] ?? null,
+                ])
+                ->filter(fn (array $hit) => $hit['icode'] !== '')
+                ->values()
+                ->all();
+        }
+
         return Inertia::render('Pharmacy/Inventory/Stock', [
             'rows' => $filteredRows->values()->all(),
+            'hosxpMatches' => $hosxpMatches,
             'stats' => $stats,
-            'locations' => PharmacyLocation::query()->where('is_active', true)->orderBy('sort_order')->get(['id', 'code', 'name', 'type']),
+            'locations' => $this->catalogLocations(true)->get(['id', 'code', 'name', 'type']),
             'filters' => [
                 'location_id' => $locationId,
                 'q' => $q,
@@ -186,9 +215,10 @@ class PharmacyInventoryController extends Controller
         $this->inventory->ensureDefaultLocations();
 
         return Inertia::render('Pharmacy/Inventory/Receive', [
-            'locations' => PharmacyLocation::query()->where('is_active', true)->orderBy('sort_order')->get(['id', 'code', 'name', 'type']),
+            'locations' => $this->catalogLocations()->get(['id', 'code', 'name', 'type']),
             'packagingTypes' => PharmacyPackagingType::query()->where('is_active', true)->orderBy('sort_order')->get(['id', 'code', 'name']),
             'initialBarcode' => request()->query('barcode'),
+            'initialIcode' => request()->query('icode'),
         ]);
     }
 
@@ -218,7 +248,7 @@ class PharmacyInventoryController extends Controller
             'min_level' => 'nullable|numeric|min:0',
         ]);
 
-        $lot = $this->inventory->receive($data);
+        $lot = $this->inventory->receive($data + ['catalog' => $this->catalog()]);
 
         // หากมีการระบุบาร์โค้ด ให้ผูกบาร์โค้ดเข้ากับยานี้ทันที
         if (! empty($data['barcode'])) {
@@ -235,9 +265,11 @@ class PharmacyInventoryController extends Controller
             );
         }
 
+        $noun = $this->catalog() === 'nondrug' ? 'เวชภัณฑ์' : 'ยา';
+
         return redirect()
-            ->route('pharmacy.inventory.lots.show', $lot->id)
-            ->with('success', 'รับเข้ายาและสร้าง QR lot แล้ว');
+            ->route($this->catalogRoute('lots.show'), $lot->id)
+            ->with('success', "รับเข้า{$noun}และสร้าง QR lot แล้ว");
     }
 
     public function transferForm(): Response
@@ -245,7 +277,7 @@ class PharmacyInventoryController extends Controller
         $this->inventory->ensureDefaultLocations();
 
         return Inertia::render('Pharmacy/Inventory/Transfer', [
-            'locations' => PharmacyLocation::query()->where('is_active', true)->orderBy('sort_order')->get(['id', 'code', 'name', 'type']),
+            'locations' => $this->catalogLocations(true)->get(['id', 'code', 'name', 'type']),
             'packagingTypes' => PharmacyPackagingType::query()->where('is_active', true)->orderBy('sort_order')->get(['id', 'code', 'name']),
             'initialBarcode' => request()->query('barcode'),
         ]);
@@ -265,21 +297,30 @@ class PharmacyInventoryController extends Controller
             'packaging_chain.*.packaging_type_id' => 'nullable|exists:pharmacy_packaging_types,id',
             'packaging_chain.*.barcode' => 'nullable|string|max:150',
             'note' => 'nullable|string|max:2000',
+            'transferred_at' => ['required', 'date', 'before_or_equal:'.now('Asia/Bangkok')->toDateString()],
         ]);
 
-        $result = $this->inventory->transfer(
-            (int) $data['from_location_id'],
-            (int) $data['to_location_id'],
-            (string) $data['icode'],
-            (float) $data['qty'],
-            isset($data['unit_id']) ? (int) $data['unit_id'] : null,
-            $data['note'] ?? null,
-            $data['packaging_chain'] ?? null,
-        );
+        try {
+            $result = $this->inventory->transfer(
+                (int) $data['from_location_id'],
+                (int) $data['to_location_id'],
+                (string) $data['icode'],
+                (float) $data['qty'],
+                isset($data['unit_id']) ? (int) $data['unit_id'] : null,
+                $data['note'] ?? null,
+                $data['packaging_chain'] ?? null,
+                $this->catalog(),
+                (string) $data['transferred_at'],
+            );
+        } catch (\RuntimeException $e) {
+            return back()->withInput()->withErrors(['qty' => $e->getMessage()]);
+        }
+
+        $noun = $this->catalog() === 'nondrug' ? 'เวชภัณฑ์' : 'ยา';
 
         return redirect()
-            ->route('pharmacy.inventory.index')
-            ->with('success', 'เบิกยา '.$result['qty'].' หน่วย จาก '.$result['from']->name.' → '.$result['to']->name);
+            ->route($this->catalogRoute('index'))
+            ->with('success', 'เบิก'.$noun.' '.$result['qty'].' หน่วย จาก '.$result['from']->name.' → '.$result['to']->name);
     }
 
     public function lots(Request $request): Response
@@ -288,7 +329,9 @@ class PharmacyInventoryController extends Controller
         $locationId = $request->integer('location_id') ?: null;
         $status = trim((string) $request->query('status', ''));
 
-        $query = PharmacyLot::query()->with(['item', 'location', 'receivedUnit'])->latest('id');
+        $query = PharmacyLot::query()->with(['item', 'location', 'receivedUnit'])
+            ->whereHas('item', fn ($item) => $item->ofCatalog($this->catalog()))
+            ->latest('id');
         if ($q !== '') {
             $query->where(function ($b) use ($q) {
                 $b->where('lot_no', 'like', "%{$q}%")
@@ -353,7 +396,7 @@ class PharmacyInventoryController extends Controller
 
         return Inertia::render('Pharmacy/Inventory/Lots', [
             'lots' => $lots,
-            'locations' => PharmacyLocation::query()->where('is_active', true)->orderBy('sort_order')->get(['id', 'name', 'code', 'type']),
+            'locations' => $this->catalogLocations(true)->get(['id', 'name', 'code', 'type']),
             'filters' => [
                 'q' => $q,
                 'location_id' => $locationId,
@@ -365,10 +408,12 @@ class PharmacyInventoryController extends Controller
     public function lotShow(PharmacyLot $lot): Response
     {
         $lot->load(['item.units', 'location', 'receiver', 'receivedUnit']);
+        $lotCatalog = $lot->item?->isNondrug() ? 'nondrug' : 'drug';
+        abort_unless($lotCatalog === $this->catalog(), 404);
 
         return Inertia::render('Pharmacy/Inventory/LotShow', [
             'hospitalName' => PharmacySetting::query()->where('key', 'hospital_label_header')->value('value') ?: 'โรงพยาบาลค่ายสุรสิงหนาท',
-            'locations' => PharmacyLocation::query()->where('is_active', true)->orderBy('sort_order')->get(['id', 'name', 'code', 'type']),
+            'locations' => $this->catalogLocations(true)->get(['id', 'name', 'code', 'type']),
             'units' => $lot->item?->units ?? [],
             'lot' => [
                 'id' => $lot->id,
@@ -496,21 +541,31 @@ class PharmacyInventoryController extends Controller
             $status = 'active';
         }
 
+        $invoiceUnitPrice = isset($validated['invoice_unit_price']) && $validated['invoice_unit_price'] !== ''
+            ? (float) $validated['invoice_unit_price']
+            : null;
+        $packageQty = isset($validated['received_package_qty']) && $validated['received_package_qty'] !== ''
+            ? (float) $validated['received_package_qty']
+            : ($lot->received_package_qty !== null ? (float) $lot->received_package_qty : null);
+        $invoiceTotalPrice = $invoiceUnitPrice !== null && $packageQty !== null
+            ? round($packageQty * $invoiceUnitPrice, 2)
+            : null;
+
         $lot->update([
             'lot_no' => trim($validated['lot_no']),
             'location_id' => $newLocationId,
             'received_at' => $validated['received_at'] ?? null,
             'expires_at' => $validated['expires_at'] ?? null,
             'received_unit_id' => $validated['received_unit_id'] ?? $lot->received_unit_id,
-            'received_package_qty' => isset($validated['received_package_qty']) && $validated['received_package_qty'] !== '' ? (float) $validated['received_package_qty'] : $lot->received_package_qty,
+            'received_package_qty' => $packageQty,
             'unit_factor' => isset($validated['unit_factor']) && $validated['unit_factor'] !== '' ? (float) $validated['unit_factor'] : ((float) ($lot->unit_factor ?: 1.0)),
             'qty_received' => isset($validated['qty_received']) && $validated['qty_received'] !== '' ? (float) $validated['qty_received'] : ((float) ($lot->qty_received ?: $newQtyRemaining)),
             'qty_remaining' => $newQtyRemaining,
             'supplier' => $validated['supplier'] ?? null,
             'invoice_no' => $validated['invoice_no'] ?? null,
             'invoice_date' => $validated['invoice_date'] ?? null,
-            'invoice_unit_price' => isset($validated['invoice_unit_price']) && $validated['invoice_unit_price'] !== '' ? (float) $validated['invoice_unit_price'] : null,
-            'invoice_total_price' => isset($validated['invoice_total_price']) && $validated['invoice_total_price'] !== '' ? (float) $validated['invoice_total_price'] : null,
+            'invoice_unit_price' => $invoiceUnitPrice,
+            'invoice_total_price' => $invoiceTotalPrice,
             'status' => $status,
             'notes' => $validated['notes'] ?? null,
         ]);
@@ -548,7 +603,7 @@ class PharmacyInventoryController extends Controller
 
         $lot->delete();
 
-        return redirect()->route('pharmacy.inventory.lots')->with('success', "ลบ Lot {$lotNo} ({$itemName}) และรหัส QR เรียบร้อยแล้ว");
+        return redirect()->route($this->catalogRoute('lots'))->with('success', "ลบ Lot {$lotNo} ({$itemName}) และรหัส QR เรียบร้อยแล้ว");
     }
 
     public function lotRegenerateQr(PharmacyLot $lot): RedirectResponse
@@ -562,6 +617,7 @@ class PharmacyInventoryController extends Controller
     {
         $rows = PharmacyStockMovement::query()
             ->with(['item', 'lot', 'fromLocation', 'toLocation', 'user'])
+            ->whereHas('item', fn ($item) => $item->ofCatalog($this->catalog()))
             ->latest('id')
             ->limit(200)
             ->get()
@@ -596,13 +652,13 @@ class PharmacyInventoryController extends Controller
         $q = trim((string) $request->query('q', ''));
 
         return response()->json([
-            'data' => $this->inventory->searchHosxpDrugs($q),
+            'data' => $this->inventory->searchHosxpDrugs($q, 30, $this->catalog()),
         ]);
     }
 
     public function itemUnits(string $icode)
     {
-        $item = $this->inventory->resolveItemFromHosxp($icode);
+        $item = $this->inventory->resolveItemFromHosxp($icode, $this->catalog());
         $item->load(['units.parentUnit', 'units.packagingType', 'units.barcodes']);
 
         return response()->json([
@@ -633,7 +689,7 @@ class PharmacyInventoryController extends Controller
     public function syncDispense(Request $request)
     {
         $date = $request->input('date') ?: now('Asia/Bangkok')->toDateString();
-        $result = $this->dispenseSync->sync(is_string($date) ? $date : null);
+        $result = $this->dispenseSync->sync(is_string($date) ? $date : null, null, $this->catalog());
 
         return back()->with($result['ok'] ? 'success' : 'error', $result['message']);
     }
@@ -768,7 +824,7 @@ class PharmacyInventoryController extends Controller
     public function stockCard(Request $request): Response
     {
         $this->inventory->ensureDefaultLocations();
-        $locations = PharmacyLocation::query()->where('is_active', true)->orderBy('sort_order')->get(['id', 'code', 'name', 'type']);
+        $locations = $this->catalogLocations(true)->get(['id', 'code', 'name', 'type']);
         $locationId = $request->integer('location_id') ?: null;
         $icode = trim((string) $request->query('icode', ''));
         $startDate = $request->query('start_date') ?: now('Asia/Bangkok')->startOfMonth()->toDateString();
@@ -788,14 +844,14 @@ class PharmacyInventoryController extends Controller
 
         if (! $item && ! empty($icode)) {
             try {
-                $item = $this->inventory->resolveItemFromHosxp($icode);
+                $item = $this->inventory->resolveItemFromHosxp($icode, $this->catalog());
             } catch (\Throwable) {}
 
             if (! $item) {
                 try {
-                    $found = $this->inventory->searchHosxpDrugs($icode, 1);
+                    $found = $this->inventory->searchHosxpDrugs($icode, 1, $this->catalog());
                     if (! empty($found[0]['icode'])) {
-                        $item = $this->inventory->resolveItemFromHosxp($found[0]['icode']);
+                        $item = $this->inventory->resolveItemFromHosxp($found[0]['icode'], $this->catalog());
                     }
                 } catch (\Throwable) {}
             }
@@ -980,14 +1036,15 @@ class PharmacyInventoryController extends Controller
     public function batchLabels(Request $request): Response
     {
         $this->inventory->ensureDefaultLocations();
-        $locations = PharmacyLocation::query()->where('is_active', true)->orderBy('sort_order')->get(['id', 'name', 'type']);
+        $locations = $this->catalogLocations(true)->get(['id', 'name', 'type']);
         $locationId = $request->integer('location_id') ?: null;
         $q = trim((string) $request->query('q', ''));
 
         $query = PharmacyLot::query()
             ->with(['item.units', 'location'])
             ->where('status', 'active')
-            ->where('qty_remaining', '>', 0);
+            ->where('qty_remaining', '>', 0)
+            ->whereHas('item', fn ($item) => $item->ofCatalog($this->catalog()));
 
         if ($locationId) {
             $query->where('location_id', $locationId);
@@ -1047,8 +1104,10 @@ class PharmacyInventoryController extends Controller
         $endDate = $request->query('end_date') ?: now('Asia/Bangkok')->toDateString();
         $status = $request->query('status');
 
+        $catalogIcodes = PharmacyItem::query()->ofCatalog($this->catalog())->select('icode');
         $query = PharmacyDispenseSync::query()
             ->with(['item'])
+            ->whereIn('icode', $catalogIcodes)
             ->where('vstdate', '>=', $startDate)
             ->where('vstdate', '<=', $endDate);
 
@@ -1058,11 +1117,14 @@ class PharmacyInventoryController extends Controller
 
         $syncs = $query->orderByDesc('id')->paginate(100)->withQueryString();
 
+        $statsBase = PharmacyDispenseSync::query()
+            ->whereIn('icode', PharmacyItem::query()->ofCatalog($this->catalog())->select('icode'))
+            ->whereBetween('vstdate', [$startDate, $endDate]);
         $stats = [
-            'total' => PharmacyDispenseSync::query()->whereBetween('vstdate', [$startDate, $endDate])->count(),
-            'synced' => PharmacyDispenseSync::query()->whereBetween('vstdate', [$startDate, $endDate])->where('status', 'deducted')->count(),
-            'insufficient' => PharmacyDispenseSync::query()->whereBetween('vstdate', [$startDate, $endDate])->where('status', 'insufficient')->count(),
-            'failed' => PharmacyDispenseSync::query()->whereBetween('vstdate', [$startDate, $endDate])->where('status', 'failed')->count(),
+            'total' => (clone $statsBase)->count(),
+            'synced' => (clone $statsBase)->where('status', 'deducted')->count(),
+            'insufficient' => (clone $statsBase)->where('status', 'insufficient')->count(),
+            'failed' => (clone $statsBase)->where('status', 'failed')->count(),
         ];
 
         return Inertia::render('Pharmacy/Inventory/DispenseSync', [
@@ -1079,7 +1141,7 @@ class PharmacyInventoryController extends Controller
     public function retryDispenseSync(Request $request)
     {
         $id = $request->integer('id') ?: null;
-        $result = $this->dispenseSync->retryFailed($id);
+        $result = $this->dispenseSync->retryFailed($id, null, $this->catalog());
 
         return back()->with($result['ok'] ? 'success' : 'error', $result['message']);
     }
@@ -1088,7 +1150,7 @@ class PharmacyInventoryController extends Controller
     public function analytics(Request $request): Response
     {
         $this->inventory->ensureDefaultLocations();
-        $locations = PharmacyLocation::query()->where('is_active', true)->orderBy('sort_order')->get(['id', 'name', 'type']);
+        $locations = $this->catalogLocations()->get(['id', 'name', 'type']);
         $locationId = $request->integer('location_id') ?: null;
 
         // 1. Calculate Average Daily Usage (ADU) over the last 90 days
@@ -1096,6 +1158,7 @@ class PharmacyInventoryController extends Controller
         $usageData = PharmacyStockMovement::query()
             ->select('item_id', DB::raw('SUM(qty) as total_dispensed'), DB::raw('COUNT(DISTINCT vstdate) as days_dispensed'))
             ->where('type', 'dispense')
+            ->whereHas('item', fn ($item) => $item->ofCatalog($this->catalog()))
             ->where('created_at', '>=', $ninetyDaysAgo . ' 00:00:00')
             ->when($locationId, fn ($q) => $q->where('from_location_id', $locationId))
             ->groupBy('item_id')
@@ -1105,6 +1168,7 @@ class PharmacyInventoryController extends Controller
         // 2. Fetch current balances with items
         $balances = PharmacyStockBalance::query()
             ->with(['item.lots' => fn ($lq) => $lq->where('status', 'active')->where('qty_remaining', '>', 0)])
+            ->whereHas('item', fn ($item) => $item->ofCatalog($this->catalog()))
             ->when($locationId, fn ($q) => $q->where('location_id', $locationId))
             ->get();
 
@@ -1185,6 +1249,7 @@ class PharmacyInventoryController extends Controller
         // Near-Expiry Lots (within 90 and 180 days)
         $nearExpiryLots = PharmacyLot::query()
             ->with(['item', 'location'])
+            ->whereHas('item', fn ($item) => $item->ofCatalog($this->catalog()))
             ->where('status', 'active')
             ->where('qty_remaining', '>', 0)
             ->whereNotNull('expires_at')
@@ -1236,16 +1301,14 @@ class PharmacyInventoryController extends Controller
 
     public function drugOut(Request $request): Response
     {
-        $locations = PharmacyLocation::query()
-            ->where('is_active', true)
-            ->orderBy('sort_order')
-            ->get();
+        $locations = $this->catalogLocations()->get();
 
         $selectedLocationId = (int) ($request->query('location_id') ?: $locations->firstWhere('type', 'pharmacy')?->id ?: $locations->first()?->id);
 
         $recentMovements = PharmacyStockMovement::query()
             ->with(['item', 'lot', 'fromLocation', 'toLocation', 'transactionUnit', 'user'])
             ->whereIn('type', ['dispense', 'return'])
+            ->whereHas('item', fn ($item) => $item->ofCatalog($this->catalog()))
             ->when($selectedLocationId, function ($q) use ($selectedLocationId) {
                 $q->where(function ($sq) use ($selectedLocationId) {
                     $sq->where('from_location_id', $selectedLocationId)
@@ -1393,7 +1456,7 @@ class PharmacyInventoryController extends Controller
         $item = PharmacyItem::query()->with('units')->where('icode', $icode)->first();
         if (!$item) {
             try {
-                $item = $this->inventory->resolveItemFromHosxp($icode);
+                $item = $this->inventory->resolveItemFromHosxp($icode, $this->catalog());
             } catch (\Throwable) {}
         }
         if (!$item) {
@@ -1413,6 +1476,21 @@ class PharmacyInventoryController extends Controller
             ->orderByRaw('CASE WHEN expires_at IS NULL THEN 1 ELSE 0 END')
             ->orderBy('expires_at')
             ->get(['id', 'lot_no', 'expires_at', 'qty_remaining']);
+
+        $otherLocations = PharmacyStockBalance::query()
+            ->with('location:id,name')
+            ->where('item_id', $item->id)
+            ->where('location_id', '!=', $locationId)
+            ->where('qty_on_hand', '>', 0)
+            ->whereHas('location', fn ($location) => $location->where('is_active', true))
+            ->orderByDesc('qty_on_hand')
+            ->get()
+            ->map(fn (PharmacyStockBalance $balance) => [
+                'id' => (int) $balance->location_id,
+                'name' => $balance->location?->name ?: 'คลัง',
+                'qty_on_hand' => (float) $balance->qty_on_hand,
+            ])
+            ->values();
 
         return response()->json([
             'found' => true,
@@ -1434,6 +1512,7 @@ class PharmacyInventoryController extends Controller
             'min_level' => (float) ($balance?->min_level ?? 0),
             'reorder_level' => (float) ($balance?->reorder_level ?? 0),
             'active_lots' => $lots,
+            'other_locations' => $otherLocations,
         ]);
     }
 }

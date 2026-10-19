@@ -2,7 +2,7 @@ import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Transition } from '@headlessui/react';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { FormEventHandler, useRef, useState } from 'react';
-import { Camera, MessageCircle, User } from 'lucide-react';
+import { Camera, MessageCircle, User, FileDown, BookOpen } from 'lucide-react';
 
 import DeleteUser from '@/components/delete-user';
 import DepartmentPicker from '@/components/department-picker';
@@ -161,6 +161,39 @@ export default function Profile({
                 )}
 
                 <div className="space-y-6">
+                    <div className="rounded-xl border border-slate-200/90 bg-gradient-to-r from-emerald-50/60 via-slate-50 to-blue-50/60 p-4 shadow-2xs">
+                        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="space-y-0.5">
+                                <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
+                                    <BookOpen className="h-4 w-4 text-emerald-600" />
+                                    คู่มือการใช้งานระบบ (เอกสาร PDF)
+                                </div>
+                                <p className="text-[11px] text-slate-500">
+                                    ดาวน์โหลดคู่มือสมัครสมาชิก หรือคู่มือการตั้งค่าโปรไฟล์ฉบับพิมพ์ A4
+                                </p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <Button asChild size="sm" variant="outline" className="h-8 rounded-lg border-emerald-200 text-emerald-800 hover:bg-emerald-50 text-xs">
+                                    <a href={route('settings.manuals.registration.download')} download>
+                                        <FileDown className="mr-1 h-3.5 w-3.5 text-emerald-600" />
+                                        คู่มือสมัครสมาชิก (PDF)
+                                    </a>
+                                </Button>
+                                <Button asChild size="sm" variant="outline" className="h-8 rounded-lg border-blue-200 text-blue-800 hover:bg-blue-50 text-xs">
+                                    <a href={route('settings.manuals.profile.download')} download>
+                                        <FileDown className="mr-1 h-3.5 w-3.5 text-blue-600" />
+                                        คู่มือตั้งค่าโปรไฟล์ (PDF)
+                                    </a>
+                                </Button>
+                                <Button asChild size="sm" variant="ghost" className="h-8 rounded-lg text-slate-600 hover:text-slate-900 text-xs">
+                                    <Link href={route('settings.manuals')}>
+                                        อ่านฉบับเต็ม
+                                    </Link>
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+
                     <HeadingSmall title="ข้อมูลโปรไฟล์" description="อัปเดตชื่อ ที่อยู่อีเมล แผนก และชื่อในแชท" />
 
                     <div className="mb-6 flex items-start gap-6">
@@ -261,7 +294,7 @@ export default function Profile({
                         )}
 
                         <div className="grid gap-2">
-                            <Label htmlFor="chat_display_name">ชื่อที่ใช้ใน FSHH Chat</Label>
+                            <Label htmlFor="chat_display_name">ชื่อที่ใช้ใน S-Chat</Label>
                             <Input
                                 id="chat_display_name"
                                 className="mt-1 block w-full"
@@ -312,7 +345,7 @@ export default function Profile({
                 <div className="space-y-6">
                     <HeadingSmall
                         title="เชื่อมระบบ LINE และแชท"
-                        description="ผูกบัญชี LINE เพื่อเข้า FSHH Chat และรับกลุ่มตามแผนก"
+                        description="ผูกบัญชี LINE เพื่อเข้า S-Chat และรับกลุ่มตามแผนก"
                     />
 
                     <div className="flex items-center justify-between rounded-lg border p-4">
@@ -374,7 +407,7 @@ export default function Profile({
                                 <p className="flex items-center gap-1">
                                     <MessageCircle className="h-4 w-4" />
                                     <a href={chatLiffUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
-                                        เปิด FSHH Chat
+                                        เปิด S-Chat
                                     </a>
                                 </p>
                             )}

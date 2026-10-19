@@ -77,14 +77,15 @@ class PharmacyMenusSeeder extends Seeder
         $children = [
             ['title' => 'ภาพรวมเภสัชกรรม', 'icon' => 'LayoutDashboard', 'route' => 'pharmacy.index', 'order' => 1, 'permission_name' => 'pharmacy.index'],
             ['title' => 'คลังยา / ห้องยา', 'icon' => 'Warehouse', 'route' => 'pharmacy.inventory.index', 'order' => 2, 'permission_name' => 'pharmacy.inventory.index'],
-            ['title' => 'แจ้งเตือนการใช้ยา', 'icon' => 'AlertTriangle', 'route' => 'pharmacy.drug-alerts', 'order' => 3, 'permission_name' => 'pharmacy.drug-alerts'],
-            ['title' => 'ตัวชี้วัด RDU', 'icon' => 'Activity', 'route' => 'rdu.index', 'order' => 4, 'permission_name' => 'rdu.index'],
-            ['title' => 'Case Audit', 'icon' => 'ClipboardList', 'route' => 'rdu.cases', 'order' => 5, 'permission_name' => 'rdu.cases'],
-            ['title' => 'การใช้ยารวม', 'icon' => 'Pill', 'route' => 'rdu.drugs', 'order' => 6, 'permission_name' => 'rdu.drugs'],
-            ['title' => 'ยาปฏิชีวนะ', 'icon' => 'Syringe', 'route' => 'rdu.drugs.antibiotics', 'order' => 7, 'permission_name' => 'rdu.drugs.antibiotics'],
-            ['title' => 'ตามแผนก/แพทย์', 'icon' => 'Building2', 'route' => 'rdu.drugs.by-department', 'order' => 8, 'permission_name' => 'rdu.drugs.by-department'],
-            ['title' => 'ภาพรวมการใช้ยา', 'icon' => 'LayoutDashboard', 'route' => 'drug-usage.index', 'order' => 9, 'permission_name' => 'drug-usage.index'],
-            ['title' => 'รายงานรายการยา', 'icon' => 'ClipboardList', 'route' => 'drug-usage.report', 'order' => 10, 'permission_name' => 'drug-usage.report'],
+            ['title' => 'คลังเวชภัณฑ์มิใช่ยา', 'icon' => 'Package', 'route' => 'pharmacy.supplies.index', 'order' => 3, 'permission_name' => 'pharmacy.inventory.index'],
+            ['title' => 'แจ้งเตือนการใช้ยา', 'icon' => 'AlertTriangle', 'route' => 'pharmacy.drug-alerts', 'order' => 4, 'permission_name' => 'pharmacy.drug-alerts'],
+            ['title' => 'ตัวชี้วัด RDU', 'icon' => 'Activity', 'route' => 'rdu.index', 'order' => 5, 'permission_name' => 'rdu.index'],
+            ['title' => 'Case Audit', 'icon' => 'ClipboardList', 'route' => 'rdu.cases', 'order' => 6, 'permission_name' => 'rdu.cases'],
+            ['title' => 'การใช้ยารวม', 'icon' => 'Pill', 'route' => 'rdu.drugs', 'order' => 7, 'permission_name' => 'rdu.drugs'],
+            ['title' => 'ยาปฏิชีวนะ', 'icon' => 'Syringe', 'route' => 'rdu.drugs.antibiotics', 'order' => 8, 'permission_name' => 'rdu.drugs.antibiotics'],
+            ['title' => 'ตามแผนก/แพทย์', 'icon' => 'Building2', 'route' => 'rdu.drugs.by-department', 'order' => 9, 'permission_name' => 'rdu.drugs.by-department'],
+            ['title' => 'ภาพรวมการใช้ยา', 'icon' => 'LayoutDashboard', 'route' => 'drug-usage.index', 'order' => 10, 'permission_name' => 'drug-usage.index'],
+            ['title' => 'รายงานรายการยา', 'icon' => 'ClipboardList', 'route' => 'drug-usage.report', 'order' => 11, 'permission_name' => 'drug-usage.report'],
         ];
 
         $validRoutes = collect($children)->pluck('route')->all();

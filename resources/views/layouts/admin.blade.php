@@ -6,7 +6,7 @@
     <title>Admin - TV Board</title>
     @vite(['resources/css/app.css', 'resources/js/app.tsx'])
 </head>
-<body class="font-sans antialiased text-slate-900 bg-slate-50">
+<body class="font-sans text-slate-900 bg-slate-50">
     <div class="min-h-screen flex flex-col">
         <!-- Top Navigation -->
         <header class="bg-white shadow-sm border-b">

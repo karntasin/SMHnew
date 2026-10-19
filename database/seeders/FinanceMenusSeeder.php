@@ -58,6 +58,13 @@ class FinanceMenusSeeder extends Seeder
                 'order' => 2,
                 'permission_name' => 'finance.revenue',
             ],
+            [
+                'title' => 'งานงบประมาณ',
+                'icon' => 'PieChart',
+                'route' => 'finance.budget',
+                'order' => 3,
+                'permission_name' => 'finance.budget',
+            ],
         ];
 
         $this->syncChildren($parent, $children, 'รายงานการเงิน');

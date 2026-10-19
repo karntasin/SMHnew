@@ -25,6 +25,7 @@ class CheckMenuPermission
             'dashboard.stats',
             'dashboard.monthly-visits',
             'dashboard.pdf',
+            'dashboard.department-daily-pdf',
             'dashboard.cv-risk-report',
         ], true)) {
             return $next($request);
@@ -81,6 +82,12 @@ class CheckMenuPermission
 
         if (method_exists($user, 'hasAnyRole') && $user->hasAnyRole(['admin', 'superUser'])) {
             return true;
+        }
+
+        if ($user->can('km.learn.dashboard') || $user->can('km.learn.hub')) {
+            if (str_starts_with($permissionName, 'km.learn.')) {
+                return true;
+            }
         }
 
         foreach ($this->legacyPermissionFallbacks($permissionName) as $fallback) {

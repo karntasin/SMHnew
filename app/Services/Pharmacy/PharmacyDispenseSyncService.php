@@ -3,6 +3,7 @@
 namespace App\Services\Pharmacy;
 
 use App\Models\Pharmacy\PharmacyDispenseSync;
+use App\Models\Pharmacy\PharmacyItem;
 use App\Models\Pharmacy\PharmacyLocation;
 use App\Services\HosxpConnectionService;
 use Illuminate\Support\Facades\DB;
@@ -21,19 +22,35 @@ class PharmacyDispenseSyncService
      *
      * @return array{ok:bool,message:string,scanned:int,deducted:int,skipped:int,insufficient:int}
      */
-    public function sync(?string $date = null, ?int $pharmacyLocationId = null): array
+    public function sync(?string $date = null, ?int $pharmacyLocationId = null, ?string $catalog = null): array
     {
+        if ($catalog === null) {
+            $drug = $this->sync($date, null, 'drug');
+            $supply = $this->sync($date, null, 'nondrug');
+
+            return [
+                'ok' => ($drug['ok'] ?? false) && ($supply['ok'] ?? false),
+                'message' => 'ยา: '.($drug['message'] ?? '').' | เวชภัณฑ์: '.($supply['message'] ?? ''),
+                'scanned' => (int) ($drug['scanned'] ?? 0) + (int) ($supply['scanned'] ?? 0),
+                'deducted' => (int) ($drug['deducted'] ?? 0) + (int) ($supply['deducted'] ?? 0),
+                'skipped' => (int) ($drug['skipped'] ?? 0) + (int) ($supply['skipped'] ?? 0),
+                'insufficient' => (int) ($drug['insufficient'] ?? 0) + (int) ($supply['insufficient'] ?? 0),
+            ];
+        }
+
+        $catalog = $this->inventory->normalizeCatalog($catalog);
         $this->inventory->ensureDefaultLocations();
         $date = $date ?: now('Asia/Bangkok')->toDateString();
+        $label = $catalog === 'nondrug' ? 'จุดจ่ายเวชภัณฑ์' : 'ห้องยา';
 
         $pharmacy = $pharmacyLocationId
-            ? PharmacyLocation::query()->where('type', 'pharmacy')->find($pharmacyLocationId)
-            : PharmacyLocation::query()->where('type', 'pharmacy')->where('is_active', true)->orderBy('sort_order')->first();
+            ? PharmacyLocation::query()->where('type', 'pharmacy')->where('catalog', $catalog)->find($pharmacyLocationId)
+            : $this->inventory->defaultDispenseLocation($catalog);
 
         if (! $pharmacy) {
             return [
                 'ok' => false,
-                'message' => 'ยังไม่มีตำแหน่งห้องยา',
+                'message' => "ยังไม่มีตำแหน่ง{$label}",
                 'scanned' => 0,
                 'deducted' => 0,
                 'skipped' => 0,
@@ -53,11 +70,13 @@ class PharmacyDispenseSyncService
             ];
         }
 
-        $trackedIcodes = DB::table('pharmacy_items')->pluck('icode')->filter()->values()->all();
+        $trackedIcodes = PharmacyItem::query()->ofCatalog($catalog)->pluck('icode')->filter()->values()->all();
         if ($trackedIcodes === []) {
+            $emptyLabel = $catalog === 'nondrug' ? 'เวชภัณฑ์' : 'ยา';
+
             return [
                 'ok' => true,
-                'message' => 'ยังไม่มีรายการยาในคลังแอป — รับเข้าก่อนจึงจะตัดจ่ายได้',
+                'message' => "ยังไม่มีรายการ{$emptyLabel}ในคลังแอป — รับเข้าก่อนจึงจะตัดจ่ายได้",
                 'scanned' => 0,
                 'deducted' => 0,
                 'skipped' => 0,
@@ -149,7 +168,7 @@ class PharmacyDispenseSyncService
 
         return [
             'ok' => true,
-            'message' => "สแกน {$rows->count()} · ตัดได้ {$deducted} · ข้าม {$skipped} · สต็อกไม่พอ {$insufficient}",
+            'message' => "{$label} สแกน {$rows->count()} · ตัดได้ {$deducted} · ข้าม {$skipped} · สต็อกไม่พอ {$insufficient}",
             'scanned' => $rows->count(),
             'deducted' => $deducted,
             'skipped' => $skipped,
@@ -162,18 +181,22 @@ class PharmacyDispenseSyncService
      *
      * @return array{ok:bool,message:string,retried:int,success:int}
      */
-    public function retryFailed(?int $id = null, ?int $pharmacyLocationId = null): array
+    public function retryFailed(?int $id = null, ?int $pharmacyLocationId = null, ?string $catalog = null): array
     {
+        $catalog = $this->inventory->normalizeCatalog($catalog);
         $this->inventory->ensureDefaultLocations();
+        $label = $catalog === 'nondrug' ? 'จุดจ่ายเวชภัณฑ์' : 'ห้องยา';
         $pharmacy = $pharmacyLocationId
-            ? PharmacyLocation::query()->where('type', 'pharmacy')->find($pharmacyLocationId)
-            : PharmacyLocation::query()->where('type', 'pharmacy')->where('is_active', true)->orderBy('sort_order')->first();
+            ? PharmacyLocation::query()->where('type', 'pharmacy')->where('catalog', $catalog)->find($pharmacyLocationId)
+            : $this->inventory->defaultDispenseLocation($catalog);
 
         if (! $pharmacy) {
-            return ['ok' => false, 'message' => 'ไม่พบคลังห้องยา', 'retried' => 0, 'success' => 0];
+            return ['ok' => false, 'message' => "ไม่พบ{$label}", 'retried' => 0, 'success' => 0];
         }
 
-        $query = PharmacyDispenseSync::query()->whereIn('status', ['insufficient', 'failed']);
+        $query = PharmacyDispenseSync::query()
+            ->whereIn('status', ['insufficient', 'failed'])
+            ->whereIn('icode', PharmacyItem::query()->ofCatalog($catalog)->select('icode'));
         if ($id) {
             $query->where('id', $id);
         }

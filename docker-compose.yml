@@ -1,0 +1,82 @@
+services:
+  app:
+    build:
+      context: ./docker/php
+      dockerfile: Dockerfile
+    container_name: smh_app
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - .:/var/www/html
+    environment:
+      - DB_DUMP_PATH=/usr/bin
+    networks:
+      - smh_network
+
+  web:
+    image: nginx:alpine
+    container_name: smh_web
+    restart: unless-stopped
+    ports:
+      # Phase 1 Staging Port (parallel with XAMPP). Change to "80:80" and "127.0.0.1:8081:80" for Phase 2 Cutover.
+      - "127.0.0.1:8085:80"
+    volumes:
+      - .:/var/www/html:ro
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - app
+    networks:
+      - smh_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: smh_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass smh_redis_secret
+    volumes:
+      - smh_redis_data:/data
+    networks:
+      - smh_network
+
+  queue:
+    build:
+      context: ./docker/php
+      dockerfile: Dockerfile
+    container_name: smh_queue
+    restart: unless-stopped
+    working_dir: /var/www/html
+    command: php artisan queue:work --sleep=3 --tries=3 --timeout=300
+    volumes:
+      - .:/var/www/html
+    environment:
+      - DB_DUMP_PATH=/usr/bin
+    depends_on:
+      - app
+      - redis
+    networks:
+      - smh_network
+
+  scheduler:
+    build:
+      context: ./docker/php
+      dockerfile: Dockerfile
+    container_name: smh_scheduler
+    restart: unless-stopped
+    working_dir: /var/www/html
+    command: sh -c "while true; do php /var/www/html/artisan schedule:run --verbose --no-interaction & sleep 60; done"
+    volumes:
+      - .:/var/www/html
+    environment:
+      - DB_DUMP_PATH=/usr/bin
+    depends_on:
+      - app
+    networks:
+      - smh_network
+
+volumes:
+  smh_redis_data:
+    driver: local
+
+networks:
+  smh_network:
+    driver: bridge

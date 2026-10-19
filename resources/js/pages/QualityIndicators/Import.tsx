@@ -192,7 +192,7 @@ export default function ImportPage({
             icon={FileSpreadsheet}
             badge="ศูนย์พัฒนาคุณภาพ · ตัวชี้วัด"
             title="นำเข้าตัวชี้วัดจาก Excel"
-            subtitle="ดาวน์โหลดเทมเพลต → เลือกองค์กร/แผนก/ทีม → ตรวจสอบตัวอย่าง → ยืนยันนำเข้า (มี log)"
+            subtitle="ดาวน์โหลดตาราง KPI ตามปี → เลือกองค์กร/แผนก/ทีม → ตรวจสอบตัวอย่าง → ยืนยันนำเข้า (มี log)"
             breadcrumbs={breadcrumbs}
             headTitle="นำเข้าตัวชี้วัด"
             actions={
@@ -217,7 +217,7 @@ export default function ImportPage({
             )}
 
             <div className="grid gap-4 md:grid-cols-3">
-                <StatCard label="ขั้นตอนที่ 1" value="เทมเพลต" sub="ดาวน์โหลดโครงสร้างไฟล์" icon={FileDown} tone="cyan" />
+                <StatCard label="ขั้นตอนที่ 1" value="เทมเพลต" sub="ตาราง KPI ตามปี" icon={FileDown} tone="cyan" />
                 <StatCard label="ขั้นตอนที่ 2" value="ตรวจสอบ" sub="ดูตัวอย่างก่อนนำเข้า" icon={AlertTriangle} tone="amber" />
                 <StatCard label="ขั้นตอนที่ 3" value="ยืนยัน + Log" sub="พิมพ์คำว่า ยืนยัน" icon={History} tone="emerald" />
             </div>
@@ -296,8 +296,8 @@ export default function ImportPage({
                             onChange={(e) => setData('file', e.target.files?.[0] ?? null)}
                         />
                         <p className="text-xs text-slate-500">
-                            ชีต <strong>indicators</strong> / <strong>entries</strong>: แถว 1 = หัวตาราง, แถว 2 = คำอธิบาย
-                            (ระบบข้าม), แถว 3 ขึ้นไป = ข้อมูล · ช่องที่ขึ้นต้นด้วย [ไม่บังคับ] เว้นว่างได้
+                            เทมเพลตปัจจุบันเป็นตาราง KPI ตามปี ไม่ต้องกรอกรหัส ระบบสร้างจากตัวย่อของแผนก ทีม หรือองค์กรที่เลือก
+                            ลบแถวตัวอย่างสีเหลืองก่อนนำเข้าจริง ไฟล์เดิมที่มีชีต indicators และ entries ยังอัปโหลดได้
                         </p>
                     </div>
 
@@ -364,10 +364,10 @@ export default function ImportPage({
                         </div>
                     )}
 
-                    <PreviewTable title="ชีต indicators" rows={preview.preview.indicators} cols={['code', 'name', 'unit', 'target_value', 'link_code']} />
+                    <PreviewTable title="ตัวชี้วัด" rows={preview.preview.indicators} cols={['code', 'name', 'unit', 'target_value', 'link_code']} />
                     <div className="mt-4">
                         <PreviewTable
-                            title="ชีต entries"
+                            title="ผลรายปี"
                             rows={preview.preview.entries}
                             cols={['code', 'period_date', 'numerator', 'denominator', 'result_value']}
                         />

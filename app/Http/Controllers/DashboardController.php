@@ -294,6 +294,42 @@ class DashboardController extends Controller
         ]);
     }
 
+    public function exportDepartmentDailyPdf(Request $request, ThaiPdfService $pdf)
+    {
+        $this->extendExecutionTime(180);
+        [$startDate, $endDate] = $this->parseDates($request);
+
+        if (! $this->hasHosxpConnection()) {
+            abort(503, 'ไม่สามารถเชื่อมต่อฐานข้อมูล HOSxP ได้');
+        }
+
+        $stats = $this->cachedBuildStats($startDate, $endDate);
+        [$fontRegularUri, $fontBoldUri] = $pdf->fontUris();
+
+        $html = view('dashboard.department-daily-pdf', [
+            'daily' => $stats['charts']['department_daily_average'] ?? [
+                'days' => 0,
+                'total' => 0,
+                'avg_per_day' => 0,
+                'departments' => [],
+            ],
+            'startDate' => $this->formatThaiDateLabel($startDate),
+            'endDate' => $this->formatThaiDateLabel($endDate),
+            'generatedAt' => $this->formatThaiDateLabel(date('Y-m-d')).' '.date('H:i'),
+            'appName' => config('app.name'),
+            'fontRegularUri' => $fontRegularUri,
+            'fontBoldUri' => $fontBoldUri,
+        ])->render();
+
+        return response($pdf->render($html, 'portrait'), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="department_daily_average_'.date('Ymd_His').'.pdf"',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma' => 'no-cache',
+            'Expires' => '0',
+        ]);
+    }
+
     private function buildVisitTrendChartSvgDataUri(iterable $rows): string
     {
         $rows = collect($rows)->values();
@@ -411,7 +447,7 @@ class DashboardController extends Controller
 
         $key = implode(':', [
             'dashboard_stats',
-            'dm_ht_vn_stat_v3',
+            'dm_ht_vn_stat_v4',
             app()->getLocale(),
             $startDate,
             $endDate,
@@ -462,6 +498,7 @@ class DashboardController extends Controller
         $todayOps = $this->buildTodayOperations($conn, $today, $monthStart);
         $departmentVisitsThisMonth = $this->buildDepartmentVisits($conn, $monthStart, $today);
         $departmentVisitsThisYear = $this->buildDepartmentVisits($conn, $yearStart, $today);
+        $departmentDailyAverage = $this->buildDepartmentDailyAverage($conn, $startDate, $endDate);
         $visitsYearTrend = $this->buildVisitsYearTrend($conn, $yearStart, $today);
         try {
             $appointments = $this->buildAppointmentStats($conn, $startDate, $endDate, $today);
@@ -696,6 +733,7 @@ class DashboardController extends Controller
                 'visits_monthly' => $visitsMonthly,
                 'department_visits_this_month' => $departmentVisitsThisMonth,
                 'department_visits_this_year' => $departmentVisitsThisYear,
+                'department_daily_average' => $departmentDailyAverage,
                 'visits_year_trend' => $visitsYearTrend,
                 'costs_yearly_last5' => $costsByYearLast5,
                 'costs_monthly' => $costsByMonth,
@@ -767,6 +805,47 @@ class DashboardController extends Controller
         }
 
         return $top;
+    }
+
+    private function inclusiveDayCount(string $startDate, string $endDate): int
+    {
+        $start = new \DateTime($startDate);
+        $end = new \DateTime($endDate);
+
+        return (int) $start->diff($end)->days + 1;
+    }
+
+    private function buildDepartmentDailyAverage($conn, string $startDate, string $endDate): array
+    {
+        $days = max(1, $this->inclusiveDayCount($startDate, $endDate));
+
+        $rows = $conn->table('ovst as o')
+            ->leftJoin('kskdepartment as dep', 'dep.depcode', '=', 'o.main_dep')
+            ->whereBetween('o.vstdate', [$startDate, $endDate])
+            ->selectRaw("COALESCE(NULLIF(dep.department, ''), NULLIF(o.main_dep, ''), 'ไม่ระบุแผนก') as department")
+            ->selectRaw('COUNT(*) as total')
+            ->groupByRaw("COALESCE(NULLIF(dep.department, ''), NULLIF(o.main_dep, ''), 'ไม่ระบุแผนก')")
+            ->orderByDesc('total')
+            ->get();
+
+        $departments = [];
+        $grandTotal = 0;
+        foreach ($rows as $row) {
+            $total = (int) $row->total;
+            $grandTotal += $total;
+            $departments[] = [
+                'department' => (string) $row->department,
+                'total' => $total,
+                'avg_per_day' => round($total / $days, 1),
+            ];
+        }
+
+        return [
+            'days' => $days,
+            'total' => $grandTotal,
+            'avg_per_day' => round($grandTotal / $days, 1),
+            'departments' => $departments,
+        ];
     }
 
     private function buildVisitsYearTrend($conn, string $yearStart, string $today): array

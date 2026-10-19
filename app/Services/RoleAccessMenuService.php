@@ -11,6 +11,42 @@ class RoleAccessMenuService
     /** @var Collection<string, int>|null */
     private ?Collection $validPermissionNames = null;
 
+    public function __construct(
+        private readonly MenuPermissionSyncService $menuPermissionSync,
+    ) {}
+
+    /**
+     * ซิงก์เมนู/สิทธิ์แล้วสร้างต้นไม้สำหรับหน้าจัดการบทบาท
+     *
+     * @return array{
+     *   tree: list<array<string, mixed>>,
+     *   coverage: array<string, int>,
+     *   sync: array<string, int>
+     * }
+     */
+    public function prepareForRoleForm(bool $sync = true): array
+    {
+        $syncResult = $sync
+            ? $this->menuPermissionSync->sync()
+            : [
+                'menus_ensured' => 0,
+                'permissions_backfilled' => 0,
+                'permissions_created' => 0,
+                'role_assignments' => 0,
+                'navigable_menus' => 0,
+                'missing_before' => 0,
+                'uncovered_after' => 0,
+            ];
+
+        $this->validPermissionNames = null;
+
+        return [
+            'tree' => $this->buildTree(),
+            'coverage' => $this->menuPermissionSync->coverage(),
+            'sync' => $syncResult,
+        ];
+    }
+
     /**
      * @return list<string>
      */
@@ -20,7 +56,7 @@ class RoleAccessMenuService
     }
 
     /**
-     * @return list<array{id: int, title: string, icon: string, permission_name: string|null, permission_valid: bool, children: list<mixed>}>
+     * @return list<array{id: int, title: string, icon: string, route: string|null, permission_name: string|null, permission_valid: bool, children: list<mixed>}>
      */
     public function buildTree(): array
     {
@@ -34,18 +70,28 @@ class RoleAccessMenuService
                 ->filter(fn (Menu $menu) => $menu->parent_id === $parentId)
                 ->map(function (Menu $menu) use (&$build, $valid): array {
                     $children = $build($menu->id);
-                    $permissionName = $menu->permission_name;
+                    $permissionName = $menu->permission_name ?: null;
+
+                    // ถ้ามี route แต่ยังไม่มี permission ให้ derive เพื่อแสดงใน UI
+                    if ($permissionName === null && filled($menu->route)) {
+                        $permissionName = $this->menuPermissionSync->permissionNameFromRoute(
+                            (string) $menu->route,
+                            (string) $menu->title,
+                        );
+                    }
 
                     return [
                         'id' => $menu->id,
                         'title' => $menu->title,
                         'icon' => $menu->icon ?: 'Folder',
+                        'route' => $menu->route,
                         'permission_name' => $permissionName,
                         'permission_valid' => $permissionName !== null && $valid->has($permissionName),
                         'children' => $children,
                     ];
                 })
                 ->filter(function (array $node): bool {
+                    // เก็บโฟลเดอร์ที่มีลูก หรือใบที่มีสิทธิ์ใช้งานได้ หรือใบที่มี route (รอซิงก์)
                     if ($node['children'] !== []) {
                         return true;
                     }
@@ -54,7 +100,7 @@ class RoleAccessMenuService
                         return false;
                     }
 
-                    return $node['permission_valid'];
+                    return $node['permission_valid'] || filled($node['route'] ?? null);
                 })
                 ->values()
                 ->all();

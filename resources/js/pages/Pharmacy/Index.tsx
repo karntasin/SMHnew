@@ -3,7 +3,7 @@ import { Head, Link } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import PharmacySubNav, { pharmacyBreadcrumbs } from '@/pages/Pharmacy/PharmacySubNav';
 import { cn } from '@/lib/utils';
-import { AlertTriangle, ArrowRight, ClipboardList, Pill, Sparkles, Warehouse } from 'lucide-react';
+import { AlertTriangle, ArrowRight, ClipboardList, Package, Pill, Sparkles, Warehouse } from 'lucide-react';
 
 type Channel = {
     key: string;
@@ -48,6 +48,7 @@ const toneMap = {
 const iconMap = {
     'drug-alerts': AlertTriangle,
     inventory: Warehouse,
+    supplies: Package,
     rdu: Pill,
     'drug-usage': ClipboardList,
 };

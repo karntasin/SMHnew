@@ -10,7 +10,7 @@ class SyncPharmacyDispenseStock extends Command
 {
     protected $signature = 'pharmacy:sync-dispense-stock {--date=} {--notify : ส่งแจ้งเตือนสต็อกหลัง sync}';
 
-    protected $description = 'ตัดสต็อกห้องยาตามใบสั่ง HOSxP (opitemrece) และแจ้งเตือนสต็อกต่ำ';
+    protected $description = 'ตัดสต็อกห้องยาและจุดจ่ายเวชภัณฑ์ตาม opitemrece ของ HOSxP แล้วแจ้งเตือนสต็อกต่ำ';
 
     public function handle(PharmacyDispenseSyncService $sync, PharmacyStockTelegramNotifier $notifier): int
     {
@@ -25,7 +25,7 @@ class SyncPharmacyDispenseStock extends Command
             return self::FAILURE;
         }
 
-        if ($this->option('notify') || config('services.telegram.stock_alerts.enabled')) {
+        if ($this->option('notify') || $notifier->isEnabled()) {
             $n = $notifier->notify();
             $this->line($n['message']);
         }

@@ -7,11 +7,12 @@ use Illuminate\Database\Eloquent\Model;
 class HrdQuizAttempt extends Model
 {
     protected $fillable = [
-        'user_id', 'quiz_id', 'score', 'total_questions', 'passed', 'started_at', 'completed_at'
+        'user_id', 'quiz_id', 'score', 'percentage', 'total_questions', 'passed', 'answers', 'started_at', 'completed_at'
     ];
 
     protected $casts = [
         'passed' => 'boolean',
+        'answers' => 'array',
         'started_at' => 'datetime',
         'completed_at' => 'datetime',
     ];

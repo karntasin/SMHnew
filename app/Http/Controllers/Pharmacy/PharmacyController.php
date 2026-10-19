@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Pharmacy;
 
 use App\Http\Controllers\Controller;
 use App\Services\Pharmacy\EgfrDrugAlertService;
+use App\Services\Pharmacy\EgfrDrugAlertTelegramNotifier;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -28,7 +30,15 @@ class PharmacyController extends Controller
                     'hint' => 'รับเข้า · เบิก · lot/QR · ตัดจ่ายตาม HOSxP',
                     'href' => route('pharmacy.inventory.index'),
                     'tone' => 'violet',
-                    'stats_label' => 'สต็อก + แจ้งเตือนต่ำ',
+                    'stats_label' => 'สต็อกยา + แจ้งเตือนต่ำ',
+                ],
+                [
+                    'key' => 'supplies',
+                    'title' => 'คลังเวชภัณฑ์มิใช่ยา',
+                    'hint' => 'นำเข้าจาก nondrugitems · ตรวจนับ · ตัดจ่าย HOSxP',
+                    'href' => route('pharmacy.supplies.index'),
+                    'tone' => 'emerald',
+                    'stats_label' => 'สต็อกเวชภัณฑ์แยกจากยา',
                 ],
                 [
                     'key' => 'rdu',
@@ -65,6 +75,7 @@ class PharmacyController extends Controller
         return Inertia::render('Pharmacy/DrugAlerts', [
             'result' => $result,
             'catalog' => $service->catalogForUi(),
+            'telegramEnabled' => app(EgfrDrugAlertTelegramNotifier::class)->isEnabled(),
             'severityOptions' => [
                 ['value' => 'all', 'label' => 'ทุกระดับ'],
                 ['value' => 'contraindicated', 'label' => 'ห้ามใช้'],
@@ -73,5 +84,30 @@ class PharmacyController extends Controller
                 ['value' => 'missing_egfr', 'label' => 'ไม่มีค่า eGFR'],
             ],
         ]);
+    }
+
+    public function sendEgfrTelegramAlerts(Request $request, EgfrDrugAlertTelegramNotifier $notifier): RedirectResponse
+    {
+        $days = $request->integer('days', 0);
+        $force = $request->boolean('force', true);
+
+        $result = $notifier->notify(force: $force, lookbackDays: $days);
+
+        if ($result['skipped'] ?? false) {
+            return back()->with('error', $result['message'] ?: 'ยังไม่ได้เปิดการแจ้งเตือน Telegram eGFR');
+        }
+
+        if (! ($result['ok'] ?? false)) {
+            return back()->with('error', $result['message'] ?: 'ส่งแจ้งเตือน Telegram ไม่สำเร็จ');
+        }
+
+        $sent = (int) ($result['sent'] ?? 0);
+        $scanned = (int) ($result['scanned'] ?? 0);
+
+        if ($sent === 0) {
+            return back()->with('success', "สแกนแล้ว {$scanned} รายการ — ไม่มีรายการใหม่ที่ต้องส่ง Telegram");
+        }
+
+        return back()->with('success', $result['message'] ?: "ส่งแจ้งเตือน Telegram {$sent} รายการแล้ว");
     }
 }

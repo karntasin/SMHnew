@@ -13,7 +13,7 @@
 <div class="max-w-5xl mx-auto p-6" x-data="{
     enabled: {{ ($setting->screening_enabled ?? true) ? 'true' : 'false' }},
     rotateSeconds: {{ $setting->screening_rotate_seconds ?? 60 }},
-    title: '{{ addslashes($setting->screening_title ?: "ผู้ป่วยรอซักประวัติ / คัดกรอง") }}',
+    title: '{{ addslashes($setting->screening_title ?: "รอซักประวัติ ห้อง 301 หรือ 302") }}',
     subtitle: '{{ addslashes($setting->screening_subtitle ?: "จุดคัดกรองห้องตรวจโรคภายนอก (002)") }}',
     showAppointment: {{ ($setting->screening_show_appointment ?? true) ? 'true' : 'false' }},
     showOrderTime: {{ ($setting->screening_show_order_time ?? true) ? 'true' : 'false' }},
@@ -175,7 +175,7 @@
                     <label class="block text-xs font-bold text-slate-700 mb-1.5">ชื่อหัวข้อบนจอทีวี</label>
                     <input type="text" name="screening_title" x-model="title"
                            class="w-full border border-slate-300 rounded-xl p-2.5 text-sm bg-white focus:ring-2 focus:ring-indigo-500"
-                           placeholder="เช่น ผู้ป่วยรอซักประวัติ / คัดกรอง">
+                           placeholder="เช่น รอซักประวัติ ห้อง 301 หรือ 302">
                 </div>
 
                 <div>

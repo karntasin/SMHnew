@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class HrdQuiz extends Model
 {
     protected $fillable = [
-        'course_id', 'lesson_id', 'title', 'description', 
+        'course_id', 'lesson_id', 'title', 'purpose', 'description',
         'passing_score', 'time_limit_minutes', 'randomize_questions'
     ];
 

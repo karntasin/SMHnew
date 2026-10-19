@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Pharmacy;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Pharmacy\Concerns\ResolvesPharmacyCatalog;
+use App\Models\Pharmacy\PharmacyLocation;
 use App\Models\Pharmacy\PharmacyLot;
 use App\Models\Pharmacy\PharmacyStockBalance;
 use App\Models\Pharmacy\PharmacyStockCount;
@@ -15,6 +17,8 @@ use Inertia\Response;
 
 class PharmacyStockCountController extends Controller
 {
+    use ResolvesPharmacyCatalog;
+
     public function store(Request $request)
     {
         $data = $request->validate([
@@ -24,7 +28,15 @@ class PharmacyStockCountController extends Controller
             'members.*.role' => 'nullable|string|max:100', 'photos' => 'nullable|array|max:10',
             'photos.*' => 'image|max:5120',
         ]);
-        $count = DB::transaction(function () use ($request, $data) {
+        $location = PharmacyLocation::query()->findOrFail($data['location_id']);
+        $catalog = $this->catalog();
+        $locationMatches = ($location->catalog ?: 'drug') === $catalog
+            || PharmacyStockBalance::query()
+                ->where('location_id', $location->id)
+                ->whereHas('item', fn ($item) => $item->ofCatalog($catalog))
+                ->exists();
+        abort_unless($locationMatches, 422, 'ตำแหน่งนี้ไม่ได้อยู่ในคลังที่เลือก');
+        $count = DB::transaction(function () use ($request, $data, $catalog) {
             $count = PharmacyStockCount::query()->create([
                 'count_no' => 'PC-'.now()->format('Ymd-His-u'), 'location_id' => $data['location_id'],
                 'count_date' => $data['count_date'], 'status' => 'counting',
@@ -32,6 +44,7 @@ class PharmacyStockCountController extends Controller
             ]);
             $count->members()->createMany($data['members']);
             foreach (PharmacyLot::query()->where('location_id', $data['location_id'])
+                ->whereHas('item', fn ($item) => $item->ofCatalog($catalog))
                 ->where('qty_remaining', '>', 0)->whereIn('status', ['active', 'quarantined'])->get() as $lot) {
                 $count->items()->create(['item_id' => $lot->item_id, 'lot_id' => $lot->id, 'system_qty' => $lot->qty_remaining]);
             }
@@ -40,7 +53,9 @@ class PharmacyStockCountController extends Controller
             return $count;
         });
 
-        return redirect()->route('pharmacy.inventory.counts.show', $count)->with('success', 'เปิดรอบตรวจนับแล้ว');
+        $route = $this->catalogRoute('counts.show');
+
+        return redirect()->route($route, $count)->with('success', 'เปิดรอบตรวจนับแล้ว');
     }
 
     public function show(PharmacyStockCount $count): Response

@@ -60,7 +60,7 @@ return [
             ]) : [],
 
             'dump' => [
-                'dump_binary_path' => 'C:\xampp\mysql\bin',
+                'dump_binary_path' => env('DB_DUMP_PATH', 'D:\xampp\mysql\bin'),
                 'use_single_transaction' => true,
                 'timeout' => 60,
             ],

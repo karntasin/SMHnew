@@ -25,6 +25,8 @@ class DatabaseSeeder extends Seeder
 
         $this->call([
             MenuSeeder::class,
+            SyncSidebarMenusSeeder::class,
+            SyncMenuPermissionsSeeder::class,
         ]);
     }
 }

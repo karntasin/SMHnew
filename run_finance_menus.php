@@ -148,6 +148,13 @@ syncMenuGroup($pdo, $financeParentId, [
         'order' => 2,
         'permission_name' => 'finance.revenue',
     ],
+    [
+        'title' => 'งานงบประมาณ',
+        'icon' => 'PieChart',
+        'route' => 'finance.budget',
+        'order' => 3,
+        'permission_name' => 'finance.budget',
+    ],
 ], 'รายงานการเงิน', $now);
 
 // ---- Financial Data Hub ----

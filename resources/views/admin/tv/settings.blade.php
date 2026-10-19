@@ -152,9 +152,9 @@
                 <div>
                     <h2 class="text-lg font-black text-slate-900 flex items-center gap-2">
                         <span class="p-1.5 bg-emerald-100 text-emerald-700 rounded-lg">💊</span>
-                        ปรับแต่งคิวห้องจ่ายยา (2 คอลัมน์: รอจ่ายยา 062 & รอจัดยา 013)
+                        ปรับแต่งคิวห้องจ่ายยา (2 คอลัมน์: รอจัดยา และ รอจ่ายยา)
                     </h2>
-                    <p class="text-xs text-slate-500 mt-1">กำหนดชื่อหัวข้อ สีกรอบ และป้ายกำกับคิวรอของแต่ละคอลัมน์เพื่อแบ่งแยกให้เห็นชัดเจนบนจอทีวี</p>
+                    <p class="text-xs text-slate-500 mt-1">คนที่ส่งมาห้องจ่ายยา (013) อยู่คอลัมน์รอจัดยาจนกว่าจะพิมพ์สติกเกอร์ แล้วจะย้ายไปคอลัมน์รอจ่ายยา เมื่อบันทึกการจ่ายยาแล้วชื่อจะหายจากจอ</p>
                 </div>
                 <span class="text-xs font-bold px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full">
                     Pharmacy Context
@@ -162,58 +162,14 @@
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <!-- คอลัมน์ 1: จุดรับยา (062) -->
-                <div class="bg-cyan-50/50 p-5 rounded-xl border border-cyan-200">
-                    <div class="flex items-center justify-between mb-3">
-                        <h3 class="font-bold text-cyan-900 flex items-center gap-2 text-sm">
-                            <span class="w-3 h-3 rounded-full" :style="'background-color: ' + col1Border"></span>
-                            คอลัมน์ 1: จุดรับยา (062)
-                        </h3>
-                        <span class="text-xs font-semibold px-2 py-0.5 bg-cyan-100 text-cyan-800 rounded">แผนก 062</span>
-                    </div>
-
-                    <div class="space-y-4">
-                        <div>
-                            <label class="block text-xs font-bold text-slate-700 mb-1">ชื่อหัวข้อคอลัมน์</label>
-                            <input type="text" name="drug_col1_title" x-model="col1Title"
-                                   class="w-full border border-slate-300 rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
-                                   placeholder="เช่น รอจ่ายยา">
-                        </div>
-
-                        <div>
-                            <label class="block text-xs font-bold text-slate-700 mb-1">🎨 สีกรอบคอลัมน์ 1 (Border Color)</label>
-                            <div class="flex items-center gap-2">
-                                <input type="color" x-model="col1Border" class="w-10 h-9 rounded border cursor-pointer p-0.5">
-                                <input type="text" name="drug_col1_border_color" x-model="col1Border"
-                                       class="flex-1 border border-slate-300 rounded-lg p-2 text-xs font-mono bg-white">
-                            </div>
-                            <div class="mt-2 flex items-center gap-2">
-                                <span class="text-xs text-slate-400">แนะนำ:</span>
-                                @foreach(['#06b6d4' => 'Cyan', '#0284c7' => 'Sky', '#10b981' => 'Emerald', '#3b82f6' => 'Blue', '#14b8a6' => 'Teal'] as $c => $lbl)
-                                    <button type="button" @click="col1Border = '{{ $c }}'"
-                                            class="w-6 h-6 rounded-full border-2 border-white shadow-xs hover:scale-110 transition-transform"
-                                            style="background-color: {{ $c }}" title="{{ $lbl }}"></button>
-                                @endforeach
-                            </div>
-                        </div>
-
-                        <div>
-                            <label class="block text-xs font-bold text-slate-700 mb-1">ป้ายกำกับส่วนคิวรอ</label>
-                            <input type="text" name="drug_col1_waiting_title" x-model="col1Waiting"
-                                   class="w-full border border-slate-300 rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
-                                   placeholder="เช่น คิวรอจ่ายยา">
-                        </div>
-                    </div>
-                </div>
-
-                <!-- คอลัมน์ 2: ห้องจ่ายยา (013) -->
+                <!-- คอลัมน์ซ้าย: รอจัดยา (ค่าที่บันทึกอยู่ใน drug_col2_*) -->
                 <div class="bg-amber-50/50 p-5 rounded-xl border border-amber-200">
                     <div class="flex items-center justify-between mb-3">
                         <h3 class="font-bold text-amber-900 flex items-center gap-2 text-sm">
                             <span class="w-3 h-3 rounded-full" :style="'background-color: ' + col2Border"></span>
-                            คอลัมน์ 2: ห้องจ่ายยา (013)
+                            คอลัมน์ซ้าย: รอจัดยา
                         </h3>
-                        <span class="text-xs font-semibold px-2 py-0.5 bg-amber-100 text-amber-800 rounded">แผนก 013</span>
+                        <span class="text-xs font-semibold px-2 py-0.5 bg-amber-100 text-amber-800 rounded">ยังไม่พิมพ์สติกเกอร์</span>
                     </div>
 
                     <div class="space-y-4">
@@ -225,7 +181,7 @@
                         </div>
 
                         <div>
-                            <label class="block text-xs font-bold text-slate-700 mb-1">🎨 สีกรอบคอลัมน์ 2 (Border Color)</label>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">🎨 สีกรอบคอลัมน์รอจัดยา</label>
                             <div class="flex items-center gap-2">
                                 <input type="color" x-model="col2Border" class="w-10 h-9 rounded border cursor-pointer p-0.5">
                                 <input type="text" name="drug_col2_border_color" x-model="col2Border"
@@ -249,39 +205,62 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- คอลัมน์ขวา: รอจ่ายยา (ค่าที่บันทึกอยู่ใน drug_col1_*) -->
+                <div class="bg-cyan-50/50 p-5 rounded-xl border border-cyan-200">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="font-bold text-cyan-900 flex items-center gap-2 text-sm">
+                            <span class="w-3 h-3 rounded-full" :style="'background-color: ' + col1Border"></span>
+                            คอลัมน์ขวา: รอจ่ายยา
+                        </h3>
+                        <span class="text-xs font-semibold px-2 py-0.5 bg-cyan-100 text-cyan-800 rounded">พิมพ์สติกเกอร์แล้ว</span>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">ชื่อหัวข้อคอลัมน์</label>
+                            <input type="text" name="drug_col1_title" x-model="col1Title"
+                                   class="w-full border border-slate-300 rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                                   placeholder="เช่น รอจ่ายยา">
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">🎨 สีกรอบคอลัมน์รอจ่ายยา</label>
+                            <div class="flex items-center gap-2">
+                                <input type="color" x-model="col1Border" class="w-10 h-9 rounded border cursor-pointer p-0.5">
+                                <input type="text" name="drug_col1_border_color" x-model="col1Border"
+                                       class="flex-1 border border-slate-300 rounded-lg p-2 text-xs font-mono bg-white">
+                            </div>
+                            <div class="mt-2 flex items-center gap-2">
+                                <span class="text-xs text-slate-400">แนะนำ:</span>
+                                @foreach(['#06b6d4' => 'Cyan', '#0284c7' => 'Sky', '#10b981' => 'Emerald', '#3b82f6' => 'Blue', '#14b8a6' => 'Teal'] as $c => $lbl)
+                                    <button type="button" @click="col1Border = '{{ $c }}'"
+                                            class="w-6 h-6 rounded-full border-2 border-white shadow-xs hover:scale-110 transition-transform"
+                                            style="background-color: {{ $c }}" title="{{ $lbl }}"></button>
+                                @endforeach
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">ป้ายกำกับส่วนคิวรอ</label>
+                            <input type="text" name="drug_col1_waiting_title" x-model="col1Waiting"
+                                   class="w-full border border-slate-300 rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+                                   placeholder="เช่น คิวรอจ่ายยา">
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Live Preview ตัวอย่างหน้าจอ 2 คอลัมน์ -->
             <div class="mt-6 pt-5 border-t border-slate-100">
                 <span class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">👁️ ตัวอย่างการแสดงผลสีกรอบ 2 คอลัมน์บนจอทีวี (Live Preview)</span>
                 <div class="bg-slate-950 p-4 rounded-xl grid grid-cols-2 gap-4">
-                    <!-- Preview Col 1 -->
-                    <div class="rounded-xl p-3 bg-slate-900 flex flex-col"
-                         :style="'border: 3px solid ' + col1Border + '; box-shadow: 0 0 15px -3px ' + col1Border + '40;'">
-                        <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-800">
-                            <div class="flex items-center gap-1.5">
-                                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">จุดรับยา (062)</span>
-                                <span class="text-xs font-extrabold text-cyan-200" x-text="col1Title"></span>
-                            </div>
-                        </div>
-                        <div class="bg-yellow-400 text-slate-900 rounded p-1.5 text-center text-xs font-black mb-2">
-                            เรียกคิว: 025 (นายสมชาย)
-                        </div>
-                        <div class="bg-black/40 rounded p-2 text-[11px]">
-                            <span class="text-cyan-300/80 font-bold block mb-1" x-text="col1Waiting"></span>
-                            <div class="flex justify-between text-slate-300 bg-slate-800/80 px-2 py-0.5 rounded border border-cyan-900/40">
-                                <span class="text-cyan-300 font-bold">026</span>
-                                <span>นายวรวิทย์ ***</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Preview Col 2 -->
+                    <!-- Preview ซ้าย: รอจัดยา -->
                     <div class="rounded-xl p-3 bg-slate-900 flex flex-col"
                          :style="'border: 3px solid ' + col2Border + '; box-shadow: 0 0 15px -3px ' + col2Border + '40;'">
                         <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-800">
                             <div class="flex items-center gap-1.5">
-                                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">ห้องจ่ายยา (013)</span>
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">ยังไม่พิมพ์สติกเกอร์</span>
                                 <span class="text-xs font-extrabold text-amber-200" x-text="col2Title"></span>
                             </div>
                         </div>
@@ -293,6 +272,27 @@
                             <div class="flex justify-between text-slate-300 bg-slate-800/80 px-2 py-0.5 rounded border border-amber-900/40">
                                 <span class="text-amber-300 font-bold">043</span>
                                 <span>นางสมหญิง ***</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Preview ขวา: รอจ่ายยา -->
+                    <div class="rounded-xl p-3 bg-slate-900 flex flex-col"
+                         :style="'border: 3px solid ' + col1Border + '; box-shadow: 0 0 15px -3px ' + col1Border + '40;'">
+                        <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-800">
+                            <div class="flex items-center gap-1.5">
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">พิมพ์สติกเกอร์แล้ว</span>
+                                <span class="text-xs font-extrabold text-cyan-200" x-text="col1Title"></span>
+                            </div>
+                        </div>
+                        <div class="bg-yellow-400 text-slate-900 rounded p-1.5 text-center text-xs font-black mb-2">
+                            เรียกคิว: 025 (นายสมชาย)
+                        </div>
+                        <div class="bg-black/40 rounded p-2 text-[11px]">
+                            <span class="text-cyan-300/80 font-bold block mb-1" x-text="col1Waiting"></span>
+                            <div class="flex justify-between text-slate-300 bg-slate-800/80 px-2 py-0.5 rounded border border-cyan-900/40">
+                                <span class="text-cyan-300 font-bold">026</span>
+                                <span>นายวรวิทย์ ***</span>
                             </div>
                         </div>
                     </div>
@@ -669,7 +669,7 @@
         <div class="bg-white p-6 rounded-2xl shadow-sm border border-indigo-200" x-data="{
             enabled: {{ ($setting->screening_enabled ?? true) ? 'true' : 'false' }},
             rotateSec: {{ (int)($setting->screening_rotate_seconds ?? 60) }},
-            title: '{{ addslashes($setting->screening_title ?: "ผู้ป่วยรอซักประวัติ / คัดกรอง") }}',
+            title: '{{ addslashes($setting->screening_title ?: "รอซักประวัติ ห้อง 301 หรือ 302") }}',
             subtitle: '{{ addslashes($setting->screening_subtitle ?: "จุดคัดกรองห้องตรวจโรคภายนอก (002)") }}',
             showAppointment: {{ ($setting->screening_show_appointment ?? true) ? 'true' : 'false' }},
             showOrderTime: {{ ($setting->screening_show_order_time ?? true) ? 'true' : 'false' }}
@@ -717,7 +717,7 @@
                     <label class="block text-xs font-bold text-slate-700 mb-1">ข้อความหัวเรื่องบนจอ (Title)</label>
                     <input type="text" name="screening_title" x-model="title"
                            class="w-full border border-slate-300 rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500"
-                           placeholder="ผู้ป่วยรอซักประวัติ / คัดกรอง">
+                           placeholder="รอซักประวัติ ห้อง 301 หรือ 302">
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-slate-700 mb-1">ข้อความคำอธิบายย่อย (Subtitle)</label>

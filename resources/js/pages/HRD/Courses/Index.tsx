@@ -35,8 +35,7 @@ interface Props {
 }
 
 const breadcrumbs = [
-    { title: 'KM', href: '/km/dashboard' },
-    { title: 'ระบบการเรียนรู้ (E-Learning)', href: '/km/learn/dashboard' },
+    { title: 'พัฒนาบุคลากร', href: '/km/learn/hub' },
     { title: 'หลักสูตร', href: '/km/learn/courses' },
 ];
 

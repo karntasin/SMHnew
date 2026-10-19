@@ -21,18 +21,8 @@ interface Props {
 }
 
 const breadcrumbs = [
-    {
-        title: 'Knowledge Management',
-        href: '/km/dashboard',
-    },
-    {
-        title: 'ระบบการเรียนรู้ (E-Learning)',
-        href: '/km/learn/dashboard',
-    },
-    {
-        title: 'ทักษะของฉัน',
-        href: '/km/learn/my-skills',
-    },
+    { title: 'พัฒนาบุคลากร', href: '/km/learn/hub' },
+    { title: 'สมรรถนะของฉัน', href: '/km/learn/my-skills' },
 ];
 
 export default function MySkillsIndex({ skills }: Props) {

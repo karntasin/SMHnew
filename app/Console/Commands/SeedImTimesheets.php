@@ -10,9 +10,12 @@ use Illuminate\Support\Facades\DB;
 
 class SeedImTimesheets extends Command
 {
-    protected $signature = 'im:seed-timesheets {--fresh : ลบ Timesheet ของรายชื่อชุดนี้ก่อนสร้างใหม่}';
+    protected $signature = 'im:seed-timesheets
+        {--fresh : ลบ Timesheet ของรายชื่อชุดนี้ก่อนสร้างใหม่}
+        {--extend : ต่อจากวันทำงานล่าสุดของแต่ละคน โดยไม่ลบข้อมูลเดิม}
+        {--to= : วันสิ้นสุด Y-m-d ใช้กับ --extend}';
 
-    protected $description = 'สร้างบันทึกกิจกรรม IT ย้อนหลัง 10 ปี ตามหน้าที่เจ้าหน้าที่ 4 คน (วันทำการ)';
+    protected $description = 'สร้างบันทึกกิจกรรม IT ย้อนหลัง 10 ปี หรือต่อท้ายจนถึงวันที่กำหนด ตามหน้าที่เจ้าหน้าที่ 4 คน (วันทำการ)';
 
     /** @var list<array{name: string, needle: string, role: string, pool: list<array{category: string, activity: string, note?: string}>}> */
     private array $staff = [
@@ -75,6 +78,10 @@ class SeedImTimesheets extends Command
 
     public function handle(): int
     {
+        if ($this->option('extend')) {
+            return $this->extend();
+        }
+
         $names = array_column($this->staff, 'name');
         $from = Carbon::today()->subYears(10)->startOfDay();
         $to = Carbon::today()->endOfDay();
@@ -87,83 +94,178 @@ class SeedImTimesheets extends Command
             $this->warn('ลบ Timesheet เดิมของเจ้าหน้าที่ 4 คนในช่วง 10 ปีแล้ว');
         }
 
+        $users = $this->matchUsers();
+        $rows = [];
+        $now = now();
+        $cursor = $from->copy();
+        while ($cursor->lte($to)) {
+            if (! $cursor->isWeekend()) {
+                foreach ($this->staff as $person) {
+                    array_push($rows, ...$this->rowsForDay($person, $cursor, $users, $now));
+                }
+            }
+            $cursor->addDay();
+        }
+
+        $inserted = $this->insertRows($rows);
+
+        $this->info('ช่วง '.$from->toDateString().' ถึง '.$to->toDateString().' · สร้าง '.$inserted.' รายการ');
+        $this->printSummary();
+
+        return self::SUCCESS;
+    }
+
+    private function extend(): int
+    {
+        $toRaw = $this->option('to');
+        if (! is_string($toRaw) || $toRaw === '') {
+            $this->error('ระบุ --to=YYYY-MM-DD เมื่อใช้ --extend');
+
+            return self::FAILURE;
+        }
+
+        $to = Carbon::parse($toRaw)->startOfDay();
+        $users = $this->matchUsers();
+        $rows = [];
+        $now = now();
+
+        foreach ($this->staff as $person) {
+            $max = Timesheet::query()->where('staff_name', $person['name'])->max('work_date');
+            if (! $max) {
+                $this->warn($person['name'].' ยังไม่มีข้อมูล ข้าม');
+
+                continue;
+            }
+
+            $cursor = Carbon::parse($max)->startOfDay()->addDay();
+            if ($cursor->gt($to)) {
+                $this->line($person['name'].' มีข้อมูลถึง '.$max.' แล้ว');
+
+                continue;
+            }
+
+            $existing = Timesheet::query()
+                ->where('staff_name', $person['name'])
+                ->whereBetween('work_date', [$cursor->toDateString(), $to->toDateString()])
+                ->pluck('work_date')
+                ->map(fn ($date) => Carbon::parse($date)->toDateString())
+                ->flip();
+
+            $this->line($person['name'].' ต่อจาก '.$cursor->toDateString().' ถึง '.$to->toDateString());
+
+            while ($cursor->lte($to)) {
+                $date = $cursor->toDateString();
+                if (! $cursor->isWeekend() && ! isset($existing[$date])) {
+                    array_push($rows, ...$this->rowsForDay($person, $cursor, $users, $now, 'manual'));
+                }
+                $cursor->addDay();
+            }
+        }
+
+        $inserted = $this->insertRows($rows);
+        $this->info('ต่อท้ายถึง '.$to->toDateString().' · สร้าง '.$inserted.' รายการ');
+        $this->printSummary();
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * @return array<string, User|null>
+     */
+    private function matchUsers(): array
+    {
         $users = [];
         foreach ($this->staff as $person) {
             $users[$person['name']] = User::query()->where('name', 'like', '%'.$person['needle'].'%')->first();
         }
 
+        return $users;
+    }
+
+    /**
+     * @param  array{name: string, needle: string, role: string, pool: list<array{category: string, activity: string, note?: string}>}  $person
+     * @param  array<string, User|null>  $users
+     * @return list<array<string, mixed>>
+     */
+    private function rowsForDay(array $person, Carbon $date, array $users, Carbon $now, ?string $source = null): array
+    {
+        $key = $person['name'].'|'.$date->toDateString();
+        if ((abs(crc32($key.'|skip')) % 8) === 0) {
+            return [];
+        }
+
+        $slots = $this->slotCount($key);
+        $hoursLeft = 6 + (abs(crc32($key.'|hrs')) % 3);
+        $usedActivities = [];
         $rows = [];
-        $now = now();
-        $cursor = $from->copy();
-        while ($cursor->lte($to)) {
-            if ($cursor->isWeekend()) {
-                $cursor->addDay();
+
+        for ($i = 0; $i < $slots; $i++) {
+            $pool = $person['pool'];
+            $idx = abs(crc32($key.'|act|'.$i)) % count($pool);
+            if (isset($usedActivities[$idx]) && count($usedActivities) < count($pool)) {
+                $idx = ($idx + 1) % count($pool);
+            }
+            $usedActivities[$idx] = true;
+            $item = $pool[$idx];
+            $remainSlots = $slots - $i;
+            $hours = $remainSlots === 1
+                ? $hoursLeft
+                : max(1, min($hoursLeft - ($remainSlots - 1), 1 + (abs(crc32($key.'|h|'.$i)) % 4)));
+            $hoursLeft = round($hoursLeft - $hours, 1);
+            if ($hours <= 0) {
                 continue;
             }
 
-            foreach ($this->staff as $person) {
-                $key = $person['name'].'|'.$cursor->toDateString();
-                if ((abs(crc32($key.'|skip')) % 8) === 0) {
-                    continue;
-                }
-
-                $slots = $this->slotCount($key);
-                $hoursLeft = 6 + (abs(crc32($key.'|hrs')) % 3); // 6-8
-                $usedActivities = [];
-                for ($i = 0; $i < $slots; $i++) {
-                    $pool = $person['pool'];
-                    $idx = abs(crc32($key.'|act|'.$i)) % count($pool);
-                    if (isset($usedActivities[$idx]) && count($usedActivities) < count($pool)) {
-                        $idx = ($idx + 1) % count($pool);
-                    }
-                    $usedActivities[$idx] = true;
-                    $item = $pool[$idx];
-                    $remainSlots = $slots - $i;
-                    $hours = $remainSlots === 1
-                        ? $hoursLeft
-                        : max(1, min($hoursLeft - ($remainSlots - 1), 1 + (abs(crc32($key.'|h|'.$i)) % 4)));
-                    $hoursLeft = round($hoursLeft - $hours, 1);
-                    if ($hours <= 0) {
-                        continue;
-                    }
-
-                    $rows[] = [
-                        'user_id' => $users[$person['name']]?->id,
-                        'staff_name' => $person['name'],
-                        'work_date' => $cursor->toDateString(),
-                        'hours' => $hours,
-                        'category' => $item['category'],
-                        'activity' => $item['activity'],
-                        'note' => $item['note'] ?? null,
-                        'created_at' => $now,
-                        'updated_at' => $now,
-                    ];
-                }
+            $row = [
+                'user_id' => $users[$person['name']]?->id,
+                'staff_name' => $person['name'],
+                'work_date' => $date->toDateString(),
+                'hours' => $hours,
+                'category' => $item['category'],
+                'activity' => $item['activity'],
+                'note' => $item['note'] ?? null,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+            if ($source !== null) {
+                $row['source'] = $source;
             }
-
-            $cursor->addDay();
+            $rows[] = $row;
         }
 
+        return $rows;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     */
+    private function insertRows(array $rows): int
+    {
         $inserted = 0;
         foreach (array_chunk($rows, 500) as $chunk) {
             DB::table('im_timesheets')->insert($chunk);
             $inserted += count($chunk);
         }
 
-        $this->info('ช่วง '.$from->toDateString().' ถึง '.$to->toDateString().' · สร้าง '.$inserted.' รายการ');
+        return $inserted;
+    }
+
+    private function printSummary(): void
+    {
         $this->table(
-            ['เจ้าหน้าที่', 'บทบาท', 'จำนวนรายการ', 'ชั่วโมงรวม'],
+            ['เจ้าหน้าที่', 'บทบาท', 'จำนวนรายการ', 'ชั่วโมงรวม', 'วันล่าสุด'],
             collect($this->staff)->map(function ($person) {
+                $query = Timesheet::query()->where('staff_name', $person['name']);
+
                 return [
                     $person['name'],
                     $person['role'],
-                    Timesheet::query()->where('staff_name', $person['name'])->count(),
-                    round((float) Timesheet::query()->where('staff_name', $person['name'])->sum('hours'), 1),
+                    (clone $query)->count(),
+                    round((float) (clone $query)->sum('hours'), 1),
+                    (clone $query)->max('work_date'),
                 ];
             })->all()
         );
-
-        return self::SUCCESS;
     }
 
     private function slotCount(string $key): int

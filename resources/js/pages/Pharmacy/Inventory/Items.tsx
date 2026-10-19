@@ -5,6 +5,7 @@ import AppLayout from '@/layouts/app-layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import PharmacySubNav, { pharmacyBreadcrumbs } from '@/pages/Pharmacy/PharmacySubNav';
+import { warehouseActive, warehouseHome, warehouseSupply, wh } from '@/pages/Pharmacy/inventoryCatalog';
 
 type BarcodeRow = { id: number; barcode: string; symbology: string; label?: string; is_primary: boolean };
 type Unit = {
@@ -51,83 +52,52 @@ export default function Items({
     stats?: { total: number; drugs: number; nondrugs: number };
 }) {
     const [open, setOpen] = useState<number | null>(items.data.length === 1 ? items.data[0].id : null);
-    const activeItemType = filters.item_type || 'all';
 
     const search = (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         const fd = new FormData(event.currentTarget);
-        router.get(route('pharmacy.inventory.items'), {
+        router.get(wh('items'), {
             q: fd.get('q'),
-            item_type: activeItemType !== 'all' ? activeItemType : undefined,
-        }, { preserveState: true });
-    };
-
-    const filterByType = (type: string) => {
-        router.get(route('pharmacy.inventory.items'), {
-            q: filters.q || undefined,
-            item_type: type !== 'all' ? type : undefined,
         }, { preserveState: true });
     };
 
     return (
         <AppLayout breadcrumbs={pharmacyBreadcrumbs([
-            { title: 'คลังยา / ห้องยา', href: route('pharmacy.inventory.index') },
+            { title: warehouseHome(), href: wh('index') },
             { title: 'จัดการยาและบรรจุภัณฑ์' },
         ])}>
-            <Head title="จัดการยาและบรรจุภัณฑ์" />
+            <Head title={warehouseSupply() ? "จัดการเวชภัณฑ์และบรรจุภัณฑ์" : "จัดการยาและบรรจุภัณฑ์"} />
             <div className="container mx-auto space-y-5 px-4 py-6">
-                <PharmacySubNav active="pharmacy.inventory.index" />
+                <PharmacySubNav active={warehouseActive()} />
                 <section className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border bg-white p-5 shadow-xs">
                     <div>
-                        <h1 className="text-xl font-bold">จัดการยา เวชภัณฑ์มิใช่ยา และหน่วยบรรจุ</h1>
+                        <h1 className="text-xl font-bold">{warehouseSupply() ? "จัดการเวชภัณฑ์มิใช่ยาและหน่วยบรรจุ" : "จัดการยาและหน่วยบรรจุ"}</h1>
                         <p className="text-sm text-slate-500">สร้างจากหน่วยเล็กไปใหญ่ เช่น เม็ด → แพ็ค → กล่อง → ลัง</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                         <Button asChild variant="secondary" className="rounded-xl">
-                            <Link href={route('pharmacy.inventory.scan')}>
+                            <Link href={wh('scan')}>
                                 <ScanLine className="mr-2 h-4 w-4" />เปิดเครื่องสแกน
                             </Link>
                         </Button>
+                        {warehouseSupply() ? (
                         <Button
                             variant="outline"
                             className="rounded-xl border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 font-semibold"
-                            onClick={() => router.post(route('pharmacy.inventory.items.import'), { type: 'nondrug' })}
+                            onClick={() => router.post(wh('items.import'), { type: 'nondrug' })}
                         >
                             นำเข้าเวชภัณฑ์มิใช่ยา (HOSxP)
                         </Button>
+                        ) : (
                         <Button
                             className="rounded-xl bg-violet-700 hover:bg-violet-800 text-white font-semibold"
-                            onClick={() => router.post(route('pharmacy.inventory.items.import'), { type: 'drug' })}
+                            onClick={() => router.post(wh('items.import'), { type: 'drug' })}
                         >
                             นำเข้ายา (HOSxP)
                         </Button>
+                        )}
                     </div>
                 </section>
-
-                {/* Filter Tabs by Item Type */}
-                <div className="flex flex-wrap items-center gap-2">
-                    <button
-                        type="button"
-                        onClick={() => filterByType('all')}
-                        className={`rounded-2xl px-4 py-2 text-sm font-semibold transition-all ${activeItemType === 'all' ? 'bg-slate-900 text-white shadow-xs' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}`}
-                    >
-                        ทั้งหมด {stats ? `(${stats.total})` : ''}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => filterByType('drug')}
-                        className={`rounded-2xl px-4 py-2 text-sm font-semibold transition-all ${activeItemType === 'drug' ? 'bg-sky-600 text-white shadow-xs' : 'bg-white text-sky-700 border border-sky-200 hover:bg-sky-50'}`}
-                    >
-                        เฉพาะยา {stats ? `(${stats.drugs})` : ''}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => filterByType('nondrug')}
-                        className={`rounded-2xl px-4 py-2 text-sm font-semibold transition-all ${activeItemType === 'nondrug' ? 'bg-amber-600 text-white shadow-xs' : 'bg-white text-amber-800 border border-amber-300 hover:bg-amber-50'}`}
-                    >
-                        ค่าเวชภัณฑ์ที่มิใช่ยา {stats ? `(${stats.nondrugs})` : ''}
-                    </button>
-                </div>
 
                 <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-900">
                     <b>ตัวอย่าง:</b> สร้าง “เม็ด” หรือ “ชิ้น” เป็นหน่วยฐาน → สร้าง “แพ็ค” โดยเลือกหน่วยย่อยและระบุ 10 →
@@ -168,7 +138,7 @@ export default function Items({
                                 <div className="mt-4 space-y-5 border-t pt-4">
                                     <form onSubmit={(event) => {
                                         event.preventDefault();
-                                        router.patch(route('pharmacy.inventory.items.update', { item: item.id }), formData(event.currentTarget));
+                                        router.patch(wh('items.update', { item: item.id }), formData(event.currentTarget));
                                     }} className="grid gap-2 md:grid-cols-4">
                                         <Input name="base_unit" defaultValue={item.base_unit || ''} placeholder="หน่วยฐาน เช่น เม็ด" required />
                                         <Input name="dispense_unit" defaultValue={item.dispense_unit || item.base_unit || ''} placeholder="หน่วยจ่าย HOSxP" />
@@ -200,7 +170,7 @@ export default function Items({
                                                         {unit.barcodes.map((barcode) => (
                                                             <span key={barcode.id} className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 font-mono text-xs text-emerald-800">
                                                                 <Barcode className="h-3 w-3" />{barcode.barcode}
-                                                                <button type="button" title="ลบบาร์โค้ด" onClick={() => router.delete(route('pharmacy.inventory.barcodes.destroy', { barcode: barcode.id }))}><Trash2 className="h-3 w-3" /></button>
+                                                                <button type="button" title="ลบบาร์โค้ด" onClick={() => router.delete(wh('barcodes.destroy', { barcode: barcode.id }))}><Trash2 className="h-3 w-3" /></button>
                                                             </span>
                                                         ))}
                                                     </div>
@@ -208,7 +178,7 @@ export default function Items({
                                                         <summary className="cursor-pointer text-xs font-medium text-slate-600">แก้ไขหน่วยและอัตราบรรจุ</summary>
                                                         <form onSubmit={(event) => {
                                                             event.preventDefault();
-                                                            router.patch(route('pharmacy.inventory.units.update', { unit: unit.id }), formData(event.currentTarget));
+                                                            router.patch(wh('units.update', { unit: unit.id }), formData(event.currentTarget));
                                                         }} className="mt-2 grid gap-2 md:grid-cols-4">
                                                             <Input name="name" defaultValue={unit.name} required />
                                                             <select name="packaging_type_id" defaultValue={unit.packaging_type?.id || ''} className="h-10 rounded-md border px-2 text-sm">
@@ -241,7 +211,7 @@ export default function Items({
                                     <div className="grid gap-4 lg:grid-cols-2">
                                         <form onSubmit={(event) => {
                                             event.preventDefault();
-                                            router.post(route('pharmacy.inventory.items.units.store', { item: item.id }), formData(event.currentTarget));
+                                            router.post(wh('items.units.store', { item: item.id }), formData(event.currentTarget));
                                         }} className="space-y-3 rounded-2xl bg-slate-50 p-4">
                                             <h3 className="font-semibold">เพิ่มระดับบรรจุภัณฑ์</h3>
                                             <div className="grid gap-2 sm:grid-cols-2">
@@ -271,7 +241,7 @@ export default function Items({
 
                                         <form onSubmit={(event) => {
                                             event.preventDefault();
-                                            router.post(route('pharmacy.inventory.items.barcodes.store', { item: item.id }), formData(event.currentTarget));
+                                            router.post(wh('items.barcodes.store', { item: item.id }), formData(event.currentTarget));
                                         }} className="space-y-3 rounded-2xl bg-emerald-50 p-4">
                                             <h3 className="font-semibold">เพิ่มบาร์โค้ดให้กล่อง/หน่วย</h3>
                                             <select name="unit_id" className="h-10 w-full rounded-md border px-3 text-sm" required>
