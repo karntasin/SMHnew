@@ -50,7 +50,15 @@ CREATE TABLE IF NOT EXISTS messages (
   message_type TEXT NOT NULL DEFAULT 'text',
   message TEXT NOT NULL,
   is_read INTEGER NOT NULL DEFAULT 0,
+  deleted_at TEXT,
   created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS typing (
+  conversation_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (conversation_id, user_id)
 );
 
 CREATE TABLE IF NOT EXISTS chat_files (
@@ -90,3 +98,14 @@ CREATE TABLE IF NOT EXISTS ai_rate (
   count INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (user_id, day)
 );
+
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  endpoint TEXT NOT NULL UNIQUE,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_push_user ON push_subscriptions(user_id);

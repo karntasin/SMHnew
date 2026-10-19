@@ -7,6 +7,7 @@ import PharmacySubNav, { pharmacyBreadcrumbs } from '@/pages/Pharmacy/PharmacySu
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ThaiDatePicker } from '@/components/ui/thai-date-picker';
 import axios from 'axios';
 import {
     inventoryFieldLabel,
@@ -19,6 +20,7 @@ import {
     inventorySummaryBox,
     inventorySummaryCard,
 } from '@/pages/Pharmacy/Inventory/ui-classes';
+import { warehouseActive, warehouseHome, warehouseSupply, wh } from '@/pages/Pharmacy/inventoryCatalog';
 
 type Location = { id: number; code: string; name: string; type: string };
 type Drug = { icode: string; name: string; strength?: string | null; unit?: string | null; item_type?: string; income_name?: string };
@@ -68,10 +70,12 @@ export default function Receive({
     locations,
     packagingTypes = [],
     initialBarcode,
+    initialIcode,
 }: {
     locations: Location[];
     packagingTypes?: PackagingType[];
     initialBarcode?: string;
+    initialIcode?: string;
 }) {
     const warehouses = locations.filter((l) => l.type === 'warehouse');
     const [icode, setIcode] = useState('');
@@ -79,6 +83,7 @@ export default function Receive({
     const [hits, setHits] = useState<Drug[]>([]);
     const [selected, setSelected] = useState<Drug | null>(null);
     const [qty, setQty] = useState('1');
+    const [invoiceUnitPrice, setInvoiceUnitPrice] = useState('');
     const [barcode, setBarcode] = useState(initialBarcode || '');
     const [scanCode, setScanCode] = useState(initialBarcode || '');
     const [scanError, setScanError] = useState('');
@@ -130,6 +135,15 @@ export default function Receive({
     const outerName = levels[levels.length - 1]?.name || 'หน่วยนอกสุด';
     const baseName = levels[0]?.name || selected?.unit || 'หน่วยฐาน';
 
+    const invoiceTotalPrice = useMemo(() => {
+        const packageQty = Number(qty);
+        const unitPrice = Number(invoiceUnitPrice);
+        if (!invoiceUnitPrice.trim() || Number.isNaN(packageQty) || Number.isNaN(unitPrice) || unitPrice < 0) {
+            return '';
+        }
+        return (Math.round(packageQty * unitPrice * 100) / 100).toFixed(2);
+    }, [qty, invoiceUnitPrice]);
+
     const chooseDrug = async (drug: Drug) => {
         setSelected(drug);
         setIcode(drug.icode);
@@ -137,7 +151,7 @@ export default function Receive({
         setQ(drug.name);
 
         try {
-            const res = await axios.get(route('pharmacy.inventory.drugs.units', { icode: drug.icode }));
+            const res = await axios.get(wh('drugs.units', { icode: drug.icode }));
             const existing = (res.data?.data?.units ?? []) as Array<{
                 name: string;
                 contains_qty: number;
@@ -189,7 +203,7 @@ export default function Receive({
         setBarcode(trimmed);
         setScanCode(trimmed);
         try {
-            const response = await axios.get(route('pharmacy.inventory.scan.resolve'), { params: { code: trimmed } });
+            const response = await axios.get(wh('scan.resolve'), { params: { code: trimmed } });
             const found = response.data?.data;
             if (found?.item) {
                 await chooseDrug(found.item);
@@ -208,12 +222,22 @@ export default function Receive({
     }, [initialBarcode]);
 
     useEffect(() => {
+        const code = initialIcode?.trim();
+        if (!code) return;
+        axios.get(wh('drugs.search'), { params: { q: code } }).then(async (res) => {
+            const found = ((res.data?.data ?? []) as Drug[]).find((drug) => drug.icode === code);
+            if (found) await chooseDrug(found);
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [initialIcode]);
+
+    useEffect(() => {
         if (q.trim().length < 2) {
             setHits([]);
             return;
         }
         const t = setTimeout(() => {
-            axios.get(route('pharmacy.inventory.drugs.search'), { params: { q } }).then((res) => {
+            axios.get(wh('drugs.search'), { params: { q } }).then((res) => {
                 setHits(res.data?.data ?? []);
             });
         }, 250);
@@ -244,19 +268,19 @@ export default function Receive({
             contains_qty: index === 0 ? 1 : (Number(lvl.contains_qty) || 1),
             barcode: lvl.barcode || null,
         }));
-        router.post(route('pharmacy.inventory.receive.store'), payload);
+        router.post(wh('receive.store'), payload);
     };
 
     return (
         <AppLayout breadcrumbs={pharmacyBreadcrumbs([
-            { title: 'คลังยา / ห้องยา', href: route('pharmacy.inventory.index') },
+            { title: warehouseHome(), href: wh('index') },
             { title: 'รับเข้ายา' },
         ])}>
-            <Head title="รับเข้ายา" />
+            <Head title={warehouseSupply() ? "รับเข้าเวชภัณฑ์" : "รับเข้ายา"} />
             <div className="container mx-auto space-y-6 px-4 py-6">
-                <PharmacySubNav active="pharmacy.inventory.index" />
+                <PharmacySubNav active={warehouseActive()} />
                 <form onSubmit={onSubmit} className={inventoryFormShell}>
-                    <h1 className="text-xl font-bold text-foreground">รับเข้ายาเข้าคลัง</h1>
+                    <h1 className="text-xl font-bold text-foreground">{warehouseSupply() ? "รับเข้าเวชภัณฑ์เข้าคลัง" : "รับเข้ายาเข้าคลัง"}</h1>
                     <p className="text-sm text-muted-foreground">
                         สแกนบาร์โค้ดหรือค้นหายา พร้อมระบุโครงสร้างบรรจุภัณฑ์ เช่น 1 ลัง = 20 กล่อง, 1 กล่อง = 10 แพ็ค, 1 แพ็ค = 10 เม็ด
                     </p>
@@ -593,11 +617,11 @@ export default function Receive({
                         </div>
                         <div className="space-y-2">
                             <Label className={inventoryFieldLabel}>วันที่รับ *</Label>
-                            <Input name="received_at" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} />
+                            <ThaiDatePicker name="received_at" label="วันที่รับ" required defaultValue={new Date().toISOString().slice(0, 10)} />
                         </div>
                         <div className="space-y-2">
                             <Label className={inventoryFieldLabel}>วันหมดอายุ</Label>
-                            <Input name="expires_at" type="date" />
+                            <ThaiDatePicker name="expires_at" label="วันหมดอายุ" />
                         </div>
                         <div className="space-y-2">
                             <Label className={inventoryFieldLabel}>ผู้จำหน่าย</Label>
@@ -609,15 +633,38 @@ export default function Receive({
                         </div>
                         <div className="space-y-2">
                             <Label className={inventoryFieldLabel}>วันที่ใบส่งของ</Label>
-                            <Input name="invoice_date" type="date" />
+                            <ThaiDatePicker name="invoice_date" label="วันที่ใบส่งของ" />
                         </div>
                         <div className="space-y-2">
                             <Label className={inventoryFieldLabel}>ราคาต่อหน่วยรับเข้า ({outerName})</Label>
-                            <Input name="invoice_unit_price" type="number" step="0.0001" min="0" placeholder="เช่น 250.00" />
+                            <Input
+                                name="invoice_unit_price"
+                                type="number"
+                                step="0.0001"
+                                min="0"
+                                placeholder="เช่น 250.00"
+                                value={invoiceUnitPrice}
+                                onChange={(e) => setInvoiceUnitPrice(e.target.value)}
+                            />
                         </div>
                         <div className="space-y-2">
                             <Label className={inventoryFieldLabel}>ราคารวมตามใบส่งของ (บาท)</Label>
-                            <Input name="invoice_total_price" type="number" step="0.01" min="0" placeholder="เช่น 1250.00" />
+                            {invoiceTotalPrice !== '' && (
+                                <input type="hidden" name="invoice_total_price" value={invoiceTotalPrice} />
+                            )}
+                            <Input
+                                type="text"
+                                readOnly
+                                tabIndex={-1}
+                                value={invoiceTotalPrice !== '' ? invoiceTotalPrice : '—'}
+                                className="bg-muted/40"
+                                aria-label="ราคารวมตามใบส่งของ คำนวณอัตโนมัติ"
+                            />
+                            <p className="text-[11px] text-muted-foreground">
+                                {invoiceTotalPrice !== ''
+                                    ? `คำนวณจาก ${qty || 0} × ${invoiceUnitPrice}`
+                                    : 'คำนวณอัตโนมัติจากจำนวนรับเข้า × ราคาต่อหน่วย'}
+                            </p>
                         </div>
                         <div className="space-y-2">
                             <Label className={inventoryFieldLabel}>ขั้นต่ำที่ต้องสั่งซื้อ (reorder - {baseName})</Label>

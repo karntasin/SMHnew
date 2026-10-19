@@ -44,18 +44,8 @@ interface Props {
 }
 
 const breadcrumbs = [
-    {
-        title: 'KM',
-        href: '/km/dashboard',
-    },
-    {
-        title: 'ระบบการเรียนรู้ (E-Learning)',
-        href: '/km/learn/dashboard',
-    },
-    {
-        title: 'หลักสูตร',
-        href: '/km/learn/courses',
-    },
+    { title: 'พัฒนาบุคลากร', href: '/km/learn/hub' },
+    { title: 'หลักสูตร', href: '/km/learn/courses' },
 ];
 
 export default function CourseQuiz({ course, quiz }: Props) {
@@ -105,7 +95,7 @@ export default function CourseQuiz({ course, quiz }: Props) {
 
     if (submitted || flash.success) {
         return (
-            <AppLayout breadcrumbs={breadcrumbs}>
+            <AppLayout breadcrumbs={[...breadcrumbs, { title: course.title, href: route('km.learn.courses.show', course.id) }, { title: quiz.title, href: '#' }]}>
                 <Head title={`ผลการทดสอบ - ${quiz.title}`} />
                 <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-white dark:from-emerald-950/20 dark:via-teal-950/20 dark:to-background p-6 flex items-center justify-center">
                     <Card className="w-full max-w-2xl border-none shadow-2xl bg-white/90 backdrop-blur-sm">
@@ -121,7 +111,7 @@ export default function CourseQuiz({ course, quiz }: Props) {
                             
                             <div className="pt-6 flex justify-center gap-4">
                                 <Button asChild variant="outline" className="border-emerald-200 text-emerald-700 hover:bg-emerald-50">
-                                    <Link href={route('km.learn.courses.index')}>กลับหน้ารวมหลักสูตร</Link>
+                                    <Link href={route('km.learn.courses.show', course.id)}>กลับหน้าหลักสูตร</Link>
                                 </Button>
                                 <Button asChild className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg hover:shadow-emerald-500/30 transition-all">
                                     <Link href={route('km.learn.courses.show', course.id)}>
@@ -137,7 +127,7 @@ export default function CourseQuiz({ course, quiz }: Props) {
     }
 
     return (
-        <AppLayout breadcrumbs={[...breadcrumbs, { title: quiz.title, href: '#' }]}>
+        <AppLayout breadcrumbs={[...breadcrumbs, { title: course.title, href: route('km.learn.courses.show', course.id) }, { title: quiz.title, href: '#' }]}>
             <Head title={quiz.title} />
 
             <div className="min-h-screen bg-gradient-to-br from-slate-50 via-gray-50 to-white dark:from-slate-950 dark:via-gray-900 dark:to-background p-6">

@@ -7,6 +7,7 @@ use App\Models\QualityIndicator;
 use App\Models\QualityIndicatorEntry;
 use App\Models\QualityIndicatorImportLog;
 use App\Models\TeamHa;
+use App\Services\Quality\DepartmentKpiWorkbookImportService;
 use Box\Spout\Common\Entity\Style\CellAlignment;
 use Box\Spout\Common\Entity\Style\Color;
 use Box\Spout\Reader\Common\Creator\ReaderEntityFactory;
@@ -104,20 +105,11 @@ class QualityIndicatorImportService
             ->setCellAlignment(CellAlignment::CENTER)
             ->build();
 
-        $descStyle = (new StyleBuilder())
-            ->setFontSize(10)
-            ->setFontItalic()
-            ->setFontColor(Color::rgb(71, 85, 105))
-            ->setBackgroundColor(Color::rgb(240, 253, 244))
-            ->setShouldWrapText()
-            ->build();
-
         $exampleStyle = (new StyleBuilder())
             ->setFontSize(10)
             ->setBackgroundColor(Color::rgb(254, 252, 232))
             ->build();
 
-        // ── readme ──────────────────────────────────────────────
         $writer->getCurrentSheet()->setName('readme');
 
         $add = function (array $values, $style = null) use ($writer) {
@@ -128,16 +120,17 @@ class QualityIndicatorImportService
             }
         };
 
-        $add(['โรงพยาบาลค่ายสุรสิงหนาท — คู่มือเทมเพลตนำเข้าตัวชี้วัดคุณภาพ'], $titleStyle);
-        $add(['ศูนย์พัฒนาคุณภาพ · ใช้กับหน้า /quality-indicators/import'], $mutedStyle);
+        $add(['โรงพยาบาลค่ายสุรสิงหนาท — เทมเพลตนำเข้าตัวชี้วัด เวอร์ชัน 2'], $titleStyle);
+        $add(['ศูนย์พัฒนาคุณภาพ · ตาราง KPI ตามปี ใช้กับหน้า /quality-indicators/import'], $mutedStyle);
         $add(['']);
 
         $add(['ขั้นตอนการใช้งาน'], $sectionStyle);
-        $add(['1', 'ดาวน์โหลดเทมเพลตนี้จากระบบ']);
-        $add(['2', 'เลือกปลายทางในระบบก่อนอัปโหลด: องค์กร / แผนก / ทีม HA (เลือกแผนกหรือทีมให้ตรง)']);
-        $add(['3', 'กรอกชีต indicators และ/หรือ entries — อย่าเปลี่ยนชื่อชีตและชื่อหัวคอลัมน์แถวที่ 1']);
-        $add(['4', 'แถวที่ 2 = คำอธิบาย (ระบบข้ามอัตโนมัติ) · แถวที่ 3 เป็นต้นไป = ข้อมูลจริง']);
-        $add(['5', 'อัปโหลด → ตรวจตัวอย่าง → พิมพ์คำว่า "ยืนยัน" → ระบบเก็บ Log']);
+        $add(['1', 'ดาวน์โหลดเทมเพลตนี้ แล้วลบแถวตัวอย่างสีเหลืองในชีต KPI ตามต้นฉบับ']);
+        $add(['2', 'เลือกปลายทางบนหน้าเว็บก่อนอัปโหลด: องค์กร / แผนก / ทีม HA']);
+        $add(['3', 'ไม่ต้องกรอกรหัส ระบบสร้างจากตัวย่อของปลายทางที่เลือก เช่น แผนก RAD ได้ rad-01 ทีม HRD ได้ hrd-01 ระดับองค์กรได้ org-01']);
+        $add(['4', 'กรอกชื่อข้อเป็น 1. ชื่อตัวชี้วัด และเป้าหมายในคอลัมน์ถัดไป แล้วใส่ผลรายปีในคอลัมน์ ปี65 เป็นต้น']);
+        $add(['5', 'เพิ่มหรือเปลี่ยนชื่อคอลัมน์ปีได้ ถ้าหัวคอลัมน์มีวงเล็บเดือน เช่น ปี69(ก.ค.) ระบบบันทึกหมายเหตุว่างวดนั้นถึงเดือนนั้น']);
+        $add(['6', 'อัปโหลด → ตรวจตัวอย่าง → พิมพ์คำว่า "ยืนยัน" → ระบบเก็บ Log']);
         $add(['']);
 
         $add(['สัญลักษณ์ความจำเป็นของช่อง'], $sectionStyle);
@@ -151,20 +144,13 @@ class QualityIndicatorImportService
         ]));
         $add(['']);
 
-        $add(['ชีต indicators — อธิบายทีละช่อง'], $sectionStyle);
-        $add(['ชื่อช่อง (แถว 1)', 'ความจำเป็น', 'คำอธิบาย / ค่าที่ระบบรองรับ'], $headerStyle);
+        $add(['ชีต KPI ตามต้นฉบับ — วิธีกรอก'], $sectionStyle);
+        $add(['ช่อง', 'ความจำเป็น', 'คำอธิบาย'], $headerStyle);
         foreach ([
-            ['code', 'ต้องระบุ', 'รหัสตัวชี้วัด ไม่ซ้ำในระบบ ใช้จับคู่กับชีต entries เช่น QI-IC-001'],
-            ['name', 'ต้องระบุ', 'ชื่อตัวชี้วัดภาษาไทยที่แสดงในระบบ'],
-            ['category', 'ไม่บังคับ', 'หมวดหมู่/กลุ่ม เช่น Clinical, Administrative, HA-I-1 หรือข้อความอื่น'],
-            ['unit', 'ไม่บังคับ', 'หน่วยนับ ว่างได้ (ค่าเริ่มต้น %) ตัวอย่าง: % , ครั้ง , คน , ราย , ต่อ 1000'],
-            ['target_value', 'ไม่บังคับ', 'ค่าเป้าหมายตัวเลข ทศนิยมได้ เช่น 2.00 — ว่างได้ถ้ายังไม่กำหนดเป้า'],
-            ['target_operator', 'ไม่บังคับ', 'เงื่อนไขเทียบเป้า ค่าว่างใช้ < · เลือกได้เฉพาะ: <   <=   >   >=   ='],
-            ['frequency', 'ไม่บังคับ', 'ความถี่เก็บข้อมูล ค่าว่างใช้ Monthly · เลือกได้: Monthly (รายเดือน) | Quarterly (รายไตรมาส) | Yearly (รายปี)'],
-            ['description', 'ไม่บังคับ', 'คำนิยาม/รายละเอียดตัวชี้วัด'],
-            ['formula_description', 'ไม่บังคับ', 'สูตรการคำนวณแบบอ่านเข้าใจ เช่น (ตัวตั้ง/ตัวหาร) x 100'],
-            ['is_active', 'ไม่บังคับ', 'สถานะใช้งาน ค่าว่าง=เปิดใช้ · 1/true/yes = Active · 0/false/no/inactive = ปิด'],
-            ['link_code', 'ไม่บังคับ', 'รหัสตัวชี้วัดที่มีอยู่แล้วที่ต้องการใช้ข้อมูลชุดเดียวกัน (สร้างเป็นรหัสลูก)'],
+            ['ตัวชี้วัดสำคัญ (KPI)', 'ต้องระบุ', 'ขึ้นต้นด้วยเลขข้อ เช่น 1. ชื่อตัวชี้วัด เลขข้อกลายเป็นรหัส rad-01'],
+            ['เป้าหมาย (Target)', 'ต้องระบุ', '< 10 นาที, <1, 80, 100, 0, 0 ครั้ง หรือ ไม่พบเชื้อ / ไม่พบสารปนเปื้อน'],
+            ['ปี65 ถึง ปี69(ก.ค.)', 'ไม่บังคับ', 'ผลของปีนั้น ว่างได้ · NA ไม่สร้างงวดแต่ไปอยู่คำอธิบาย · วงเล็บเดือนเป็นหมายเหตุถึงเดือนนั้น'],
+            ['ค่าที่เป็นเศษส่วน', 'ไม่บังคับ', 'เขียน 0.04 (2/4,996) หรือ 87 (26/30) ระบบเก็บผล ตัวตั้ง และตัวหาร'],
         ] as $row) {
             $needStyle = $row[1] === 'ต้องระบุ' ? $requiredStyle : $optionalStyle;
             $writer->addRow(WriterEntityFactory::createRow([
@@ -175,113 +161,55 @@ class QualityIndicatorImportService
         }
         $add(['']);
 
-        $add(['ชีต entries — อธิบายทีละช่อง'], $sectionStyle);
-        $add(['ชื่อช่อง (แถว 1)', 'ความจำเป็น', 'คำอธิบาย / ค่าที่ระบบรองรับ'], $headerStyle);
+        $add(['วิธีอ่านเป้าหมาย'], $sectionStyle);
+        $add(['ค่าที่กรอก', 'ความหมาย'], $headerStyle);
         foreach ([
-            ['code', 'ต้องระบุ', 'รหัสตัวชี้วัด ต้องตรงกับ indicators ในไฟล์นี้ หรือที่มีอยู่แล้วในสังกัดที่เลือกนำเข้า'],
-            ['period_date', 'ต้องระบุ', 'งวดข้อมูล รูปแบบ YYYY-MM-DD เช่น 2026-01-01 (แนะนำใช้วันที่ 1 ของเดือน) หรือวันที่จาก Excel'],
-            ['numerator', 'ไม่บังคับ*', 'ตัวตั้ง (จำนวน) — *จำเป็นถ้าไม่กรอก result_value'],
-            ['denominator', 'ไม่บังคับ*', 'ตัวหาร — *จำเป็นถ้าไม่กรอก result_value และต้องไม่เป็น 0'],
-            ['result_value', 'ไม่บังคับ*', 'ผลลัพธ์ — *จำเป็นถ้าไม่กรอก numerator+denominator · ถ้าว่างระบบคำนวณให้อัตโนมัติตาม unit'],
-            ['notes', 'ไม่บังคับ', 'หมายเหตุของงวดนั้น'],
-        ] as $row) {
-            $needStyle = str_starts_with($row[1], 'ต้องระบุ') ? $requiredStyle : $optionalStyle;
-            $writer->addRow(WriterEntityFactory::createRow([
-                WriterEntityFactory::createCell($row[0], $labelStyle),
-                WriterEntityFactory::createCell($row[1], $needStyle),
-                WriterEntityFactory::createCell($row[2], $mutedStyle),
-            ]));
-        }
-        $add(['']);
-
-        $add(['ค่าที่เลือกได้ในระบบ (อ้างอิง)'], $sectionStyle);
-        $add(['หัวข้อ', 'ค่าที่ใช้กรอก', 'ความหมาย'], $headerStyle);
-        foreach ([
-            ['ปลายทางนำเข้า (เลือกในหน้าเว็บ)', 'organization', 'ระดับองค์กร'],
-            ['ปลายทางนำเข้า (เลือกในหน้าเว็บ)', 'department', 'ระดับแผนก/ฝ่าย — ต้องเลือกแผนก'],
-            ['ปลายทางนำเข้า (เลือกในหน้าเว็บ)', 'ha_team', 'ระดับทีม HA — ต้องเลือกทีม'],
-            ['target_operator', '<', 'น้อยกว่า'],
-            ['target_operator', '<=', 'น้อยกว่าหรือเท่ากับ'],
-            ['target_operator', '>', 'มากกว่า'],
-            ['target_operator', '>=', 'มากกว่าหรือเท่ากับ'],
-            ['target_operator', '=', 'เท่ากับ'],
-            ['frequency', 'Monthly', 'รายเดือน'],
-            ['frequency', 'Quarterly', 'รายไตรมาส'],
-            ['frequency', 'Yearly', 'รายปี'],
-            ['is_active', '1', 'เปิดใช้งาน (Active)'],
-            ['is_active', '0', 'ปิดใช้งาน (Inactive)'],
-            ['การคำนวณ result_value', 'unit = %', '(numerator / denominator) x 100'],
-            ['การคำนวณ result_value', 'unit มีคำว่า 1000', '(numerator / denominator) x 1000'],
-            ['การคำนวณ result_value', 'หน่วยอื่น', 'numerator / denominator'],
+            ['< 10 นาที', 'น้อยกว่า 10 หน่วยนาที'],
+            ['<1 และชื่อมีคำว่าร้อยละ', 'น้อยกว่า 1 หน่วย %'],
+            ['80 หรือ 100', 'มากกว่าหรือเท่ากับค่านี้ ถ้าร้อยละใช้หน่วย %'],
+            ['0 หรือ 0 ครั้ง', 'น้อยกว่าหรือเท่ากับ 0 หน่วยครั้ง'],
+            ['ไม่พบเชื้อ', 'บันทึกผลเป็น 0 เป้าหมายไม่เกิน 0 และคงข้อความไว้ในหมายเหตุงวด'],
+            ['NA', 'ไม่สร้างงวดของปีนั้น ข้อความไปอยู่คำอธิบายตัวชี้วัด'],
+            ['0.04 (2/4,996)', 'ผล 0.04 ตัวตั้ง 2 ตัวหาร 4996'],
         ] as $row) {
             $writer->addRow(WriterEntityFactory::createRow([
                 WriterEntityFactory::createCell($row[0], $labelStyle),
-                WriterEntityFactory::createCell($row[1]),
-                WriterEntityFactory::createCell($row[2], $mutedStyle),
+                WriterEntityFactory::createCell($row[1], $mutedStyle),
             ]));
         }
         $add(['']);
 
         $add(['กฎสำคัญ / ข้อควรระวัง'], $sectionStyle);
-        $add(['•', 'ห้ามเปลี่ยนชื่อชีต: readme, indicators, entries และห้ามเปลี่ยนชื่อคอลัมน์แถวที่ 1']);
-        $add(['•', 'แถวที่ 2 ของ indicators/entries เป็นคำอธิบาย — ห้ามลบแถวนี้ (ระบบข้ามให้อัตโนมัติ)']);
-        $add(['•', 'เริ่มกรอกข้อมูลจริงตั้งแต่แถวที่ 3 — แทนที่แถวตัวอย่างได้เลย']);
-        $add(['•', 'code เดียวกันแต่คนละแผนก/ทีมในระบบอยู่แล้ว จะถูกปฏิเสธ']);
-        $add(['•', 'ถ้ามีข้อมูลงวด (period_date) เดิมของ code นั้นอยู่แล้ว ระบบจะอัปเดตแทนสร้างใหม่']);
-        $add(['•', 'link_code ใช้สร้างรหัสลูกที่ชี้ข้อมูลชุดเดียวกับรหัสนั้น — แก้ที่ไหนมีผลทุกหัสที่เชื่อมกัน']);
-        $add(['•', 'ตัวเลขแสดงผลในระบบเป็นทศนิยม 2 ตำแหน่ง']);
+        $add(['•', 'ห้ามเปลี่ยนชื่อชีต KPI ตามต้นฉบับ และห้ามเปลี่ยนข้อความหัวคอลัมน์ A กับ B']);
+        $add(['•', 'แถวสีเหลืองเป็นตัวอย่าง ให้ลบหรือแทนที่ก่อนนำเข้าจริง']);
+        $add(['•', 'รหัสถูกสร้างจากตัวย่อปลายทางที่เลือกบนหน้าเว็บ ไม่ได้กรอกในไฟล์']);
+        $add(['•', 'ถ้าตัวย่อแผนกหรือทีมว่าง หรือมีอักขระที่ใช้เป็นรหัสไม่ได้ ระบบจะไม่ให้ยืนยัน']);
+        $add(['•', 'รหัสนี้มีอยู่แล้วในสังกัดอื่น จะถูกปฏิเสธ และไม่เขียนทับ']);
+        $add(['•', 'ถ้างวดปีเดิมของรหัสนั้นมีอยู่แล้วในสังกัดเดียวกัน ระบบจะอัปเดตแทนสร้างใหม่']);
+        $add(['•', 'ไฟล์เทมเพลตเดิมที่มีชีต indicators และ entries ยังอัปโหลดได้']);
         $add(['']);
         $add(['โรงพยาบาลค่ายสุรสิงหนาท · ศูนย์พัฒนาคุณภาพ'], $mutedStyle);
 
-        // ── indicators ──────────────────────────────────────────
-        $writer->addNewSheetAndMakeItCurrent()->setName('indicators');
-        $writer->addRow(WriterEntityFactory::createRowFromArray(self::INDICATOR_HEADERS, $headerStyle));
+        $writer->addNewSheetAndMakeItCurrent()->setName('KPI ตามต้นฉบับ');
         $writer->addRow(WriterEntityFactory::createRowFromArray([
-            '[ต้องระบุ] รหัสไม่ซ้ำ เช่น QI-IC-001',
-            '[ต้องระบุ] ชื่อตัวชี้วัด',
-            '[ไม่บังคับ] หมวดหมู่ เช่น Clinical',
-            '[ไม่บังคับ] หน่วย ค่าว่าง=% เช่น % / ครั้ง / คน / ต่อ 1000',
-            '[ไม่บังคับ] ค่าเป้าตัวเลข เช่น 2.00',
-            '[ไม่บังคับ] เงื่อนไข: < หรือ <= หรือ > หรือ >= หรือ = (ว่างใช้ <)',
-            '[ไม่บังคับ] Monthly / Quarterly / Yearly (ว่างใช้ Monthly)',
-            '[ไม่บังคับ] คำนิยาม/รายละเอียด',
-            '[ไม่บังคับ] สูตรคำนวณ เช่น (ตัวตั้ง/ตัวหาร)x100',
-            '[ไม่บังคับ] 1=เปิดใช้, 0=ปิด (ว่าง=เปิด)',
-            '[ไม่บังคับ] รหัสแม่ที่ต้องการใช้ข้อมูลชุดเดียวกัน',
-        ], $descStyle));
-        $writer->addRow(WriterEntityFactory::createRowFromArray([
-            'QI-DEMO-001',
-            'อัตราการติดเชื้อในโรงพยาบาล',
-            'Clinical',
-            '%',
-            '2.00',
-            '<',
-            'Monthly',
-            'ตัวอย่าง — แทนที่หรือลบก่อนนำเข้าจริง',
-            '(จำนวนผู้ป่วยติดเชื้อ / จำนวนผู้ป่วยทั้งหมด) x 100',
-            '1',
-            '',
-        ], $exampleStyle));
-
-        // ── entries ─────────────────────────────────────────────
-        $writer->addNewSheetAndMakeItCurrent()->setName('entries');
-        $writer->addRow(WriterEntityFactory::createRowFromArray(self::ENTRY_HEADERS, $headerStyle));
-        $writer->addRow(WriterEntityFactory::createRowFromArray([
-            '[ต้องระบุ] รหัสเดียวกับ indicators',
-            '[ต้องระบุ] งวด YYYY-MM-DD เช่น 2026-01-01',
-            '[ไม่บังคับ*] ตัวตั้ง — จำเป็นถ้าไม่กรอก result_value',
-            '[ไม่บังคับ*] ตัวหาร — จำเป็นถ้าไม่กรอก result_value',
-            '[ไม่บังคับ*] ผลลัพธ์ — ว่างได้ถ้ามีตัวตั้ง+ตัวหาร (ระบบคำนวณให้)',
-            '[ไม่บังคับ] หมายเหตุ',
-        ], $descStyle));
-        $writer->addRow(WriterEntityFactory::createRowFromArray([
-            'QI-DEMO-001',
-            '2026-01-01',
-            '2',
-            '100',
-            '2.00',
-            'ตัวอย่างงวด ม.ค. — แทนที่หรือลบก่อนนำเข้าจริง',
-        ], $exampleStyle));
+            'ตัวชี้วัดสำคัญ (KPI)',
+            'เป้าหมาย (Target)',
+            'ปี65',
+            'ปี66',
+            'ปี67',
+            'ปี68',
+            'ปี69(ก.ค.)',
+        ], $headerStyle));
+        foreach ([
+            ['1. ระยะเวลาการรอคอย', '< 10 นาที', '6', '5', '5', '5', '5'],
+            ['2. ร้อยละการถ่ายภาพซ้ำ', '<1', '0.04 (2/4,996)', 'NA', '0.02 (1/5,693)', '0.02 (1/5,319)', '0.02 (1/5,351)'],
+            ['3. ร้อยละความสำเร็จ', '80', '87 (26/30)', '90 (27/30)', '86 (24/28)', '82 (23/28)', '86 (12/14)'],
+            ['4. ร้อยละการจัดได้ถูกต้อง', '100', '99 (16,729/16,753)', '99 (2,690/2,696)', '99 (2,114/2,134)', '99 (1,416/1,422)', '99 (428/429)'],
+            ['5. จำนวนคำร้องเรียน', '0 ครั้ง', '5', '1', '2', '2', '1'],
+            ['6. การตรวจเชื้อในอาหาร', 'ไม่พบเชื้อ', 'ไม่พบเชื้อ', 'ไม่พบเชื้อ', 'ไม่พบเชื้อ', 'ไม่พบเชื้อ', 'ไม่พบเชื้อ'],
+        ] as $example) {
+            $writer->addRow(WriterEntityFactory::createRowFromArray($example, $exampleStyle));
+        }
 
         $writer->close();
     }
@@ -293,7 +221,7 @@ class QualityIndicatorImportService
     {
         $this->assertOwnershipSelection($type, $departmentId, $teamId);
 
-        $parsed = $this->parseWorkbook($file->getRealPath());
+        $parsed = $this->parseWorkbook($file->getRealPath(), $type, $departmentId, $teamId);
         $preview = $this->buildPreview($parsed, $type, $departmentId, $teamId);
 
         $log = QualityIndicatorImportLog::create([
@@ -504,9 +432,30 @@ class QualityIndicatorImportService
     }
 
     /**
+     * @return array{indicators: list<array>, entries: list<array>, file_errors?: list<array>}
+     */
+    private function parseWorkbook(string $path, string $type, ?int $departmentId, ?int $teamId): array
+    {
+        $reader = ReaderEntityFactory::createXLSXReader();
+        $reader->open($path);
+
+        $sheetNames = [];
+        foreach ($reader->getSheetIterator() as $sheet) {
+            $sheetNames[] = mb_strtolower(trim((string) $sheet->getName()));
+        }
+        $reader->close();
+
+        if (in_array('indicators', $sheetNames, true) || in_array('entries', $sheetNames, true)) {
+            return $this->parseLegacyWorkbook($path);
+        }
+
+        return $this->parseYearlyWorkbook($path, $type, $departmentId, $teamId);
+    }
+
+    /**
      * @return array{indicators: list<array>, entries: list<array>}
      */
-    private function parseWorkbook(string $path): array
+    private function parseLegacyWorkbook(string $path): array
     {
         // Uploaded files are stored as *.tmp — Spout's createReaderFromFile()
         // would fail on extension. Force XLSX reader instead.
@@ -567,6 +516,93 @@ class QualityIndicatorImportService
     }
 
     /**
+     * @return array{indicators: list<array>, entries: list<array>, file_errors?: list<array>}
+     */
+    private function parseYearlyWorkbook(string $path, string $type, ?int $departmentId, ?int $teamId): array
+    {
+        $owner = $this->yearlyOwner($type, $departmentId, $teamId);
+
+        try {
+            $specs = app(DepartmentKpiWorkbookImportService::class)
+                ->parseSpecs($path, $owner['prefix'], $owner['category']);
+        } catch (\RuntimeException $e) {
+            $message = $e->getMessage();
+            if (str_starts_with($message, 'รหัสแผนกใช้เป็นรหัสตัวชี้วัดไม่ได้')) {
+                $message = 'ตัวย่อของสังกัดที่เลือกใช้สร้างรหัสไม่ได้ ให้เป็นตัวอักษรภาษาอังกฤษ เช่น RAD หรือ HRD';
+            }
+
+            return [
+                'indicators' => [],
+                'entries' => [],
+                'file_errors' => [[
+                    'sheet' => 'KPI ตามต้นฉบับ',
+                    'row' => 1,
+                    'messages' => [$message],
+                ]],
+            ];
+        }
+
+        $indicators = [];
+        $entries = [];
+        foreach ($specs as $spec) {
+            $indicators[] = [
+                '_row' => (int) $spec['row'],
+                'code' => $spec['code'],
+                'name' => $spec['name'],
+                'category' => $spec['category'],
+                'unit' => $spec['unit'],
+                'target_value' => $spec['target_value'],
+                'target_operator' => $spec['target_operator'],
+                'frequency' => $spec['frequency'],
+                'description' => $spec['description'] ?? '',
+                'formula_description' => $spec['formula_description'] ?? '',
+                'is_active' => '1',
+                'link_code' => '',
+            ];
+
+            foreach ($spec['entries'] as $entry) {
+                $entries[] = [
+                    '_row' => (int) $spec['row'],
+                    'code' => $spec['code'],
+                    'period_date' => $entry['period_date'],
+                    'numerator' => $entry['numerator'],
+                    'denominator' => $entry['denominator'],
+                    'result_value' => $entry['result_value'],
+                    'notes' => $entry['notes'] ?? '',
+                ];
+            }
+        }
+
+        return compact('indicators', 'entries');
+    }
+
+    /**
+     * @return array{prefix: string, category: string}
+     */
+    private function yearlyOwner(string $type, ?int $departmentId, ?int $teamId): array
+    {
+        if ($type === 'department') {
+            $department = Department::query()->findOrFail($departmentId);
+
+            return [
+                'prefix' => trim((string) $department->code),
+                'category' => (string) $department->name,
+            ];
+        }
+
+        if ($type === 'ha_team') {
+            $team = TeamHa::query()->findOrFail($teamId);
+
+            return [
+                'prefix' => trim((string) $team->abbreviation),
+                'category' => (string) ($team->name_th ?: $team->abbreviation),
+            ];
+        }
+
+        return ['prefix' => 'org', 'category' => 'องค์กร'];
+    }
+
+    /**
      * @param  array{indicators: list<array>, entries: list<array>}  $parsed
      * @return array{can_confirm: bool, counts: array, indicators: list<array>, entries: list<array>, errors: list<array>}
      */
@@ -583,6 +619,11 @@ class QualityIndicatorImportService
             'errors' => 0,
             'skip' => 0,
         ];
+
+        foreach ($parsed['file_errors'] ?? [] as $error) {
+            $errors[] = $error;
+            $counts['errors']++;
+        }
 
         $seenCodes = [];
 

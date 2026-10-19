@@ -50,6 +50,15 @@ class PharmacyItem extends Model
         return $this->base_unit ?: $this->unit ?: 'หน่วย';
     }
 
+    public function scopeOfCatalog($query, string $catalog)
+    {
+        if ($catalog === 'nondrug') {
+            return $query->where('item_type', 'nondrug');
+        }
+
+        return $query->where(fn ($inner) => $inner->where('item_type', 'drug')->orWhereNull('item_type'));
+    }
+
     public function isNondrug(): bool
     {
         return $this->item_type === 'nondrug';

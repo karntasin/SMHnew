@@ -125,7 +125,7 @@ class TvDisplaySettingController extends Controller
             $data['screening_rotate_seconds'] = 60;
         }
         if (empty($data['screening_title'])) {
-            $data['screening_title'] = 'ผู้ป่วยรอซักประวัติ / คัดกรอง';
+            $data['screening_title'] = 'รอซักประวัติ ห้อง 301 หรือ 302';
         }
         if (empty($data['screening_subtitle'])) {
             $data['screening_subtitle'] = 'จุดคัดกรองห้องตรวจโรคภายนอก (002)';

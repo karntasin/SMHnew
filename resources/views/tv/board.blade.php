@@ -711,7 +711,7 @@
                  x-transition:enter-start="opacity-0 scale-95"
                  x-transition:enter-end="opacity-100 scale-100"
                  class="grid gap-1.5 flex-1 min-h-0 h-full" :class="gridClass">
-                <template x-for="([roomName, roomData], idx) in Object.entries(rooms)" :key="roomName">
+                <template x-for="([roomName, roomData], idx) in roomEntries()" :key="roomName">
                     <!-- Room Card -->
                     <div class="room-card backdrop-blur-sm rounded-xl md:rounded-2xl shadow-xl flex flex-col h-full min-h-0 relative overflow-hidden transition-all duration-300"
                          :class="getCardClass(roomData, idx)"
@@ -903,6 +903,10 @@
                                 </h2>
                                 <span class="px-3 py-1 rounded-full text-sm font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm"
                                       x-text="'รอผลตรวจทั้งหมด ' + pendingLabXray.length + ' ราย'"></span>
+                                <template x-if="labPageCount > 1">
+                                    <span class="px-2 py-0.5 rounded-full text-xs font-extrabold bg-slate-950/80 text-amber-200 border border-amber-500/30"
+                                          x-text="'หน้า ' + (labPage + 1) + '/' + labPageCount"></span>
+                                </template>
                             </div>
                             <p class="text-slate-400 text-xs md:text-sm mt-0.5 font-medium">
                                 {{ $settings->lab_xray_subtitle ?: 'รายชื่อจะหายไปโดยอัตโนมัติเมื่อผลการตรวจออกครบทุกรายการ และสามารถเข้าตรวจต่อได้ทันที' }}
@@ -921,79 +925,60 @@
                         </div>
                         <button type="button" @click="toggleView()"
                                 class="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-extrabold text-sm shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer">
-                            <span>🏥 กลับหน้าห้องตรวจ</span>
+                            <span x-text="labPage < labPageCount - 1 ? 'หน้าถัดไป' : '🏥 กลับหน้าห้องตรวจ'"></span>
                             <span class="text-xs bg-black/30 px-2 py-0.5 rounded-md" x-text="rotateCountdown + 's'"></span>
                         </button>
                     </div>
                 </div>
 
                 <!-- Cards Grid -->
-                <div class="flex-1 min-h-0 overflow-y-auto pr-1">
+                <div x-ref="labGrid" class="flex-1 min-h-0 overflow-hidden">
                     <template x-if="pendingLabXray.length > 0">
-                        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-5 items-stretch">
-                            <template x-for="p in pendingLabXray" :key="'pending-' + p.oqueue">
-                                <div class="bg-gradient-to-br from-slate-800/95 via-slate-850/95 to-slate-900/95 rounded-2xl p-4 md:p-5 border-2 transition-all duration-200 shadow-xl flex flex-col justify-between min-h-[175px]"
-                                     :class="p.triage_level ? getErWaitingItemClass(p) : 'border-indigo-500/30 hover:border-indigo-400/50'">
+                        <div class="grid gap-2 items-start content-start"
+                             :style="'grid-template-columns: repeat(' + labCols + ', minmax(0, 1fr))'">
+                            <template x-for="p in labPageItems" :key="'pending-' + labPage + '-' + p.oqueue">
+                                <div data-lab-card
+                                     class="bg-gradient-to-br from-slate-800/95 via-slate-850/95 to-slate-900/95 rounded-lg px-2.5 py-1.5 border transition-all duration-200 shadow-md flex flex-col"
+                                     :class="p.triage_level ? getErWaitingItemClass(p) : 'border-indigo-500/30'">
                                     
-                                    <!-- Top: Queue & Name -->
-                                    <div>
-                                        <div class="flex items-start justify-between gap-2.5 mb-2">
-                                            <div class="flex items-center gap-2.5">
-                                                <span class="font-black text-3xl md:text-4xl text-amber-300 drop-shadow-sm tracking-tight leading-none"
-                                                      @if(($settings->font_lab_oqueue ?? 'auto') !== 'auto') style="font-size: {{ $settings->font_lab_oqueue }}px !important" @endif
-                                                      x-text="p.oqueue"></span>
-                                                <template x-if="p.triage_level">
-                                                    <span class="px-2.5 py-0.5 rounded-md text-xs font-black border tracking-wider shadow-sm"
-                                                          :class="getTriageBadgeClass(p.triage_level)"
-                                                          x-text="p.triage_name"></span>
-                                                </template>
-                                            </div>
-                                            <span class="text-xs md:text-sm font-bold text-slate-200 bg-slate-950/80 px-2.5 py-1 rounded-lg border border-slate-700/80 truncate max-w-[170px] shadow-xs"
-                                                  x-text="p.display_room_name"></span>
+                                    <div class="flex items-center justify-between gap-1.5">
+                                        <div class="flex items-center gap-1.5 min-w-0">
+                                            <span class="font-black text-xl text-amber-300 drop-shadow-sm tracking-tight leading-none font-mono"
+                                                  @if(($settings->font_lab_oqueue ?? 'auto') !== 'auto') style="font-size: {{ $settings->font_lab_oqueue }}px !important" @endif
+                                                  x-text="p.oqueue"></span>
+                                            <template x-if="p.triage_level">
+                                                <span class="px-1.5 py-0.5 rounded-md text-[11px] font-black border tracking-wider"
+                                                      :class="getTriageBadgeClass(p.triage_level)"
+                                                      x-text="p.triage_name"></span>
+                                            </template>
                                         </div>
-
-                                        <div class="font-black text-xl md:text-2xl text-white break-words leading-tight my-2 md:my-3 drop-shadow-sm"
-                                             @if(($settings->font_lab_name ?? 'auto') !== 'auto') style="font-size: {{ $settings->font_lab_name }}px !important" @endif
-                                             x-text="p.display_name"></div>
+                                        <span class="text-[11px] font-bold text-slate-300 bg-slate-950/80 px-1.5 py-0.5 rounded-md border border-slate-700/80 truncate max-w-[140px]"
+                                              x-text="p.display_room_name"></span>
                                     </div>
 
-                                    <!-- Bottom: Status Badges & Timing -->
-                                    <div class="pt-2.5 md:pt-3 border-t border-slate-700/60 flex flex-col gap-2">
-                                        <div class="flex items-center gap-2 flex-wrap">
-                                            <!-- Lab badge -->
-                                            <template x-if="p.has_lab && (p.lab_status !== 'confirmed' || {{ ($settings->lab_xray_show_confirmed ?? true) ? 'true' : 'false' }})">
-                                                <span class="px-3.5 py-1.5 md:px-4 md:py-2 rounded-xl text-sm md:text-base font-black shadow-md tracking-wide inline-flex items-center gap-2 border-2"
-                                                      :class="p.lab_status === 'confirmed'
-                                                        ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/80'
-                                                        : 'bg-amber-950/90 text-amber-300 border-amber-500/80 animate-pulse'">
-                                                    <span class="text-xl md:text-2xl leading-none" x-text="p.lab_status === 'confirmed' ? '✅' : '🔬'"></span>
-                                                    <span x-text="p.lab_status === 'confirmed' ? 'ผล LAB ออกแล้ว' : 'รอผล LAB'"></span>
-                                                </span>
-                                            </template>
+                                    <div class="font-black text-base text-white break-words leading-snug mt-1 drop-shadow-sm"
+                                         @if(($settings->font_lab_name ?? 'auto') !== 'auto') style="font-size: {{ $settings->font_lab_name }}px !important" @endif
+                                         x-text="p.display_name"></div>
 
-                                            <!-- X-ray badge -->
-                                            <template x-if="p.has_xray && (p.xray_status !== 'confirmed' || {{ ($settings->lab_xray_show_confirmed ?? true) ? 'true' : 'false' }})">
-                                                <span class="px-3.5 py-1.5 md:px-4 md:py-2 rounded-xl text-sm md:text-base font-black shadow-md tracking-wide inline-flex items-center gap-2 border-2"
-                                                      :class="p.xray_status === 'confirmed'
-                                                        ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/80'
-                                                        : 'bg-indigo-950/90 text-indigo-300 border-indigo-500/80 animate-pulse'">
-                                                    <span class="text-xl md:text-2xl leading-none" x-text="p.xray_status === 'confirmed' ? '✅' : '📷'"></span>
-                                                    <span x-text="p.xray_status === 'confirmed' ? 'ผล X-RAY ออกแล้ว' : 'รอผล X-RAY'"></span>
-                                                </span>
-                                            </template>
-                                        </div>
-
-                                        @if($settings->lab_xray_show_order_time ?? true)
-                                        <template x-if="p.waited_minutes > 0">
-                                            <div class="text-xs md:text-sm text-slate-300 font-bold bg-black/50 px-3 py-1.5 rounded-xl border border-slate-800 flex items-center justify-between">
-                                                <span class="flex items-center gap-1.5">
-                                                    <span>⏱️</span>
-                                                    <span>เวลาสั่งตรวจ: <span class="text-white font-extrabold" x-text="p.order_time || '-'"></span></span>
-                                                </span>
-                                                <span class="text-amber-400 font-black" x-text="'รอ ' + p.waited_minutes + ' นาที'"></span>
-                                            </div>
+                                    <div class="mt-1 flex items-center gap-1 flex-wrap">
+                                        <template x-if="p.has_lab && (p.lab_status !== 'confirmed' || {{ ($settings->lab_xray_show_confirmed ?? true) ? 'true' : 'false' }})">
+                                            <span class="px-1.5 py-0.5 rounded-md text-[11px] font-bold tracking-wide inline-flex items-center gap-1 border"
+                                                  :class="p.lab_status === 'confirmed'
+                                                    ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/70'
+                                                    : 'bg-amber-950/90 text-amber-300 border-amber-500/70'">
+                                                <span class="text-xs leading-none" x-text="p.lab_status === 'confirmed' ? '✅' : '🔬'"></span>
+                                                <span x-text="p.lab_status === 'confirmed' ? 'ผล LAB ออกแล้ว' : 'รอผล LAB'"></span>
+                                            </span>
                                         </template>
-                                        @endif
+                                        <template x-if="p.has_xray && (p.xray_status !== 'confirmed' || {{ ($settings->lab_xray_show_confirmed ?? true) ? 'true' : 'false' }})">
+                                            <span class="px-1.5 py-0.5 rounded-md text-[11px] font-bold tracking-wide inline-flex items-center gap-1 border"
+                                                  :class="p.xray_status === 'confirmed'
+                                                    ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/70'
+                                                    : 'bg-indigo-950/90 text-indigo-300 border-indigo-500/70'">
+                                                <span class="text-xs leading-none" x-text="p.xray_status === 'confirmed' ? '✅' : '📷'"></span>
+                                                <span x-text="p.xray_status === 'confirmed' ? 'ผล X-RAY ออกแล้ว' : 'รอผล X-RAY'"></span>
+                                            </span>
+                                        </template>
                                     </div>
 
                                 </div>
@@ -1020,138 +1005,125 @@
             </div>
 
             <!-- Non-ER View 3: หน้ารายชื่อผู้ป่วยรอซักประวัติ (002 จุดคัดกรอง OPD) -->
+            @php
+                $screeningHeading = trim((string) ($settings->screening_title ?? ''));
+                if ($screeningHeading === '' || $screeningHeading === 'ผู้ป่วยรอซักประวัติ / คัดกรอง') {
+                    $screeningHeading = 'รอซักประวัติ ห้อง 301 หรือ 302';
+                }
+            @endphp
             <div x-show="!isErBoard && currentView === 'screening'" x-cloak
                  x-transition:enter="transition ease-out duration-300"
                  x-transition:enter-start="opacity-0 scale-98"
                  x-transition:enter-end="opacity-100 scale-100"
-                 class="flex-1 min-h-0 flex flex-col bg-slate-900/85 backdrop-blur-md rounded-2xl border-2 border-amber-500/30 p-5 shadow-2xl overflow-hidden">
+                 class="flex-1 min-h-0 flex flex-col bg-slate-900/85 backdrop-blur-md rounded-2xl border-2 border-amber-500/30 p-3 shadow-2xl overflow-hidden">
                 
                 <!-- View 3 Sub-header Bar -->
-                <div class="flex-shrink-0 flex items-center justify-between pb-4 mb-4 border-b border-slate-700/80">
-                    <div class="flex items-center gap-3.5">
-                        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center text-2xl shadow-lg shadow-amber-500/30 text-slate-950 font-black">
+                <div class="flex-shrink-0 flex items-center justify-between pb-2 mb-2 border-b border-slate-700/80">
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center text-xl shadow-lg shadow-amber-500/30 text-slate-950 font-black flex-shrink-0">
                             📋
                         </div>
-                        <div>
-                            <div class="flex items-center gap-3">
-                                <h2 class="text-2xl md:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-400 tracking-wide">
-                                    {{ $settings->screening_title ?: 'ผู้ป่วยรอซักประวัติ / คัดกรอง' }}
-                                </h2>
-                                <span class="px-3 py-1 rounded-full text-sm font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm"
-                                      x-text="'รอคัดกรองทั้งหมด ' + pendingScreening.length + ' ราย'"></span>
+                        <div class="min-w-0">
+                            <h2 class="text-xl md:text-2xl font-black leading-tight text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-400 tracking-wide break-words">
+                                {{ $screeningHeading }}
+                            </h2>
+                            <div class="flex items-center gap-2 flex-wrap mt-1">
+                                <span class="px-2 py-0.5 rounded-full text-xs font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm"
+                                      x-text="'รอซักประวัติทั้งหมด ' + pendingScreening.length + ' ราย'"></span>
+                                <template x-if="screeningPageCount > 1">
+                                    <span class="px-2 py-0.5 rounded-full text-xs font-extrabold bg-slate-950/80 text-amber-200 border border-amber-500/30"
+                                          x-text="'หน้า ' + (screeningPage + 1) + '/' + screeningPageCount"></span>
+                                </template>
                             </div>
-                            <p class="text-slate-400 text-xs md:text-sm mt-0.5 font-medium">
+                            <p class="text-slate-400 text-xs mt-0.5 font-medium">
                                 {{ $settings->screening_subtitle ?: 'จุดคัดกรองห้องตรวจโรคภายนอก (002)' }}
                             </p>
                         </div>
                     </div>
 
                     <!-- Legend & Action -->
-                    <div class="flex items-center gap-3">
-                        <div class="hidden xl:flex items-center gap-2.5 text-xs md:text-sm font-extrabold text-slate-200 bg-slate-950/70 px-4 py-2 rounded-xl border border-slate-800 shadow-inner">
-                            <span class="flex items-center gap-1.5 text-emerald-300"><span class="text-base">📅</span> ผู้ป่วยนัด</span>
+                    <div class="flex items-center gap-2 flex-shrink-0">
+                        <div class="hidden xl:flex items-center gap-1.5 text-[11px] font-bold text-slate-200 bg-slate-950/70 px-2 py-1 rounded-lg border border-slate-800">
+                            <span class="flex items-center gap-1 text-emerald-300"><span class="text-xs leading-none">📅</span> ผู้ป่วยนัด</span>
                             <span class="text-slate-600">|</span>
-                            <span class="flex items-center gap-1.5 text-slate-400"><span>⚪</span> ไม่ได้นัด</span>
+                            <span class="flex items-center gap-1 text-slate-400"><span class="text-[10px] leading-none">⚪</span> ไม่ได้นัด</span>
                             <span class="text-slate-600">|</span>
-                            <span class="flex items-center gap-1.5 text-purple-300"><span class="text-base">🧪</span> มีตรวจ LAB</span>
+                            <span class="flex items-center gap-1 text-purple-300"><span class="text-xs leading-none">🧪</span> มีตรวจ LAB</span>
                             <span class="text-slate-600">|</span>
-                            <span class="flex items-center gap-1.5 text-amber-300"><span class="text-base">🩻</span> มีตรวจ X-RAY</span>
+                            <span class="flex items-center gap-1 text-amber-300"><span class="text-xs leading-none">🩻</span> มีตรวจ X-RAY</span>
                         </div>
                         <button type="button" @click="nextView()"
-                                class="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-extrabold text-sm shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer">
+                                class="px-3 py-1.5 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-extrabold text-xs shadow-md transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer">
                             <span>หน้าถัดไป</span>
-                            <span class="text-xs bg-black/30 px-2 py-0.5 rounded-md" x-text="rotateCountdown + 's'"></span>
+                            <span class="text-[11px] bg-black/30 px-1.5 py-0.5 rounded-md" x-text="rotateCountdown + 's'"></span>
                         </button>
                     </div>
                 </div>
 
                 <!-- Cards Grid -->
-                <div class="flex-1 min-h-0 overflow-y-auto pr-1">
+                <div x-ref="screeningGrid" class="flex-1 min-h-0 overflow-hidden">
                     <template x-if="pendingScreening.length > 0">
-                        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-5 items-stretch">
-                            <template x-for="p in pendingScreening" :key="'scr-p-' + p.oqueue">
-                                <div class="rounded-2xl p-4 md:p-5 border-2 transition-all duration-200 shadow-xl flex flex-col justify-between min-h-[175px]"
+                        <div class="grid gap-2 items-start content-start"
+                             :style="'grid-template-columns: repeat(' + screeningCols + ', minmax(0, 1fr))'">
+                            <template x-for="p in screeningPageItems" :key="'scr-p-' + screeningPage + '-' + p.oqueue">
+                                <div data-screening-card
+                                     class="rounded-lg px-2.5 py-1.5 border transition-all duration-200 shadow-md flex flex-col"
                                      :class="p.status === 'calling' 
                                         ? 'bg-gradient-to-br from-yellow-950/80 via-slate-900 to-slate-900 border-yellow-400 shadow-yellow-500/10' 
-                                        : 'bg-gradient-to-br from-slate-800/95 via-slate-850/95 to-slate-900/95 border-amber-500/30 hover:border-amber-400/50'">
+                                        : 'bg-gradient-to-br from-slate-800/95 via-slate-850/95 to-slate-900/95 border-amber-500/30'">
                                     
-                                    <!-- Top: Queue & Status Badge -->
-                                    <div>
-                                        <div class="flex items-start justify-between gap-2.5 mb-2">
-                                            <div class="flex items-center gap-2.5">
-                                                <span class="font-black text-3xl md:text-4xl drop-shadow-sm tracking-tight leading-none font-mono"
-                                                      :class="p.status === 'calling' ? 'text-yellow-300' : 'text-amber-300'"
-                                                      @if(($settings->font_screening_oqueue ?? 'auto') !== 'auto') style="font-size: {{ $settings->font_screening_oqueue }}px !important" @endif
-                                                      x-text="p.oqueue"></span>
-                                            </div>
-                                            <template x-if="p.status === 'calling'">
-                                                <span class="px-3 py-1 rounded-full text-xs md:text-sm font-black bg-yellow-400 text-slate-950 animate-pulse shadow-md flex items-center gap-1">
-                                                    <span>📢</span>
-                                                    <span>กำลังเรียกคัดกรอง</span>
-                                                </span>
-                                            </template>
-                                            <template x-if="p.status !== 'calling'">
-                                                <span class="text-xs md:text-sm font-bold text-slate-300 bg-slate-950/80 px-2.5 py-1 rounded-lg border border-slate-700/80 shadow-xs">
-                                                    จุดคัดกรอง (002)
-                                                </span>
-                                            </template>
-                                        </div>
-
-                                        <div class="font-black text-xl md:text-2xl text-white break-words leading-tight my-2 md:my-3 drop-shadow-sm"
-                                             @if(($settings->font_screening_name ?? 'auto') !== 'auto') style="font-size: {{ $settings->font_screening_name }}px !important" @endif
-                                             x-text="p.display_name"></div>
-                                    </div>
-
-                                    <!-- Bottom: Appointment & Lab/Xray tags & Arrival Timing -->
-                                    <div class="pt-2.5 md:pt-3 border-t border-slate-700/60 flex flex-col gap-2">
-                                        @if($settings->screening_show_appointment ?? true)
-                                        <div class="flex items-center gap-2 flex-wrap">
-                                            <!-- Appointment Badge -->
-                                            <template x-if="p.is_appointment">
-                                                <span class="px-3.5 py-1.5 md:px-4 md:py-2 rounded-xl text-sm md:text-base font-black bg-emerald-950/90 text-emerald-300 border-2 border-emerald-500/80 inline-flex items-center gap-2 shadow-md">
-                                                    <span class="text-xl md:text-2xl leading-none">📅</span>
-                                                    <span>ผู้ป่วยนัด</span>
-                                                </span>
-                                            </template>
-                                            <template x-if="!p.is_appointment">
-                                                <span class="px-3.5 py-1.5 md:px-4 md:py-2 rounded-xl text-xs md:text-sm font-bold bg-slate-950/80 text-slate-300 border border-slate-700 inline-flex items-center gap-1.5">
-                                                    <span>⚪</span>
-                                                    <span>ไม่ได้นัด (ทั่วไป)</span>
-                                                </span>
-                                            </template>
-
-                                            <!-- Lab tag -->
-                                            <template x-if="p.has_lab">
-                                                <span class="px-3.5 py-1.5 md:px-4 md:py-2 rounded-xl text-sm md:text-base font-black bg-purple-950/90 text-purple-300 border-2 border-purple-500/80 inline-flex items-center gap-2 shadow-md"
-                                                      :title="p.lab_list_text || 'มีรายการสั่งตรวจ LAB'">
-                                                    <span class="text-xl md:text-2xl leading-none">🧪</span>
-                                                    <span>มีตรวจ LAB</span>
-                                                </span>
-                                            </template>
-
-                                            <!-- X-ray tag -->
-                                            <template x-if="p.has_xray">
-                                                <span class="px-3.5 py-1.5 md:px-4 md:py-2 rounded-xl text-sm md:text-base font-black bg-amber-950/90 text-amber-300 border-2 border-amber-500/80 inline-flex items-center gap-2 shadow-md"
-                                                      :title="p.xray_list_text || 'มีรายการสั่งตรวจ X-RAY'">
-                                                    <span class="text-xl md:text-2xl leading-none">🩻</span>
-                                                    <span>มีตรวจ X-RAY</span>
-                                                </span>
-                                            </template>
-                                        </div>
-                                        @endif
-
-                                        @if($settings->screening_show_order_time ?? true)
-                                        <div class="text-xs md:text-sm text-slate-300 font-bold bg-black/50 px-3 py-1.5 rounded-xl border border-slate-800 flex items-center justify-between">
-                                            <span class="flex items-center gap-1.5">
-                                                <span>⏱️</span>
-                                                <span>มาถึงจุดคัดกรอง: <span class="text-white font-extrabold" x-text="p.vsttime || '-'"></span></span>
+                                    <div class="flex items-center justify-between gap-1.5">
+                                        <span class="font-black text-xl drop-shadow-sm tracking-tight leading-none font-mono"
+                                              :class="p.status === 'calling' ? 'text-yellow-300' : 'text-amber-300'"
+                                              @if(($settings->font_screening_oqueue ?? 'auto') !== 'auto') style="font-size: {{ $settings->font_screening_oqueue }}px !important" @endif
+                                              x-text="p.oqueue"></span>
+                                        <template x-if="p.status === 'calling'">
+                                            <span class="px-1.5 py-0.5 rounded-md text-[11px] font-black bg-yellow-400 text-slate-950 animate-pulse flex items-center gap-0.5">
+                                                <span class="text-xs leading-none">📢</span>
+                                                <span>กำลังเรียก</span>
                                             </span>
-                                            <template x-if="p.waited_minutes > 0">
-                                                <span class="text-amber-400 font-black" x-text="'รอ ' + p.waited_minutes + ' นาที'"></span>
-                                            </template>
-                                        </div>
-                                        @endif
+                                        </template>
+                                        <template x-if="p.status !== 'calling'">
+                                            <span class="text-[11px] font-bold text-slate-300 bg-slate-950/80 px-1.5 py-0.5 rounded-md border border-slate-700/80">
+                                                จุดคัดกรอง (002)
+                                            </span>
+                                        </template>
                                     </div>
+
+                                    <div class="font-black text-base text-white break-words leading-snug mt-1 drop-shadow-sm"
+                                         @if(($settings->font_screening_name ?? 'auto') !== 'auto') style="font-size: {{ $settings->font_screening_name }}px !important" @endif
+                                         x-text="p.display_name"></div>
+
+                                    @if($settings->screening_show_appointment ?? true)
+                                    <div class="mt-1 flex items-center gap-1 flex-wrap">
+                                        <template x-if="p.is_appointment">
+                                            <span class="px-1.5 py-0.5 rounded-md text-[11px] font-bold bg-emerald-950/90 text-emerald-300 border border-emerald-500/70 inline-flex items-center gap-1">
+                                                <span class="text-xs leading-none">📅</span>
+                                                <span>ผู้ป่วยนัด</span>
+                                            </span>
+                                        </template>
+                                        <template x-if="!p.is_appointment">
+                                            <span class="px-1.5 py-0.5 rounded-md text-[11px] font-bold bg-slate-950/80 text-slate-400 border border-slate-700 inline-flex items-center gap-1">
+                                                <span class="text-[10px] leading-none">⚪</span>
+                                                <span>ไม่ได้นัด</span>
+                                            </span>
+                                        </template>
+                                        <template x-if="p.has_lab">
+                                            <span class="px-1.5 py-0.5 rounded-md text-[11px] font-bold bg-purple-950/90 text-purple-300 border border-purple-500/70 inline-flex items-center gap-1"
+                                                  :title="p.lab_list_text || 'มีรายการสั่งตรวจ LAB'">
+                                                <span class="text-xs leading-none">🧪</span>
+                                                <span>มีตรวจ LAB</span>
+                                            </span>
+                                        </template>
+                                        <template x-if="p.has_xray">
+                                            <span class="px-1.5 py-0.5 rounded-md text-[11px] font-bold bg-amber-950/90 text-amber-300 border border-amber-500/70 inline-flex items-center gap-1"
+                                                  :title="p.xray_list_text || 'มีรายการสั่งตรวจ X-RAY'">
+                                                <span class="text-xs leading-none">🩻</span>
+                                                <span>มีตรวจ X-RAY</span>
+                                            </span>
+                                        </template>
+                                    </div>
+                                    @endif
 
                                 </div>
                             </template>
@@ -1321,12 +1293,20 @@
                 screeningEnabled: {{ ($settings->screening_enabled ?? true) ? 'true' : 'false' }},
                 screeningRotateSeconds: {{ (int)($settings->screening_rotate_seconds ?? 60) }},
                 pendingScreening: [],
+                screeningPage: 0,
+                screeningPageSize: 16,
+                screeningCols: 4,
+                screeningResizeObserver: null,
 
                 labXrayEnabled: {{ ($settings->lab_xray_enabled ?? true) ? 'true' : 'false' }},
                 labXrayRotateSeconds: {{ (int)($settings->lab_xray_rotate_seconds ?? 60) }},
                 rotateCountdown: {{ (int)($settings->screening_rotate_seconds ?? $settings->lab_xray_rotate_seconds ?? 60) }},
                 isViewPaused: false,
                 pendingLabXray: [],
+                labPage: 0,
+                labPageSize: 16,
+                labCols: 4,
+                labResizeObserver: null,
 
                 isDrugBoard: {{ $normalizedKey === 'drug' ? 'true' : 'false' }},
                 isErBoard: {{ $normalizedKey === 'er' ? 'true' : 'false' }},
@@ -1340,6 +1320,41 @@
 
                 get roomCount() {
                     return Object.keys(this.rooms).length;
+                },
+
+                roomEntries() {
+                    const entries = Object.entries(this.rooms || {});
+                    if (!this.isDrugBoard) return entries;
+                    return entries.slice().sort((a, b) => {
+                        const rank = (room) => (room && room.pharmacy_stage === 'dispense') ? 1 : 0;
+                        return rank(a[1]) - rank(b[1]);
+                    });
+                },
+
+                get screeningPageCount() {
+                    const size = Math.max(1, this.screeningPageSize || 1);
+                    const total = (this.pendingScreening || []).length;
+                    if (total === 0) return 1;
+                    return Math.ceil(total / size);
+                },
+
+                get screeningPageItems() {
+                    const size = Math.max(1, this.screeningPageSize || 1);
+                    const start = (this.screeningPage || 0) * size;
+                    return (this.pendingScreening || []).slice(start, start + size);
+                },
+
+                get labPageCount() {
+                    const size = Math.max(1, this.labPageSize || 1);
+                    const total = (this.pendingLabXray || []).length;
+                    if (total === 0) return 1;
+                    return Math.ceil(total / size);
+                },
+
+                get labPageItems() {
+                    const size = Math.max(1, this.labPageSize || 1);
+                    const start = (this.labPage || 0) * size;
+                    return (this.pendingLabXray || []).slice(start, start + size);
                 },
 
                 get gridClass() {
@@ -1373,7 +1388,7 @@
 
                 isCol1(roomData, idx) {
                     if (!this.isDrugBoard) return false;
-                    return (roomData && roomData.cur_dep === '062') || idx === 0;
+                    return !!(roomData && roomData.pharmacy_stage === 'dispense');
                 },
 
                 getCardStyle(roomData, idx) {
@@ -1419,7 +1434,7 @@
 
                 getBadgeText(roomData, idx) {
                     if (!this.isDrugBoard) return '';
-                    return this.isCol1(roomData, idx) ? 'จุดรับยา (062)' : 'ห้องจ่ายยา (013)';
+                    return this.isCol1(roomData, idx) ? 'พิมพ์สติกเกอร์แล้ว' : 'ยังไม่พิมพ์สติกเกอร์';
                 },
 
                 getBadgeClass(roomData, idx) {
@@ -1617,6 +1632,8 @@
                     this.initScale();
 
                     this.fetchQueue();
+                    this.initScreeningPager();
+                    this.initLabPager();
                     this.pollTimer = setInterval(() => this.fetchQueue(), this.pollSeconds * 1000);
                     setInterval(() => {
                         this.nowTime = Date.now() + this.serverTimeOffset;
@@ -1711,12 +1728,24 @@
                 },
 
                 nextView() {
+                    if (this.currentView === 'screening' && this.screeningPage < this.screeningPageCount - 1) {
+                        this.screeningPage++;
+                        this.rotateCountdown = this.screeningRotateSeconds;
+                        return;
+                    }
+                    if (this.currentView === 'lab_xray' && this.labPage < this.labPageCount - 1) {
+                        this.labPage++;
+                        this.rotateCountdown = this.labXrayRotateSeconds;
+                        return;
+                    }
                     const views = ['rooms'];
                     if (this.screeningEnabled) views.push('screening');
                     if (this.labXrayEnabled) views.push('lab_xray');
                     if (views.length <= 1) return;
                     let idx = views.indexOf(this.currentView);
                     let nextIdx = (idx === -1) ? 0 : (idx + 1) % views.length;
+                    this.screeningPage = 0;
+                    this.labPage = 0;
                     this.switchView(views[nextIdx]);
                 },
 
@@ -1725,13 +1754,111 @@
                 },
 
                 switchView(view) {
+                    if (view === 'screening' && this.currentView !== 'screening') {
+                        this.screeningPage = 0;
+                    }
+                    if (view === 'lab_xray' && this.currentView !== 'lab_xray') {
+                        this.labPage = 0;
+                    }
                     this.currentView = view;
                     if (view === 'screening') {
                         this.rotateCountdown = this.screeningRotateSeconds;
+                        this.$nextTick(() => this.updateScreeningLayout());
                     } else if (view === 'lab_xray') {
                         this.rotateCountdown = this.labXrayRotateSeconds;
+                        this.$nextTick(() => this.updateLabLayout());
                     } else {
                         this.rotateCountdown = this.screeningRotateSeconds || this.labXrayRotateSeconds || 60;
+                    }
+                },
+
+                initScreeningPager() {
+                    this.$nextTick(() => {
+                        const el = this.$refs.screeningGrid;
+                        if (!el || this.screeningResizeObserver) return;
+                        if (typeof ResizeObserver !== 'undefined') {
+                            this.screeningResizeObserver = new ResizeObserver(() => this.updateScreeningLayout());
+                            this.screeningResizeObserver.observe(el);
+                        }
+                        this.updateScreeningLayout();
+                    });
+                },
+
+                clampScreeningPage() {
+                    const pages = this.screeningPageCount;
+                    if (this.screeningPage < 0 || this.screeningPage >= pages) {
+                        this.screeningPage = 0;
+                    }
+                },
+
+                measureCardGrid(el, cardSelector) {
+                    const width = el.clientWidth;
+                    const height = el.clientHeight;
+                    if (width < 40 || height < 40) return null;
+
+                    let cols = 1;
+                    if (width >= 1100) cols = 4;
+                    else if (width >= 760) cols = 3;
+                    else if (width >= 520) cols = 2;
+
+                    const sample = el.querySelector(cardSelector);
+                    const gap = 8;
+                    const rowHeight = sample
+                        ? Math.max(72, Math.ceil(sample.getBoundingClientRect().height) + gap)
+                        : 104;
+                    let rows = Math.max(1, Math.floor(height / rowHeight));
+                    let size = cols * rows;
+                    if (sample && el.scrollHeight > height + 1 && rows > 1) {
+                        rows -= 1;
+                        size = cols * rows;
+                    }
+                    return { cols, size };
+                },
+
+                updateScreeningLayout(pass = 0) {
+                    const el = this.$refs.screeningGrid;
+                    if (!el) return;
+                    const measured = this.measureCardGrid(el, '[data-screening-card]');
+                    if (!measured) return;
+                    const changed = measured.size !== this.screeningPageSize || measured.cols !== this.screeningCols;
+                    this.screeningCols = measured.cols;
+                    this.screeningPageSize = measured.size;
+                    this.clampScreeningPage();
+                    if (changed && pass < 3) {
+                        this.$nextTick(() => this.updateScreeningLayout(pass + 1));
+                    }
+                },
+
+                initLabPager() {
+                    this.$nextTick(() => {
+                        const el = this.$refs.labGrid;
+                        if (!el || this.labResizeObserver) return;
+                        if (typeof ResizeObserver !== 'undefined') {
+                            this.labResizeObserver = new ResizeObserver(() => this.updateLabLayout());
+                            this.labResizeObserver.observe(el);
+                        }
+                        this.updateLabLayout();
+                    });
+                },
+
+                clampLabPage() {
+                    const pages = this.labPageCount;
+                    if (this.labPage < 0 || this.labPage >= pages) {
+                        this.labPage = 0;
+                    }
+                },
+
+                updateLabLayout(pass = 0) {
+                    const el = this.$refs.labGrid;
+                    if (!el) return;
+                    const measured = this.measureCardGrid(el, '[data-lab-card]');
+                    if (!measured) return;
+                    const changed = measured.size !== this.labPageSize || measured.cols !== this.labCols;
+                    this.labCols = measured.cols;
+                    this.labPageSize = measured.size;
+                    this.clampLabPage();
+                    if (changed && pass < 3) {
+                        this.$nextTick(() => this.updateLabLayout(pass + 1));
                     }
                 },
 
@@ -1767,6 +1894,12 @@
                             this.rooms = data.rooms;
                             this.pendingLabXray = data.pending_lab_xray || [];
                             this.pendingScreening = data.pending_screening || [];
+                            this.clampScreeningPage();
+                            this.clampLabPage();
+                            this.$nextTick(() => {
+                                this.updateScreeningLayout();
+                                this.updateLabLayout();
+                            });
                         }
 
                         if (data.media && Array.isArray(data.media)) {

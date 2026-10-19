@@ -159,6 +159,10 @@ class HosxpQueueService
      */
     public function getQueueGroupedByRoom(string $boardKey = 'default'): Collection
     {
+        if ($this->isPharmacyBoard($boardKey)) {
+            return $this->getPharmacyQueueGrouped();
+        }
+
         $activeRooms = TvClinicRoom::activeForBoard($boardKey)->get();
         $isEr = in_array(strtolower(trim($boardKey)), ['003', 'er', 'tv-er']);
         $todayQueues = $this->getTodayQueue($boardKey)->groupBy('display_room_name');
@@ -207,6 +211,119 @@ class HosxpQueueService
         }
 
         return $result;
+    }
+
+    /**
+     * คิวห้องจ่ายยา (013) แบ่งตามสถานะ ไม่ได้แบ่งตามแผนก 062/013
+     *
+     * - รอจัดยา: ส่งมาห้องจ่ายยาแล้ว ยังไม่พิมพ์สติกเกอร์
+     * - รอจ่ายยา: พิมพ์สติกเกอร์แล้ว (opitemrece.print = Y หรือ service6 ของแผนก 013)
+     * - เอาออก: บันทึกจ่ายยาแล้ว (service16) หรือไม่ได้อยู่ที่แผนก 013
+     *
+     * PDPA: คืนเฉพาะ oqueue กับ display_name ที่ mask แล้ว
+     */
+    private function getPharmacyQueueGrouped(): Collection
+    {
+        $today = now('Asia/Bangkok')->toDateString();
+        $conn = DB::connection('hosxp');
+
+        $rows = $conn->table('ovst as o')
+            ->leftJoin('patient as p', 'p.hn', '=', 'o.hn')
+            ->leftJoin('service_time as st', 'st.vn', '=', 'o.vn')
+            ->select([
+                'p.fname', 'p.lname', 'p.pname',
+                'o.oqueue', 'o.vn', 'o.cur_dep_busy',
+                'st.service6', 'st.service6_dep', 'st.service16',
+            ])
+            ->whereDate('o.vstdate', $today)
+            ->where('o.cur_dep', '013')
+            ->orderBy('o.oqueue')
+            ->get()
+            ->filter(fn ($row) => ! $this->isPharmacyDispensed($row))
+            ->values();
+
+        $printedVnSet = [];
+        $vns = $rows->pluck('vn')->filter()->unique()->values()->all();
+        if ($vns !== []) {
+            $printedVnSet = $conn->table('opitemrece as oi')
+                ->join('drugitems as d', 'd.icode', '=', 'oi.icode')
+                ->whereIn('oi.vn', $vns)
+                ->where('oi.print', 'Y')
+                ->distinct()
+                ->pluck('oi.vn')
+                ->flip()
+                ->all();
+        }
+
+        $buckets = [
+            'prepare' => ['calling' => [], 'waiting' => []],
+            'dispense' => ['calling' => [], 'waiting' => []],
+        ];
+
+        foreach ($rows as $row) {
+            $stage = $this->isPharmacyStickerPrinted($row, $printedVnSet) ? 'dispense' : 'prepare';
+            $lane = strtoupper(trim((string) $row->cur_dep_busy)) === 'Y' ? 'calling' : 'waiting';
+            $buckets[$stage][$lane][] = $row;
+        }
+
+        $shape = function (array $items): array {
+            usort($items, fn ($a, $b) => $a->oqueue <=> $b->oqueue);
+
+            return array_values(array_map(fn ($row) => [
+                'oqueue' => $row->oqueue,
+                'display_name' => $this->maskThaiName($row->pname, $row->fname, $row->lname),
+                'triage_level' => null,
+                'triage_name' => null,
+                'triage_full_name' => null,
+                'triage_color' => 'gray',
+                'lab_status' => null,
+                'lab_status_text' => null,
+            ], $items));
+        };
+
+        return collect([
+            'รอจัดยา' => [
+                'cur_dep' => '013',
+                'pharmacy_stage' => 'prepare',
+                'waiting' => $shape($buckets['prepare']['waiting']),
+                'calling' => $shape($buckets['prepare']['calling']),
+            ],
+            'รอจ่ายยา' => [
+                'cur_dep' => '013',
+                'pharmacy_stage' => 'dispense',
+                'waiting' => $shape($buckets['dispense']['waiting']),
+                'calling' => $shape($buckets['dispense']['calling']),
+            ],
+        ]);
+    }
+
+    private function isPharmacyBoard(string $boardKey): bool
+    {
+        return in_array(strtolower(trim($boardKey)), ['013', 'drug', 'tv-drug', 'pharmacy'], true);
+    }
+
+    private function isPharmacyDispensed(object $row): bool
+    {
+        return $this->isRecordedServiceTime($row->service16 ?? null);
+    }
+
+    private function isPharmacyStickerPrinted(object $row, array $printedVnSet): bool
+    {
+        if (isset($printedVnSet[$row->vn])) {
+            return true;
+        }
+
+        return trim((string) ($row->service6_dep ?? '')) === '013'
+            && $this->isRecordedServiceTime($row->service6 ?? null);
+    }
+
+    private function isRecordedServiceTime(mixed $value): bool
+    {
+        $time = trim((string) $value);
+
+        return $time !== ''
+            && ! str_starts_with($time, '00:00:00')
+            && ! str_starts_with($time, '0000');
     }
 
     /**
@@ -535,10 +652,14 @@ class HosxpQueueService
     /**
      * ดึงข้อมูล ER แบบ 3 Section สำหรับจอแสดงผลใหม่
      *
-     * Section 1: คัดแยก (Triage) — cur_dep = 003 จนกว่าจะส่งเข้า 063
-     * Section 2: คิวรอตรวจ — cur_dep = 063 และยังไม่มี lab/xray/หัตถการ/วินิจฉัย/doctor_tx_time/สถานภาพจำหน่าย
-     * Section 3: กำลังตรวจรักษา — cur_dep = 063 และมี lab / xray / หัตถการ / วินิจฉัย / doctor_tx_time
-     *            หรือสถานภาพจำหน่าย (ยกเว้นกลับบ้าน); ไม่ใช้ service5 เป็นตัวดันข้อ 3
+     * Section 1: คัดแยก (Triage) — cur_dep = 003 (ยังไม่ลงสถานภาพ / ไม่ใช่รับไว้สังเกตอาการ)
+     *            คนที่ main_dep = 002 ส่งเข้า 003 เรียงขึ้นก่อนเสมอ
+     * Section 2: รอพบแพทย์ — cur_dep = 063 และยังไม่เข้าเงื่อนไขข้อ 3
+     * Section 3: กำลังตรวจรักษา — cur_dep = 063 และมี lab / xray / หัตถการ / ยา / วินิจฉัย
+     *            ที่สั่งหลัง enter_er_time (fallback vsttime) หรือมี doctor_tx_time
+     *            หรือสถานภาพ «รับไว้สังเกต(ุ)อาการ» (อยู่ 003 หรือ 063 ก็ได้)
+     *            สถานภาพอื่นที่ไม่ใช่รับไว้สังเกตอาการ → เอาชื่อออกจากคิว
+     *            ไม่ใช้ service5 เป็นตัวดันข้อ 3
      *
      * PDPA: คืนเฉพาะ oqueue + display_name (masked) เท่านั้น ไม่ส่ง hn/vn/ชื่อเต็มออกไป
      */
@@ -553,10 +674,13 @@ class HosxpQueueService
             ->leftJoin('patient as p', 'p.hn', '=', 'o.hn')
             ->leftJoin('er_regist as e', 'e.vn', '=', 'o.vn')
             ->leftJoin('er_leave_status as els', 'els.er_leave_status_id', '=', 'e.er_leave_status_id')
+            ->leftJoin('er_dch_type as edt', 'edt.er_dch_type', '=', 'e.er_dch_type')
             ->select([
-                'p.pname', 'p.fname', 'p.lname', 'o.oqueue', 'o.vsttime', 'o.cur_dep',
+                'p.pname', 'p.fname', 'p.lname',
+                'o.oqueue', 'o.vsttime', 'o.cur_dep', 'o.main_dep',
                 'e.finish_time', 'e.er_dch_type', 'e.er_leave_status_id',
                 'els.er_leave_status_name',
+                'edt.name as er_dch_type_name',
             ])
             ->whereDate('o.vstdate', $today)
             ->where('o.cur_dep', '003')
@@ -564,27 +688,50 @@ class HosxpQueueService
             ->get();
 
         $screening = $screeningQuery->filter(function ($row) {
+            // ข้อ 1: ไม่โชว์คนที่มีสถานภาพรับไว้สังเกตอาการ (ไปข้อ 3) หรือถูกตัดออกจากจอ
+            if ($this->resolveErObservationStatusLabel(
+                trim((string) ($row->er_leave_status_name ?? '')),
+                trim((string) ($row->er_dch_type_name ?? ''))
+            ) !== null) {
+                return false;
+            }
+
             return ! $this->isErRemovedFromDisplay($row);
+        })->sort(function ($a, $b) {
+            // main_dep = 002 ส่งเข้า 003 ขึ้นก่อนเสมอ
+            $priA = trim((string) ($a->main_dep ?? '')) === '002' ? 0 : 1;
+            $priB = trim((string) ($b->main_dep ?? '')) === '002' ? 0 : 1;
+            if ($priA !== $priB) {
+                return $priA <=> $priB;
+            }
+            $timeCmp = strcmp((string) ($a->vsttime ?? ''), (string) ($b->vsttime ?? ''));
+            if ($timeCmp !== 0) {
+                return $timeCmp;
+            }
+
+            return ($a->oqueue ?? 0) <=> ($b->oqueue ?? 0);
         })->map(fn ($row) => [
             'oqueue' => $row->oqueue,
             'display_name' => $this->maskThaiName($row->pname, $row->fname, $row->lname),
         ])->values()->all();
 
-        // --- Section 2 + 3: ห้องฉุกเฉิน (cur_dep = 063 เท่านั้น) ---
+        // --- Section 2 + 3: ห้องฉุกเฉิน (063) + เรียกกลับข้อ 3 เมื่อสถานภาพรับไว้สังเกตอาการ ---
         $erRows = $conn->table('ovst as o')
             ->leftJoin('patient as p', 'p.hn', '=', 'o.hn')
             ->leftJoin('opdscreen as s', 's.vn', '=', 'o.vn')
             ->leftJoin('er_regist as e', 'e.vn', '=', 'o.vn')
             ->leftJoin('er_leave_status as els', 'els.er_leave_status_id', '=', 'e.er_leave_status_id')
+            ->leftJoin('er_dch_type as edt', 'edt.er_dch_type', '=', 'e.er_dch_type')
             ->leftJoin('opdscreen_patient_type as t', 't.opdscreen_patient_type_id', '=', 's.opdscreen_patient_type_id')
             ->leftJoin('er_emergency_level as l', 'l.er_emergency_level_id', '=', 'e.er_emergency_type')
             ->leftJoin('service_time as st', 'st.vn', '=', 'o.vn')
             ->select([
                 'p.pname', 'p.fname', 'p.lname',
-                'o.oqueue', 'o.vn', 'o.vstdate', 'o.vsttime', 'o.cur_dep',
+                'o.oqueue', 'o.vn', 'o.vstdate', 'o.vsttime', 'o.cur_dep', 'o.main_dep',
                 'e.enter_er_time', 'e.finish_time', 'e.doctor_tx_time',
                 'e.er_dch_type', 'e.er_leave_status_id',
                 'els.er_leave_status_name',
+                'edt.name as er_dch_type_name',
                 'e.er_screen',
                 'e.er_emergency_type', 'e.er_emergency_level_id',
                 's.opdscreen_patient_type_id',
@@ -594,79 +741,68 @@ class HosxpQueueService
                 'st.service5',
             ])
             ->whereDate('o.vstdate', $today)
-            ->where('o.cur_dep', '063')
+            ->where(function ($q) {
+                $q->where('o.cur_dep', '063')
+                    ->orWhere(function ($q2) {
+                        // เรียกกลับข้อ 3: อยู่ 003 และสถานภาพเป็นรับไว้สังเกต(ุ)อาการเท่านั้น
+                        $q2->where('o.cur_dep', '003')
+                            ->where(function ($q3) {
+                                $q3->where('els.er_leave_status_name', 'like', '%รับไว้สังเกต%')
+                                    ->orWhere('edt.name', 'like', '%รับไว้สังเกต%');
+                            });
+                    });
+            })
             ->orderBy('o.oqueue')
             ->get();
 
         $erRows = $erRows->filter(fn ($row) => ! $this->isErRemovedFromDisplay($row));
 
         $allErVns = $erRows->pluck('vn')->filter()->unique()->all();
-
-        $labVns = !empty($allErVns) ? $conn->table('lab_head')
-            ->whereIn('vn', $allErVns)
-            ->pluck('vn')
-            ->flip()
-            ->all() : [];
-
-        $xrayVns = !empty($allErVns) ? $conn->table('xray_head')
-            ->whereIn('vn', $allErVns)
-            ->pluck('vn')
-            ->flip()
-            ->all() : [];
-
-        $diagVns = !empty($allErVns) ? $conn->table('ovstdiag')
-            ->whereIn('vn', $allErVns)
-            ->pluck('vn')
-            ->flip()
-            ->all() : [];
-
-        $operErVns = !empty($allErVns) ? $conn->table('er_regist_oper')
-            ->whereIn('vn', $allErVns)
-            ->pluck('vn')
-            ->flip()
-            ->all() : [];
-
-        $operDocVns = !empty($allErVns) ? $conn->table('doctor_operation')
-            ->whereIn('vn', $allErVns)
-            ->pluck('vn')
-            ->flip()
-            ->all() : [];
+        $orderSignals = $this->batchErClinicalOrderSignals($conn, $allErVns);
 
         $waiting = [];
         $treating = [];
 
         foreach ($erRows as $row) {
             $vn = $row->vn;
-            $hasLab = isset($labVns[$vn]);
-            $hasXray = isset($xrayVns[$vn]);
-            $hasDiag = isset($diagVns[$vn]);
-            $hasOper = isset($operErVns[$vn]) || isset($operDocVns[$vn]);
-            $hasDocTx = !empty($row->doctor_tx_time)
-                && !str_starts_with((string) $row->doctor_tx_time, '1899')
-                && !str_starts_with((string) $row->doctor_tx_time, '0000');
-
             $leaveStatusName = trim((string) ($row->er_leave_status_name ?? ''));
-            $hasOtherLeaveStatus = $leaveStatusName !== '' && ! $this->isErHomeDischargeStatus($leaveStatusName);
+            $dchTypeName = trim((string) ($row->er_dch_type_name ?? ''));
+            $observationLabel = $this->resolveErObservationStatusLabel($leaveStatusName, $dchTypeName);
 
-            // ข้อ 3 = มี lab / xray / หัตถการ / วินิจฉัย / แพทย์เริ่มตรวจ / สถานภาพจำหน่าย (ไม่ใช่กลับบ้าน)
-            // ไม่ใช้ service5 เป็นตัวดันข้อ 3 โดยลำพัง (อาจเป็นแผนกอื่น เช่น 007 ตอนคัดกรอง)
-            $isTreating = $hasOtherLeaveStatus
+            $hasDocTx = ! empty($row->doctor_tx_time)
+                && ! str_starts_with((string) $row->doctor_tx_time, '1899')
+                && ! str_starts_with((string) $row->doctor_tx_time, '0000');
+
+            $signals = $orderSignals[$vn] ?? [];
+            $baseline = $this->resolveErProcessBaseline($row);
+            $qualifying = $this->resolveErQualifyingOrderFlags($signals, $baseline);
+
+            $hasLab = $qualifying['lab'];
+            $hasXray = $qualifying['xray'];
+            $hasOper = $qualifying['oper'];
+            $hasDrug = $qualifying['drug'];
+            $hasDiag = $qualifying['diag'];
+
+            // ข้อ 3 = สถานภาพรับไว้สังเกตอาการ หรือมีคำสั่ง/แพทย์เริ่มตรวจหลัง baseline
+            $isTreating = $observationLabel !== null
                 || $hasDocTx
                 || $hasLab
                 || $hasXray
-                || $hasDiag
-                || $hasOper;
+                || $hasOper
+                || $hasDrug
+                || $hasDiag;
 
             $triageInfo = $this->resolveTriageInfo($row, $erSetting);
 
             if ($isTreating) {
-                $statusText = $hasOtherLeaveStatus
-                    ? $leaveStatusName
+                $statusText = $observationLabel !== null
+                    ? $observationLabel
                     : match (true) {
                         $hasLab && $hasXray => 'รอผล Lab + X-ray',
                         $hasLab => 'รอผล Lab',
                         $hasXray => 'รอผล X-ray',
                         $hasOper => 'ทำหัตถการ',
+                        $hasDrug => 'สั่งยาแล้ว',
                         $hasDiag => 'ตรวจวินิจฉัยแล้ว',
                         $hasDocTx => 'แพทย์กำลังตรวจ',
                         default => 'กำลังตรวจรักษา',
@@ -681,6 +817,11 @@ class HosxpQueueService
                     'status_text' => $statusText,
                 ];
             } else {
+                // ข้อ 2 เฉพาะ cur_dep = 063
+                if (trim((string) ($row->cur_dep ?? '')) !== '063') {
+                    continue;
+                }
+
                 $waiting[] = [
                     'oqueue' => $row->oqueue,
                     'display_name' => $this->maskThaiName($row->pname, $row->fname, $row->lname),
@@ -722,42 +863,359 @@ class HosxpQueueService
     }
 
     /**
-     * ตัดออกจากจอ ER เมื่อปิดเคสแล้ว / ย้ายออก / สถานภาพกลับบ้าน
+     * ตัดออกจากจอ ER เมื่อปิดเคส / ย้ายออก / สถานภาพไม่ใช่รับไว้สังเกตอาการ
+     *
+     * - มีสถานภาพแล้วและไม่ใช่ «รับไว้สังเกต(ุ)อาการ» → เอาออก
+     * - เป็นรับไว้สังเกตอาการ → คงไว้ (ไปข้อ 3) แม้ finish_time ค้าง
+     * - ยังไม่ลงสถานภาพ → ตัดเมื่อมี finish_time หรือ cur_dep = 999
      */
     private function isErRemovedFromDisplay(object $row): bool
     {
-        if (trim((string) ($row->cur_dep ?? '')) === '999') {
-            return true;
-        }
+        $curDep = trim((string) ($row->cur_dep ?? ''));
 
-        $hasFinishTime = !empty($row->finish_time)
-            && !str_starts_with((string) $row->finish_time, '1899')
-            && !str_starts_with((string) $row->finish_time, '0000');
-        if ($hasFinishTime) {
+        if ($curDep === '999') {
             return true;
         }
 
         $leaveStatusName = trim((string) ($row->er_leave_status_name ?? ''));
-        if ($leaveStatusName !== '' && $this->isErHomeDischargeStatus($leaveStatusName)) {
+        $dchTypeName = trim((string) ($row->er_dch_type_name ?? ''));
+        $hasAnyStatus = $leaveStatusName !== '' || $dchTypeName !== '';
+        $isObservation = $this->resolveErObservationStatusLabel($leaveStatusName, $dchTypeName) !== null;
+
+        if ($hasAnyStatus && ! $isObservation) {
             return true;
         }
 
-        // บางเคสมี er_dch_type แต่ไม่มีชื่อสถานภาพ — ถ้าเป็นกลับบ้านผ่าน dch type text
-        $dchType = trim((string) ($row->er_dch_type ?? ''));
-        if ($dchType !== '' && $this->isErHomeDischargeStatus($dchType)) {
-            return true;
+        if ($isObservation) {
+            return false;
         }
 
-        return false;
+        $hasFinishTime = ! empty($row->finish_time)
+            && ! str_starts_with((string) $row->finish_time, '1899')
+            && ! str_starts_with((string) $row->finish_time, '0000');
+
+        return $hasFinishTime;
     }
 
-    private function isErHomeDischargeStatus(string $status): bool
+    /**
+     * คืนชื่อสถานภาพเมื่อเป็นรับไว้สังเกต(ุ)อาการ (leave status มาก่อน dch type)
+     */
+    private function resolveErObservationStatusLabel(string $leaveStatusName, string $dchTypeName): ?string
+    {
+        if ($this->isErObservationStatus($leaveStatusName)) {
+            return $leaveStatusName;
+        }
+        if ($this->isErObservationStatus($dchTypeName)) {
+            return $dchTypeName;
+        }
+
+        return null;
+    }
+
+    private function isErObservationStatus(string $status): bool
     {
         $normalized = mb_strtolower(trim($status));
+        if ($normalized === '') {
+            return false;
+        }
 
-        return str_contains($normalized, 'กลับบ้าน')
-            || str_contains($normalized, 'discharge home')
-            || $normalized === 'home';
+        // รองรับทั้ง «สังเกต» และ «สังเกตุ»
+        return str_contains($normalized, 'รับไว้สังเกต');
+    }
+
+    /**
+     * Baseline เวลา «กระบวนการก่อนหน้า» สำหรับเทียบเวลาสั่งข้อ 3
+     */
+    private function resolveErProcessBaseline(object $row): ?\Carbon\Carbon
+    {
+        $tz = 'Asia/Bangkok';
+
+        if (! empty($row->enter_er_time)
+            && ! str_starts_with((string) $row->enter_er_time, '1899')
+            && ! str_starts_with((string) $row->enter_er_time, '0000')
+        ) {
+            $rawTime = trim((string) $row->enter_er_time);
+            if (! str_contains($rawTime, '-') && ! empty($row->vstdate)) {
+                $rawTime = "{$row->vstdate} {$rawTime}";
+            }
+            try {
+                return \Carbon\Carbon::parse($rawTime, $tz);
+            } catch (\Throwable) {
+                // fall through
+            }
+        }
+
+        if (! empty($row->vstdate) && ! empty($row->vsttime)) {
+            try {
+                return \Carbon\Carbon::parse("{$row->vstdate} {$row->vsttime}", $tz);
+            } catch (\Throwable) {
+                return null;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * คำสั่งที่นับเป็นข้อ 3: มีรายการ และ (ไม่มีเวลาสั่ง หรือ เวลาสั่ง >= baseline)
+     *
+     * @param  array<string, array{has?: bool, at?: ?\Carbon\Carbon}>  $signals
+     * @return array{lab: bool, xray: bool, oper: bool, drug: bool, diag: bool}
+     */
+    private function resolveErQualifyingOrderFlags(array $signals, ?\Carbon\Carbon $baseline): array
+    {
+        $keys = ['lab', 'xray', 'oper', 'drug', 'diag'];
+        $out = [];
+
+        foreach ($keys as $key) {
+            $signal = $signals[$key] ?? null;
+            if (! is_array($signal) || empty($signal['has'])) {
+                $out[$key] = false;
+                continue;
+            }
+
+            $orderAt = $signal['at'] ?? null;
+            if (! $orderAt instanceof \Carbon\Carbon || $baseline === null) {
+                // ไม่มีคอลัมน์เวลา / parse ไม่ได้ แต่มีรายการและอยู่ 063 แล้ว → นับเข้าข้อ 3
+                $out[$key] = true;
+                continue;
+            }
+
+            $out[$key] = $orderAt->greaterThanOrEqualTo($baseline);
+        }
+
+        return $out;
+    }
+
+    /**
+     * Batch ดึงสัญญาณคำสั่งทางคลินิก + เวลาสั่งเร็วสุดต่อ vn
+     *
+     * @return array<string, array<string, array{has: bool, at: ?\Carbon\Carbon}>>
+     */
+    private function batchErClinicalOrderSignals($conn, array $vns): array
+    {
+        if ($vns === []) {
+            return [];
+        }
+
+        $result = [];
+
+        $setSignal = function (string $vn, string $key, ?\Carbon\Carbon $at) use (&$result): void {
+            $prev = $result[$vn][$key]['at'] ?? null;
+            $best = $prev instanceof \Carbon\Carbon && $at instanceof \Carbon\Carbon
+                ? ($at->lt($prev) ? $at : $prev)
+                : ($at ?? $prev);
+
+            $result[$vn][$key] = [
+                'has' => true,
+                'at' => $best instanceof \Carbon\Carbon ? $best : null,
+            ];
+        };
+
+        // LAB
+        try {
+            $labRows = $conn->table('lab_head')
+                ->whereIn('vn', $vns)
+                ->select(['vn', 'order_date', 'order_time'])
+                ->get();
+            foreach ($labRows->groupBy('vn') as $vn => $items) {
+                $setSignal((string) $vn, 'lab', $this->earliestHosxpDateTime($items, 'order_date', 'order_time'));
+            }
+        } catch (\Throwable) {
+            // ignore
+        }
+
+        // X-RAY
+        try {
+            if (HosxpSchema::tableExists($conn, 'xray_head')) {
+                $xrayRows = $conn->table('xray_head')
+                    ->whereIn('vn', $vns)
+                    ->select(['vn', 'order_date', 'order_time'])
+                    ->get();
+                foreach ($xrayRows->groupBy('vn') as $vn => $items) {
+                    $setSignal((string) $vn, 'xray', $this->earliestHosxpDateTime($items, 'order_date', 'order_time'));
+                }
+            } elseif (HosxpSchema::tableExists($conn, 'xray_report')) {
+                $xrayRows = $conn->table('xray_report')
+                    ->whereIn('vn', $vns)
+                    ->select(['vn', 'request_date', 'request_time'])
+                    ->get();
+                foreach ($xrayRows->groupBy('vn') as $vn => $items) {
+                    $at = $this->earliestHosxpDateTime($items, 'request_date', 'request_time');
+                    if ($at === null) {
+                        $at = $this->earliestHosxpDateTime($items, null, 'request_time');
+                    }
+                    $setSignal((string) $vn, 'xray', $at);
+                }
+            }
+        } catch (\Throwable) {
+            // ignore
+        }
+
+        // วินิจฉัย
+        try {
+            if (HosxpSchema::tableExists($conn, 'ovstdiag')) {
+                $diagSelect = ['vn'];
+                $dateCol = HosxpSchema::columnExists($conn, 'ovstdiag', 'vstdate') ? 'vstdate' : null;
+                $timeCol = HosxpSchema::columnExists($conn, 'ovstdiag', 'vsttime')
+                    ? 'vsttime'
+                    : (HosxpSchema::columnExists($conn, 'ovstdiag', 'diagtime') ? 'diagtime' : null);
+                if ($dateCol) {
+                    $diagSelect[] = $dateCol;
+                }
+                if ($timeCol) {
+                    $diagSelect[] = $timeCol;
+                }
+
+                $diagRows = $conn->table('ovstdiag')->whereIn('vn', $vns)->select($diagSelect)->get();
+                foreach ($diagRows->groupBy('vn') as $vn => $items) {
+                    $setSignal((string) $vn, 'diag', $this->earliestHosxpDateTime($items, $dateCol, $timeCol));
+                }
+            }
+        } catch (\Throwable) {
+            // ignore
+        }
+
+        // ยา (opitemrece + drugitems)
+        try {
+            if (HosxpSchema::tableExists($conn, 'opitemrece')) {
+                $drugQuery = $conn->table('opitemrece as oi')
+                    ->whereIn('oi.vn', $vns);
+                if (HosxpSchema::tableExists($conn, 'drugitems')) {
+                    $drugQuery->join('drugitems as d', 'd.icode', '=', 'oi.icode');
+                }
+
+                $drugSelect = ['oi.vn'];
+                $drugDate = HosxpSchema::columnExists($conn, 'opitemrece', 'rxdate')
+                    ? 'oi.rxdate'
+                    : (HosxpSchema::columnExists($conn, 'opitemrece', 'vstdate') ? 'oi.vstdate' : null);
+                $drugTime = HosxpSchema::columnExists($conn, 'opitemrece', 'rxtime')
+                    ? 'oi.rxtime'
+                    : (HosxpSchema::columnExists($conn, 'opitemrece', 'vsttime') ? 'oi.vsttime' : null);
+                if ($drugDate) {
+                    $drugSelect[] = DB::raw("{$drugDate} as order_date");
+                }
+                if ($drugTime) {
+                    $drugSelect[] = DB::raw("{$drugTime} as order_time");
+                }
+
+                $drugRows = $drugQuery->select($drugSelect)->get();
+                $drugDateKey = $drugDate ? 'order_date' : null;
+                $drugTimeKey = $drugTime ? 'order_time' : null;
+                foreach ($drugRows->groupBy('vn') as $vn => $items) {
+                    $setSignal((string) $vn, 'drug', $this->earliestHosxpDateTime($items, $drugDateKey, $drugTimeKey));
+                }
+            }
+        } catch (\Throwable) {
+            // ignore
+        }
+
+        // หัตถการ ER
+        try {
+            if (HosxpSchema::tableExists($conn, 'er_regist_oper')) {
+                $operSelect = ['vn'];
+                $operDate = HosxpSchema::columnExists($conn, 'er_regist_oper', 'oper_date')
+                    ? 'oper_date'
+                    : (HosxpSchema::columnExists($conn, 'er_regist_oper', 'vstdate') ? 'vstdate' : null);
+                $operTime = null;
+                foreach (['begin_time', 'oper_time', 'opdate_time', 'vsttime'] as $candidate) {
+                    if (HosxpSchema::columnExists($conn, 'er_regist_oper', $candidate)) {
+                        $operTime = $candidate;
+                        break;
+                    }
+                }
+                if ($operDate) {
+                    $operSelect[] = $operDate;
+                }
+                if ($operTime) {
+                    $operSelect[] = $operTime;
+                }
+
+                $operRows = $conn->table('er_regist_oper')->whereIn('vn', $vns)->select($operSelect)->get();
+                foreach ($operRows->groupBy('vn') as $vn => $items) {
+                    $setSignal((string) $vn, 'oper', $this->earliestHosxpDateTime($items, $operDate, $operTime));
+                }
+            }
+        } catch (\Throwable) {
+            // ignore
+        }
+
+        // หัตถการแพทย์
+        try {
+            if (HosxpSchema::tableExists($conn, 'doctor_operation')) {
+                $docSelect = ['vn'];
+                $docDate = HosxpSchema::columnExists($conn, 'doctor_operation', 'vstdate')
+                    ? 'vstdate'
+                    : (HosxpSchema::columnExists($conn, 'doctor_operation', 'opdate') ? 'opdate' : null);
+                $docTime = null;
+                foreach (['begin_time', 'optime', 'vsttime'] as $candidate) {
+                    if (HosxpSchema::columnExists($conn, 'doctor_operation', $candidate)) {
+                        $docTime = $candidate;
+                        break;
+                    }
+                }
+                if ($docDate) {
+                    $docSelect[] = $docDate;
+                }
+                if ($docTime) {
+                    $docSelect[] = $docTime;
+                }
+
+                $docRows = $conn->table('doctor_operation')->whereIn('vn', $vns)->select($docSelect)->get();
+                foreach ($docRows->groupBy('vn') as $vn => $items) {
+                    $setSignal((string) $vn, 'oper', $this->earliestHosxpDateTime($items, $docDate, $docTime));
+                }
+            }
+        } catch (\Throwable) {
+            // ignore
+        }
+
+        return $result;
+    }
+
+    /**
+     * หา datetime เร็วสุดจากแถว HOSxP (date+time หรือ time อย่างเดียว)
+     *
+     * @param  \Illuminate\Support\Collection<int, object>  $items
+     */
+    private function earliestHosxpDateTime($items, ?string $dateCol, ?string $timeCol): ?\Carbon\Carbon
+    {
+        $tz = 'Asia/Bangkok';
+        $earliest = null;
+
+        foreach ($items as $item) {
+            $date = $dateCol ? trim((string) ($item->{$dateCol} ?? '')) : '';
+            $time = $timeCol ? trim((string) ($item->{$timeCol} ?? '')) : '';
+
+            if ($date === '' && $time === '') {
+                continue;
+            }
+            if ($time !== '' && (str_starts_with($time, '1899') || str_starts_with($time, '0000'))) {
+                continue;
+            }
+
+            $raw = match (true) {
+                $date !== '' && $time !== '' && ! str_contains($time, '-') => "{$date} {$time}",
+                $date !== '' && str_contains($date, '-') && $time === '' => $date,
+                $time !== '' && str_contains($time, '-') => $time,
+                default => null,
+            };
+
+            if ($raw === null) {
+                continue;
+            }
+
+            try {
+                $parsed = \Carbon\Carbon::parse($raw, $tz);
+                if ($earliest === null || $parsed->lt($earliest)) {
+                    $earliest = $parsed;
+                }
+            } catch (\Throwable) {
+                continue;
+            }
+        }
+
+        return $earliest;
     }
 
     /**

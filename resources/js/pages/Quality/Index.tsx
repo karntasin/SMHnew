@@ -147,12 +147,12 @@ export default function QualityHub() {
       color: 'text-pink-600',
       bg: 'bg-pink-100',
       gradient: 'from-pink-500 to-rose-500',
-      href: '/km/learn/dashboard',
+      href: '/km/learn/hub',
       links: [
+        { label: 'ศูนย์ HRD', href: '/km/learn/hub' },
         { label: 'Dashboard', href: '/km/learn/dashboard' },
         { label: t('Training Courses'), href: '/km/learn/courses' },
         { label: t('My Training'), href: '/km/learn/my-training' },
-        { label: t('My Skills'), href: '/km/learn/my-skills' },
       ]
     },
     {

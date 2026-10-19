@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class PharmacyLocation extends Model
 {
     protected $fillable = [
-        'code', 'name', 'type', 'is_active', 'sort_order', 'notes',
+        'code', 'name', 'type', 'catalog', 'is_active', 'sort_order', 'notes',
     ];
 
     protected function casts(): array

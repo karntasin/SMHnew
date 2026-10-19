@@ -2,8 +2,8 @@ import { FormEvent, useState } from 'react';
 import { Head, router } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import PharmacySubNav, { pharmacyBreadcrumbs } from '@/pages/Pharmacy/PharmacySubNav';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { ThaiDatePicker } from '@/components/ui/thai-date-picker';
 import {
     AlertCircle,
     CheckCircle2,
@@ -15,6 +15,7 @@ import {
     TriangleAlert,
     XCircle,
 } from 'lucide-react';
+import { warehouseActive, warehouseHome, warehouseSupply, wh } from '@/pages/Pharmacy/inventoryCatalog';
 
 type SyncRecord = {
     id: number;
@@ -64,7 +65,7 @@ export default function DispenseSync({
     const handleSearch = (e: FormEvent) => {
         e.preventDefault();
         router.get(
-            route('pharmacy.inventory.sync-dispense.history'),
+            wh('sync-dispense.history'),
             {
                 start_date: startDate || undefined,
                 end_date: endDate || undefined,
@@ -77,7 +78,7 @@ export default function DispenseSync({
     const handleSyncToday = () => {
         setIsSyncing(true);
         router.post(
-            route('pharmacy.inventory.sync-dispense'),
+            wh('sync-dispense'),
             {},
             {
                 preserveScroll: true,
@@ -89,7 +90,7 @@ export default function DispenseSync({
     const handleRetryAll = () => {
         setIsRetrying(true);
         router.post(
-            route('pharmacy.inventory.sync-dispense.retry'),
+            wh('sync-dispense.retry'),
             {},
             {
                 preserveScroll: true,
@@ -100,7 +101,7 @@ export default function DispenseSync({
 
     const handleRetrySingle = (id: number) => {
         router.post(
-            route('pharmacy.inventory.sync-dispense.retry'),
+            wh('sync-dispense.retry'),
             { id },
             { preserveScroll: true },
         );
@@ -109,14 +110,14 @@ export default function DispenseSync({
     return (
         <AppLayout
             breadcrumbs={pharmacyBreadcrumbs([
-                { title: 'คลังยา / ห้องยา', href: route('pharmacy.inventory.index') },
+                { title: warehouseHome(), href: wh('index') },
                 { title: 'ติดตามการซิงก์ตัดจ่าย HOSxP' },
             ])}
         >
-            <Head title="ติดตามการซิงก์ตัดจ่ายยา HOSxP" />
+            <Head title={warehouseSupply() ? "ติดตามการซิงก์ตัดจ่ายเวชภัณฑ์ HOSxP" : "ติดตามการซิงก์ตัดจ่ายยา HOSxP"} />
 
             <div className="container mx-auto space-y-6 px-4 py-6">
-                <PharmacySubNav active="pharmacy.inventory.index" />
+                <PharmacySubNav active={warehouseActive()} />
 
                 {/* Stat Cards */}
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -168,21 +169,21 @@ export default function DispenseSync({
                     <form onSubmit={handleSearch} className="flex flex-1 flex-wrap items-end gap-3">
                         <div>
                             <label className="mb-1 block text-xs font-medium text-muted-foreground">ตั้งแต่วันที่</label>
-                            <Input
-                                type="date"
+                            <ThaiDatePicker
+                                label="ตั้งแต่วันที่"
                                 value={startDate}
-                                onChange={(e) => setStartDate(e.target.value)}
-                                className="w-38"
+                                onChange={setStartDate}
+                                className="w-56"
                             />
                         </div>
 
                         <div>
                             <label className="mb-1 block text-xs font-medium text-muted-foreground">ถึงวันที่</label>
-                            <Input
-                                type="date"
+                            <ThaiDatePicker
+                                label="ถึงวันที่"
                                 value={endDate}
-                                onChange={(e) => setEndDate(e.target.value)}
-                                className="w-38"
+                                onChange={setEndDate}
+                                className="w-56"
                             />
                         </div>
 

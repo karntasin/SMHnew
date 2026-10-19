@@ -20,6 +20,7 @@ class QualityIndicatorFamilyService
         'target_operator',
         'frequency',
         'formula_description',
+        'series',
     ];
 
     public function ensureFamily(QualityIndicator $indicator): QualityIndicatorFamily
@@ -187,10 +188,12 @@ class QualityIndicatorFamilyService
             foreach ($copies as $entry) {
                 QualityIndicatorEntry::create([
                     'quality_indicator_id' => $indicator->id,
+                    'series_key' => $entry->series_key ?? '',
                     'period_date' => $entry->period_date,
                     'numerator' => $entry->numerator,
                     'denominator' => $entry->denominator,
                     'result_value' => $entry->result_value,
+                    'is_na' => (bool) $entry->is_na,
                     'notes' => $entry->notes,
                     'created_by' => $entry->created_by,
                 ]);

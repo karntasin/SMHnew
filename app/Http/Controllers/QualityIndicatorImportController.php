@@ -73,7 +73,7 @@ class QualityIndicatorImportController extends Controller
 
         return response()->download(
             $path,
-            'เทมเพลตนำเข้าตัวชี้วัด-โรงพยาบาลค่ายสุรสิงหนาท.xlsx',
+            'เทมเพลตนำเข้าตัวชี้วัด-v2-โรงพยาบาลค่ายสุรสิงหนาท.xlsx',
             ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
         );
     }

@@ -27,14 +27,14 @@ class FshhChatSyncService
     }
 
     /**
-     * สร้างเซสชันแชทให้ผู้ใช้ที่ล็อกอินเว็บอยู่ แล้วคืน URL เปิด FSHH Chat
+     * สร้างเซสชันแชทให้ผู้ใช้ที่ล็อกอินเว็บอยู่ แล้วคืน URL เปิด S-Chat
      *
      * @return array{success: bool, url?: string, error?: string}
      */
     public function openWebSession(User $user): array
     {
         if (! $this->client->isConfigured()) {
-            return ['success' => false, 'error' => 'ยังไม่ได้ตั้งค่า FSHH Chat'];
+            return ['success' => false, 'error' => 'ยังไม่ได้ตั้งค่า S-Chat'];
         }
 
         $result = $this->client->call('createWebSession', $this->userPayload($user));
@@ -42,7 +42,7 @@ class FshhChatSyncService
         if (($result['success'] ?? false) !== true || $token === '') {
             return [
                 'success' => false,
-                'error' => (string) ($result['error'] ?? 'เปิด FSHH Chat ไม่สำเร็จ'),
+                'error' => (string) ($result['error'] ?? 'เปิด S-Chat ไม่สำเร็จ'),
             ];
         }
 
@@ -124,7 +124,7 @@ class FshhChatSyncService
         ]);
 
         if (($result['success'] ?? false) !== true) {
-            Log::info('FSHH Chat notify skipped', [
+            Log::info('S-Chat notify skipped', [
                 'user_id' => $user->id,
                 'error' => $result['error'] ?? 'unknown',
             ]);
@@ -166,7 +166,7 @@ class FshhChatSyncService
         $result = $this->client->call('notifyDepartment', $payload);
 
         if (($result['success'] ?? false) !== true) {
-            Log::info('FSHH Chat department notify skipped', [
+            Log::info('S-Chat department notify skipped', [
                 'department_id' => $department->id,
                 'error' => $result['error'] ?? 'unknown',
             ]);
@@ -220,7 +220,7 @@ class FshhChatSyncService
     }
 
     /**
-     * ส่งข้อความ/การแจ้งเตือนเข้ากลุ่มทีม HA ใน FSHH Chat
+     * ส่งข้อความ/การแจ้งเตือนเข้ากลุ่มทีม HA ใน S-Chat
      *
      * @param  array<string, mixed>  $data
      */
@@ -257,7 +257,7 @@ class FshhChatSyncService
         $result = $this->client->call('notifyHaTeam', $payload);
 
         if (($result['success'] ?? false) !== true) {
-            Log::info('FSHH Chat HA team notify skipped', [
+            Log::info('S-Chat HA team notify skipped', [
                 'team_id' => $team->id,
                 'error' => $result['error'] ?? 'unknown',
             ]);
@@ -265,7 +265,7 @@ class FshhChatSyncService
     }
 
     /**
-     * ส่งการแจ้งเตือนแบบการ์ดเข้ากลุ่มทีม HA ใน FSHH Chat
+     * ส่งการแจ้งเตือนแบบการ์ดเข้ากลุ่มทีม HA ใน S-Chat
      *
      * @param  array<string, mixed>  $fields
      */
@@ -344,7 +344,7 @@ class FshhChatSyncService
     public function syncAiContext(): array
     {
         if (! $this->client->isConfigured()) {
-            return ['success' => false, 'error' => 'ยังไม่ได้ตั้งค่า FSHH Chat'];
+            return ['success' => false, 'error' => 'ยังไม่ได้ตั้งค่า S-Chat'];
         }
 
         $payload = app(FshhChatAiContextService::class)->build();

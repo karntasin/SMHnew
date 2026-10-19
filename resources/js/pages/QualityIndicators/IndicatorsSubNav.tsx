@@ -1,5 +1,5 @@
 import { QualitySubNav, QualityTab } from '@/components/quality/quality-ui';
-import { BookOpen, LayoutDashboard, List, Trash2, Upload } from 'lucide-react';
+import { BookOpen, Hash, LayoutDashboard, List, Trash2, Upload } from 'lucide-react';
 
 export default function IndicatorsSubNav({
     active,
@@ -11,6 +11,7 @@ export default function IndicatorsSubNav({
     const tabs: QualityTab[] = [
         { key: 'quality-indicators.index', label: 'รายการตัวชี้วัด', hint: 'จัดการ KPI', icon: List },
         { key: 'quality-indicators.dashboard', label: 'ภาพรวม', hint: 'สถานะตัวชี้วัด', icon: LayoutDashboard },
+        { key: 'quality-indicators.coverage', label: 'จำนวนรายส่วน', hint: 'แผนกและทีม', icon: Hash },
         { key: 'quality-indicators.import.index', label: 'นำเข้า Excel', hint: 'เทมเพลต + ยืนยัน', icon: Upload },
         {
             key: 'quality-indicators.trash',
@@ -29,7 +30,7 @@ export default function IndicatorsSubNav({
             workspaceBadge="ตัวชี้วัดคุณภาพ"
             tabs={tabs}
             active={active}
-            columnsClass="sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"
+            columnsClass="sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6"
         />
     );
 }

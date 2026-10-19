@@ -9,7 +9,9 @@ use App\Models\Pharmacy\PharmacyLot;
 use App\Models\Pharmacy\PharmacyStockBalance;
 use App\Models\Pharmacy\PharmacyStockMovement;
 use App\Services\HosxpConnectionService;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -19,27 +21,125 @@ class PharmacyInventoryService
 {
     public function __construct(private readonly HosxpConnectionService $hosxp) {}
 
+    public function normalizeCatalog(?string $catalog): string
+    {
+        return $catalog === 'nondrug' ? 'nondrug' : 'drug';
+    }
+
+    /**
+     * รหัส income ของคลังเวชภัณฑ์ จากชื่อในตาราง income
+     * รวมค่าเวชภัณฑ์ที่มิใช่ยา และค่าอวัยวะเทียมและอุปกรณ์ในการบำบัดรักษาโรค
+     * ถ้าไม่พบชื่อที่ตรง จะใช้รหัส 05 และ 02
+     *
+     * @return list<string>
+     */
+    public function supplyIncomeCodes(): array
+    {
+        try {
+            return Cache::remember('pharmacy.supply_income_codes.v2', 3600, function () {
+                $codes = DB::connection('hosxp')->table('income')
+                    ->where(function ($query) {
+                        $query->where(function ($supply) {
+                            $supply->where('name', 'like', '%เวชภัณฑ์%')
+                                ->where(function ($name) {
+                                    $name->where('name', 'like', '%มิใช่ยา%')
+                                        ->orWhere('name', 'like', '%มิใช้ยา%');
+                                });
+                        })->orWhere('name', 'like', '%อวัยวะเทียม%');
+                    })
+                    ->pluck('income')
+                    ->map(fn ($code) => trim((string) $code))
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->all();
+
+                return $codes !== [] ? $codes : ['05', '02'];
+            });
+        } catch (Throwable) {
+            return ['05', '02'];
+        }
+    }
+
+    public function isSupplyIncome(?string $income): bool
+    {
+        $income = trim((string) $income);
+        if ($income === '') {
+            return false;
+        }
+
+        foreach ($this->supplyIncomeCodes() as $code) {
+            if ($income === $code || ltrim($income, '0') === ltrim($code, '0')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function nameStartsWithSupplyMark(?string $name): bool
+    {
+        $name = ltrim((string) $name);
+
+        return str_starts_with($name, '(ว)') || str_starts_with($name, "\x28\xC7\x29");
+    }
+
+    /**
+     * เวชภัณฑ์ใน nondrugitems คือหมวดค่าเวชภัณฑ์ที่มิใช่ยา หรือชื่อขึ้นต้น (ว) ทุกหมวด
+     */
+    public function constrainHosxpSupplyNondrug($query, string $incomeColumn = 'income', string $nameColumn = 'name')
+    {
+        $codes = $this->supplyIncomeCodes();
+
+        return $query->where(function ($inner) use ($codes, $incomeColumn, $nameColumn) {
+            $inner->whereIn($incomeColumn, $codes)
+                ->orWhereRaw("LEFT(CAST({$nameColumn} AS BINARY), 3) = UNHEX('28C729')");
+        });
+    }
+
     public function ensureDefaultLocations(): void
     {
         PharmacyLocation::query()->firstOrCreate(
             ['code' => 'WH-MAIN'],
-            ['name' => 'คลังยาหลัก', 'type' => 'warehouse', 'sort_order' => 1]
+            ['name' => 'คลังยาหลัก', 'type' => 'warehouse', 'catalog' => 'drug', 'sort_order' => 1]
         );
         PharmacyLocation::query()->firstOrCreate(
             ['code' => 'PHARM-OPD'],
-            ['name' => 'ห้องยา OPD', 'type' => 'pharmacy', 'sort_order' => 2]
+            ['name' => 'ห้องยา OPD', 'type' => 'pharmacy', 'catalog' => 'drug', 'sort_order' => 2]
         );
+        PharmacyLocation::query()->firstOrCreate(
+            ['code' => 'WH-SUPPLY'],
+            ['name' => 'คลังเวชภัณฑ์', 'type' => 'warehouse', 'catalog' => 'nondrug', 'sort_order' => 3]
+        );
+        PharmacyLocation::query()->firstOrCreate(
+            ['code' => 'SUPPLY-OPD'],
+            ['name' => 'จุดจ่ายเวชภัณฑ์', 'type' => 'pharmacy', 'catalog' => 'nondrug', 'sort_order' => 4]
+        );
+    }
+
+    public function defaultDispenseLocation(string $catalog): ?PharmacyLocation
+    {
+        $this->ensureDefaultLocations();
+
+        return PharmacyLocation::query()
+            ->where('type', 'pharmacy')
+            ->where('catalog', $this->normalizeCatalog($catalog))
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->first();
     }
 
     /**
      * ดึง/สร้างยาหรือเวชภัณฑ์มิใช่ยาจาก HOSxP ตาม icode
      */
-    public function resolveItemFromHosxp(string $icode): PharmacyItem
+    public function resolveItemFromHosxp(string $icode, ?string $catalog = null): PharmacyItem
     {
         $icode = trim($icode);
+        $catalog = $catalog !== null ? $this->normalizeCatalog($catalog) : null;
         $existing = PharmacyItem::query()->where('icode', $icode)->first();
         if ($existing) {
             $this->ensureBaseUnit($existing);
+            $this->assertItemCatalog($existing->isNondrug() ? 'nondrug' : 'drug', $catalog);
 
             return $existing;
         }
@@ -64,17 +164,19 @@ class PharmacyInventoryService
                     $strength = $row->strength ? (string) $row->strength : null;
                     $unit = $row->units ? (string) $row->units : null;
                     $group = $row->drugaccount ? (string) $row->drugaccount : null;
-                    $isNondrug = str_starts_with(trim($name), '(ว)') || ($row->income ?? null) === '05';
+                    $isNondrug = $this->nameStartsWithSupplyMark($name) || $this->isSupplyIncome($row->income ?? null);
                     $itemType = $isNondrug ? 'nondrug' : 'drug';
-                    $incomeCode = $isNondrug ? '05' : ($row->income ?? null);
+                    $incomeCode = $isNondrug ? (string) ($row->income ?: ($this->supplyIncomeCodes()[0] ?? '05')) : ($row->income ?? null);
                 } else {
-                    // 2. ถ้าไม่พบใน drugitems ให้ตรวจสอบใน nondrugitems (income = '05' ค่าเวชภัณฑ์ที่มิใช่ยา)
-                    $nondrug = DB::connection('hosxp')->table('nondrugitems as n')
-                        ->leftJoin('income as i', 'i.income', '=', 'n.income')
-                        ->leftJoin('nhso_adp_type as nac', 'nac.nhso_adp_type_id', '=', 'n.nhso_adp_type_id')
-                        ->where('n.icode', $icode)
-                        ->where('n.income', '05')
-                        ->first([
+                    $supplyIncomes = $this->supplyIncomeCodes();
+                    $nondrug = $this->constrainHosxpSupplyNondrug(
+                        DB::connection('hosxp')->table('nondrugitems as n')
+                            ->leftJoin('income as i', 'i.income', '=', 'n.income')
+                            ->leftJoin('nhso_adp_type as nac', 'nac.nhso_adp_type_id', '=', 'n.nhso_adp_type_id')
+                            ->where('n.icode', $icode),
+                        'n.income',
+                        'n.name'
+                    )->first([
                             'n.icode', 'n.name', 'n.unit', 'n.price', 'n.income',
                             'i.name as income_name', 'nac.nhso_adp_type_name',
                         ]);
@@ -83,9 +185,9 @@ class PharmacyInventoryService
                         $unit = $nondrug->unit ? (string) $nondrug->unit : 'ชิ้น';
                         $group = $nondrug->nhso_adp_type_name ?: 'ค่าเวชภัณฑ์ที่มิใช่ยา';
                         $itemType = 'nondrug';
-                        $incomeCode = '05';
+                        $incomeCode = (string) ($nondrug->income ?: ($supplyIncomes[0] ?? '05'));
                         $meta = [
-                            'income' => '05',
+                            'income' => $incomeCode,
                             'income_name' => $nondrug->income_name ?: 'ค่าเวชภัณฑ์ที่มิใช่ยา',
                             'nhso_adp_type_name' => $nondrug->nhso_adp_type_name,
                             'price' => (float) ($nondrug->price ?? 0),
@@ -102,6 +204,8 @@ class PharmacyInventoryService
         if (! isset($row) && ! isset($nondrug)) {
             throw new RuntimeException("ไม่พบรหัสยา/เวชภัณฑ์ {$icode} ในฐานข้อมูล HOSxP");
         }
+
+        $this->assertItemCatalog($itemType, $catalog);
 
         $item = PharmacyItem::query()->create([
             'icode' => $icode,
@@ -146,13 +250,13 @@ class PharmacyInventoryService
                     continue;
                 }
                 $name = trim((string) ($row->name ?? '')) ?: $icode;
-                $isNondrug = str_starts_with(trim($name), '(ว)') || (($row->income ?? null) === '05');
+                $isNondrug = $this->nameStartsWithSupplyMark($name) || $this->isSupplyIncome($row->income ?? null);
                 $unit = trim((string) ($row->units ?? '')) ?: 'หน่วย';
                 $item = PharmacyItem::query()->where('icode', $icode)->first();
                 $values = [
                     'name' => $name,
                     'item_type' => $isNondrug ? 'nondrug' : 'drug',
-                    'income_code' => $isNondrug ? '05' : ($row->income ?? null),
+                    'income_code' => $isNondrug ? (string) ($row->income ?: ($this->supplyIncomeCodes()[0] ?? '05')) : ($row->income ?? null),
                     'strength' => trim((string) ($row->strength ?? '')) ?: null,
                     'unit' => $unit,
                     'base_unit' => $item?->base_unit ?: $unit,
@@ -176,16 +280,20 @@ class PharmacyInventoryService
     }
 
     /**
-     * นำเข้า/อัปเดต master ค่าเวชภัณฑ์ที่มิใช่ยาจาก HOSxP nondrugitems (income = '05')
+     * นำเข้า/อัปเดต master ค่าเวชภัณฑ์ที่มิใช่ยาจาก HOSxP nondrugitems
      *
      * @return array{imported:int,updated:int,total:int}
      */
     public function importHosxpNondrugItems(int $limit = 0): array
     {
-        $query = DB::connection('hosxp')->table('nondrugitems as n')
-            ->leftJoin('income as i', 'i.income', '=', 'n.income')
-            ->leftJoin('nhso_adp_type as nac', 'nac.nhso_adp_type_id', '=', 'n.nhso_adp_type_id')
-            ->where('n.income', '05')
+        $supplyIncomes = $this->supplyIncomeCodes();
+        $query = $this->constrainHosxpSupplyNondrug(
+            DB::connection('hosxp')->table('nondrugitems as n')
+                ->leftJoin('income as i', 'i.income', '=', 'n.income')
+                ->leftJoin('nhso_adp_type as nac', 'nac.nhso_adp_type_id', '=', 'n.nhso_adp_type_id'),
+            'n.income',
+            'n.name'
+        )
             ->orderBy('n.name')
             ->select([
                 'n.icode',
@@ -204,18 +312,19 @@ class PharmacyInventoryService
 
         $imported = 0;
         $updated = 0;
-        $query->chunk(500, function ($rows) use (&$imported, &$updated) {
+        $query->chunk(500, function ($rows) use (&$imported, &$updated, $supplyIncomes) {
             foreach ($rows as $row) {
                 $icode = trim((string) $row->icode);
                 if ($icode === '') {
                     continue;
                 }
                 $unit = trim((string) ($row->unit ?? '')) ?: 'ชิ้น';
+                $incomeCode = (string) ($row->income ?: ($supplyIncomes[0] ?? '05'));
                 $item = PharmacyItem::query()->where('icode', $icode)->first();
                 $values = [
                     'name' => trim((string) ($row->name ?? '')) ?: $icode,
                     'item_type' => 'nondrug',
-                    'income_code' => '05',
+                    'income_code' => $incomeCode,
                     'strength' => null,
                     'unit' => $unit,
                     'base_unit' => $item?->base_unit ?: $unit,
@@ -224,7 +333,7 @@ class PharmacyInventoryService
                     'is_active' => true,
                     'hosxp_synced_at' => now(),
                     'meta' => array_merge($item?->meta ?? [], [
-                        'income' => '05',
+                        'income' => $incomeCode,
                         'income_name' => $row->income_name ?: 'ค่าเวชภัณฑ์ที่มิใช่ยา',
                         'price' => (float) ($row->price ?? 0),
                         'nhso_adp_type_name' => $row->nhso_adp_type_name,
@@ -242,71 +351,153 @@ class PharmacyInventoryService
             }
         });
 
+        $drugQuery = DB::connection('hosxp')->table('drugitems')
+            ->where(function ($query) use ($supplyIncomes) {
+                $query->whereRaw("LEFT(CAST(name AS BINARY), 3) = UNHEX('28C729')")
+                    ->orWhereIn('income', $supplyIncomes);
+            })
+            ->orderBy('icode')
+            ->select(['icode', 'name', 'strength', 'units', 'drugaccount', 'income', 'istatus']);
+        if ($limit > 0) {
+            $drugQuery->limit($limit);
+        }
+
+        $drugQuery->chunk(500, function ($rows) use (&$imported, &$updated) {
+            foreach ($rows as $row) {
+                $name = trim((string) ($row->name ?? ''));
+                if ($name === '' || (! $this->nameStartsWithSupplyMark($name) && ! $this->isSupplyIncome($row->income ?? null))) {
+                    continue;
+                }
+                $icode = trim((string) $row->icode);
+                if ($icode === '') {
+                    continue;
+                }
+                $unit = trim((string) ($row->units ?? '')) ?: 'หน่วย';
+                $incomeCode = (string) ($row->income ?: ($this->supplyIncomeCodes()[0] ?? '05'));
+                $item = PharmacyItem::query()->where('icode', $icode)->first();
+                $values = [
+                    'name' => $name,
+                    'item_type' => 'nondrug',
+                    'income_code' => $incomeCode,
+                    'strength' => trim((string) ($row->strength ?? '')) ?: null,
+                    'unit' => $unit,
+                    'base_unit' => $item?->base_unit ?: $unit,
+                    'dispense_unit' => $item?->dispense_unit ?: $unit,
+                    'drug_group' => trim((string) ($row->drugaccount ?? '')) ?: 'ค่าเวชภัณฑ์ที่มิใช่ยา',
+                    'is_active' => ! isset($row->istatus) || $row->istatus === null || strtoupper((string) $row->istatus) === 'Y',
+                    'hosxp_synced_at' => now(),
+                ];
+                if ($item) {
+                    $item->update($values);
+                    $updated++;
+                } else {
+                    $item = PharmacyItem::query()->create(['icode' => $icode] + $values);
+                    $imported++;
+                }
+                $this->ensureBaseUnit($item);
+            }
+        });
+
         return ['imported' => $imported, 'updated' => $updated, 'total' => $imported + $updated];
     }
 
-    public function searchHosxpDrugs(string $q, int $limit = 30): array
+    public function searchHosxpDrugs(string $q, int $limit = 30, ?string $catalog = 'drug'): array
     {
         $q = trim($q);
         if ($q === '') {
             return [];
         }
 
+        $catalog = $this->normalizeCatalog($catalog);
         $remoteDrugs = [];
         $remoteNonDrugs = [];
 
         try {
             $status = $this->hosxp->check(false);
             if ($status['connected'] ?? false) {
-                // 1. ค้นหาใน drugitems (เรียงรายการที่เปิดใช้งานมาก่อน)
-                $remoteDrugs = DB::connection('hosxp')->table('drugitems')
-                    ->where(function ($query) use ($q) {
-                        $query->where('icode', 'like', "%{$q}%")
-                            ->orWhere('name', 'like', "%{$q}%");
-                    })
-                    ->orderByRaw("CASE WHEN istatus = 'Y' OR istatus IS NULL THEN 0 ELSE 1 END")
-                    ->orderBy('name')
-                    ->limit($limit)
-                    ->get(['icode', 'name', 'strength', 'units', 'income', 'istatus'])
-                    ->map(function ($r) {
-                        $isNondrug = str_starts_with(trim((string) $r->name), '(ว)') || ($r->income ?? null) === '05';
-                        return [
+                if ($catalog === 'drug') {
+                    $remoteDrugs = DB::connection('hosxp')->table('drugitems')
+                        ->where(function ($query) use ($q) {
+                            $query->where('icode', 'like', "%{$q}%")
+                                ->orWhere('name', 'like', "%{$q}%");
+                        })
+                        ->orderByRaw("CASE WHEN istatus = 'Y' OR istatus IS NULL THEN 0 ELSE 1 END")
+                        ->orderBy('name')
+                        ->limit($limit)
+                        ->get(['icode', 'name', 'strength', 'units', 'income', 'istatus'])
+                        ->map(function ($r) {
+                            $isNondrug = $this->nameStartsWithSupplyMark($r->name) || $this->isSupplyIncome($r->income ?? null);
+
+                            return [
+                                'icode' => (string) $r->icode,
+                                'name' => (string) $r->name,
+                                'strength' => $r->strength ? (string) $r->strength : null,
+                                'unit' => $r->units ? (string) $r->units : null,
+                                'item_type' => $isNondrug ? 'nondrug' : 'drug',
+                                'income_name' => $isNondrug ? 'ค่าเวชภัณฑ์ที่มิใช่ยา' : null,
+                            ];
+                        })
+                        ->filter(fn ($row) => $row['item_type'] === 'drug')
+                        ->values()
+                        ->all();
+                } else {
+                    $remoteNonDrugs = $this->constrainHosxpSupplyNondrug(
+                        DB::connection('hosxp')->table('nondrugitems as n')
+                            ->leftJoin('income as i', 'i.income', '=', 'n.income'),
+                        'n.income',
+                        'n.name'
+                    )
+                        ->where(function ($query) use ($q) {
+                            $query->where('n.icode', 'like', "%{$q}%")
+                                ->orWhere('n.name', 'like', "%{$q}%");
+                        })
+                        ->orderByRaw("CASE WHEN n.istatus = 'Y' OR n.istatus IS NULL THEN 0 ELSE 1 END")
+                        ->orderBy('n.name')
+                        ->limit($limit)
+                        ->get(['n.icode', 'n.name', 'n.unit', 'i.name as income_name', 'n.istatus'])
+                        ->map(fn ($r) => [
                             'icode' => (string) $r->icode,
                             'name' => (string) $r->name,
-                            'strength' => $r->strength ? (string) $r->strength : null,
-                            'unit' => $r->units ? (string) $r->units : null,
-                            'item_type' => $isNondrug ? 'nondrug' : 'drug',
-                            'income_name' => $isNondrug ? 'ค่าเวชภัณฑ์ที่มิใช่ยา' : null,
-                        ];
-                    })
-                    ->all();
+                            'strength' => null,
+                            'unit' => $r->unit ? (string) $r->unit : 'ชิ้น',
+                            'item_type' => 'nondrug',
+                            'income_name' => $r->income_name ?: 'ค่าเวชภัณฑ์ที่มิใช่ยา',
+                        ])
+                        ->all();
 
-                // 2. ค้นหาใน nondrugitems (income = '05' ค่าเวชภัณฑ์ที่มิใช่ยา - ไม่ตัดสิทธิ์ istatus N เพราะ 72% เป็นรหัสเวชภัณฑ์คลัง)
-                $remoteNonDrugs = DB::connection('hosxp')->table('nondrugitems as n')
-                    ->leftJoin('income as i', 'i.income', '=', 'n.income')
-                    ->where('n.income', '05')
-                    ->where(function ($query) use ($q) {
-                        $query->where('n.icode', 'like', "%{$q}%")
-                            ->orWhere('n.name', 'like', "%{$q}%");
-                    })
-                    ->orderByRaw("CASE WHEN n.istatus = 'Y' OR n.istatus IS NULL THEN 0 ELSE 1 END")
-                    ->orderBy('n.name')
-                    ->limit($limit)
-                    ->get(['n.icode', 'n.name', 'n.unit', 'i.name as income_name', 'n.istatus'])
-                    ->map(fn ($r) => [
-                        'icode' => (string) $r->icode,
-                        'name' => (string) $r->name,
-                        'strength' => null,
-                        'unit' => $r->unit ? (string) $r->unit : 'ชิ้น',
-                        'item_type' => 'nondrug',
-                        'income_name' => $r->income_name ?: 'ค่าเวชภัณฑ์ที่มิใช่ยา',
-                    ])
-                    ->all();
+                    $supplyFromDrugs = DB::connection('hosxp')->table('drugitems')
+                        ->where(function ($query) use ($q) {
+                            $query->where('icode', 'like', "%{$q}%")
+                                ->orWhere('name', 'like', "%{$q}%");
+                        })
+                        ->orderBy('name')
+                        ->limit($limit)
+                        ->get(['icode', 'name', 'strength', 'units', 'income'])
+                        ->map(function ($r) {
+                            $isNondrug = $this->nameStartsWithSupplyMark($r->name) || $this->isSupplyIncome($r->income ?? null);
+                            if (! $isNondrug) {
+                                return null;
+                            }
+
+                            return [
+                                'icode' => (string) $r->icode,
+                                'name' => (string) $r->name,
+                                'strength' => $r->strength ? (string) $r->strength : null,
+                                'unit' => $r->units ? (string) $r->units : null,
+                                'item_type' => 'nondrug',
+                                'income_name' => 'ค่าเวชภัณฑ์ที่มิใช่ยา',
+                            ];
+                        })
+                        ->filter()
+                        ->values()
+                        ->all();
+                    $remoteNonDrugs = array_merge($supplyFromDrugs, $remoteNonDrugs);
+                }
             }
         } catch (\Throwable) {}
 
-        // 3. ค้นหาในรายการยาและเวชภัณฑ์ท้องถิ่น (ค้นหาทั้ง icode, ชื่อ, บาร์โค้ด)
         $local = PharmacyItem::query()->with('units')
+            ->ofCatalog($catalog)
             ->where(function ($query) use ($q) {
                 $query->where('icode', 'like', "%{$q}%")
                     ->orWhere('name', 'like', "%{$q}%")
@@ -317,7 +508,8 @@ class PharmacyInventoryService
             ->limit($limit)
             ->get()
             ->map(function (PharmacyItem $i) {
-                $isNondrug = $i->item_type === 'nondrug' || str_starts_with(trim($i->name), '(ว)');
+                $isNondrug = $i->isNondrug();
+
                 return [
                     'icode' => $i->icode,
                     'name' => $i->name,
@@ -366,8 +558,10 @@ class PharmacyInventoryService
     public function receive(array $data): PharmacyLot
     {
         return DB::transaction(function () use ($data) {
+            $catalog = isset($data['catalog']) ? $this->normalizeCatalog((string) $data['catalog']) : null;
             $location = PharmacyLocation::query()->lockForUpdate()->findOrFail($data['location_id']);
-            $item = $this->resolveItemFromHosxp((string) $data['icode']);
+            $this->assertLocationCatalog($location, $catalog);
+            $item = $this->resolveItemFromHosxp((string) $data['icode'], $catalog);
             $packageQty = round((float) $data['qty'], 2);
             if ($packageQty <= 0) {
                 throw new RuntimeException('จำนวนรับเข้าต้องมากกว่า 0');
@@ -382,9 +576,9 @@ class PharmacyInventoryService
             $unitPrice = isset($data['invoice_unit_price']) && $data['invoice_unit_price'] !== ''
                 ? round((float) $data['invoice_unit_price'], 4)
                 : null;
-            $totalPrice = isset($data['invoice_total_price']) && $data['invoice_total_price'] !== ''
-                ? round((float) $data['invoice_total_price'], 2)
-                : ($unitPrice !== null ? round($packageQty * $unitPrice, 2) : null);
+            $totalPrice = $unitPrice !== null
+                ? round($packageQty * $unitPrice, 2)
+                : null;
 
             $lot = PharmacyLot::query()->create([
                 'item_id' => $item->id,
@@ -452,6 +646,8 @@ class PharmacyInventoryService
         ?int $unitId = null,
         ?string $note = null,
         ?array $packagingChain = null,
+        ?string $catalog = null,
+        ?string $transferredAt = null,
     ): array {
         if ($fromLocationId === $toLocationId) {
             throw new RuntimeException('ต้นทางและปลายทางต้องต่างกัน');
@@ -460,10 +656,17 @@ class PharmacyInventoryService
             throw new RuntimeException('จำนวนเบิกต้องมากกว่า 0');
         }
 
-        return DB::transaction(function () use ($fromLocationId, $toLocationId, $icode, $transactionQty, $unitId, $note, $packagingChain) {
+        $now = now('Asia/Bangkok');
+        $movedAt = ($transferredAt !== null && trim($transferredAt) !== '')
+            ? Carbon::parse($transferredAt, 'Asia/Bangkok')->setTimeFrom($now)
+            : $now;
+
+        return DB::transaction(function () use ($fromLocationId, $toLocationId, $icode, $transactionQty, $unitId, $note, $packagingChain, $catalog, $movedAt) {
+            $catalog = $catalog !== null ? $this->normalizeCatalog($catalog) : null;
             $from = PharmacyLocation::query()->lockForUpdate()->findOrFail($fromLocationId);
             $to = PharmacyLocation::query()->lockForUpdate()->findOrFail($toLocationId);
-            $item = $this->resolveItemFromHosxp($icode);
+            $this->assertLocationCatalog($to, $catalog);
+            $item = $this->resolveItemFromHosxp($icode, $catalog);
             if (! empty($packagingChain)) {
                 $unit = app(PharmacyUnitService::class)->ensureHierarchy($item, $packagingChain, 'transfer');
             } else {
@@ -474,7 +677,12 @@ class PharmacyInventoryService
 
             $fromBalance = $this->lockBalance($from->id, $item->id);
             if ((float) $fromBalance->qty_on_hand < $qty) {
-                throw new RuntimeException('สต็อกต้นทางไม่พอ (คงเหลือ '.$fromBalance->qty_on_hand.')');
+                throw new RuntimeException($this->overdrawMessage(
+                    $qty,
+                    (float) $fromBalance->qty_on_hand,
+                    $item->baseUnitName(),
+                    $this->stockElsewhere($item->id, $from->id),
+                ));
             }
 
             $remaining = $qty;
@@ -511,7 +719,7 @@ class PharmacyInventoryService
                     'item_id' => $item->id,
                     'location_id' => $to->id,
                     'lot_no' => $lot->lot_no,
-                    'received_at' => now('Asia/Bangkok')->toDateString(),
+                    'received_at' => $movedAt->toDateString(),
                     'expires_at' => $lot->expires_at?->toDateString(),
                     'qty_received' => $take,
                     'qty_remaining' => $take,
@@ -528,7 +736,7 @@ class PharmacyInventoryService
                     'notes' => 'โอนจาก '.$from->code.' lot #'.$lot->id,
                 ]);
 
-                PharmacyStockMovement::query()->create([
+                $this->recordMovementAt([
                     'type' => 'transfer_out',
                     'item_id' => $item->id,
                     'lot_id' => $lot->id,
@@ -543,9 +751,9 @@ class PharmacyInventoryService
                     'reference_id' => (string) $destLot->id,
                     'user_id' => Auth::id(),
                     'note' => $note,
-                ]);
+                ], $movedAt);
 
-                PharmacyStockMovement::query()->create([
+                $this->recordMovementAt([
                     'type' => 'transfer_in',
                     'item_id' => $item->id,
                     'lot_id' => $destLot->id,
@@ -560,7 +768,7 @@ class PharmacyInventoryService
                     'reference_id' => (string) $lot->id,
                     'user_id' => Auth::id(),
                     'note' => $note,
-                ]);
+                ], $movedAt);
 
                 $movedLots[] = [
                     'from_lot_id' => $lot->id,
@@ -573,7 +781,12 @@ class PharmacyInventoryService
             }
 
             if ($remaining > 0.0001) {
-                throw new RuntimeException('สต็อก lot ไม่พอสำหรับเบิก (ขาด '.$remaining.')');
+                throw new RuntimeException($this->overdrawMessage(
+                    $qty,
+                    round($qty - $remaining, 2),
+                    $item->baseUnitName(),
+                    $this->stockElsewhere($item->id, $from->id),
+                ));
             }
 
             $fromBalance->qty_on_hand = (float) $fromBalance->qty_on_hand - $qty;
@@ -593,6 +806,54 @@ class PharmacyInventoryService
                 'lots' => $movedLots,
             ];
         });
+    }
+
+    /**
+     * @return list<array{name:string,qty:float}>
+     */
+    private function stockElsewhere(int $itemId, int $exceptLocationId): array
+    {
+        return PharmacyStockBalance::query()
+            ->with('location:id,name')
+            ->where('item_id', $itemId)
+            ->where('location_id', '!=', $exceptLocationId)
+            ->where('qty_on_hand', '>', 0)
+            ->orderByDesc('qty_on_hand')
+            ->get()
+            ->map(fn (PharmacyStockBalance $balance): array => [
+                'name' => $balance->location?->name ?: 'คลัง',
+                'qty' => (float) $balance->qty_on_hand,
+            ])
+            ->all();
+    }
+
+    /**
+     * @param  list<array{name:string,qty:float}>  $elsewhere
+     */
+    private function overdrawMessage(float $requested, float $available, string $unit, array $elsewhere = []): string
+    {
+        $format = static fn (float $qty): string => rtrim(rtrim(number_format($qty, 2, '.', ','), '0'), '.');
+
+        $message = 'เบิกเกินกว่าของที่มีในคลัง (ต้องการ '.$format($requested).' '.$unit.' คงเหลือ '.$format(max(0, $available)).' '.$unit.')';
+        if ($elsewhere !== []) {
+            $places = [];
+            foreach ($elsewhere as $row) {
+                $places[] = ($row['name'] ?? 'คลัง').' '.$format((float) ($row['qty'] ?? 0)).' '.$unit;
+            }
+            $message .= ' มีสต็อกที่ '.implode(', ', $places);
+        }
+
+        return $message;
+    }
+
+    private function recordMovementAt(array $attributes, Carbon $movedAt): PharmacyStockMovement
+    {
+        $movement = new PharmacyStockMovement($attributes);
+        $movement->created_at = $movedAt;
+        $movement->updated_at = $movedAt;
+        $movement->save();
+
+        return $movement;
     }
 
     /**
@@ -892,12 +1153,15 @@ class PharmacyInventoryService
         });
     }
 
-    public function dashboardSummary(): array
+    public function dashboardSummary(?string $catalog = 'drug'): array
     {
+        $catalog = $this->normalizeCatalog($catalog);
         $this->ensureDefaultLocations();
 
-        $locations = PharmacyLocation::query()->where('is_active', true)->orderBy('sort_order')->get();
-        $balances = PharmacyStockBalance::query()->with(['item', 'location'])->get();
+        $locations = PharmacyLocation::query()->where('is_active', true)->where('catalog', $catalog)->orderBy('sort_order')->get();
+        $balances = PharmacyStockBalance::query()->with(['item', 'location'])
+            ->whereHas('item', fn ($item) => $item->ofCatalog($catalog))
+            ->get();
 
         $low = $balances->filter(fn (PharmacyStockBalance $b) => $b->isLow())->values();
         $empty = $balances->filter(fn (PharmacyStockBalance $b) => $b->isEmpty())->values();
@@ -905,6 +1169,7 @@ class PharmacyInventoryService
             ->with(['item', 'location'])
             ->where('status', 'active')
             ->where('qty_remaining', '>', 0)
+            ->whereHas('item', fn ($item) => $item->ofCatalog($catalog))
             ->whereNotNull('expires_at')
             ->whereDate('expires_at', '<=', now('Asia/Bangkok')->addDays(90)->toDateString())
             ->whereExists(function ($query) {
@@ -921,6 +1186,7 @@ class PharmacyInventoryService
         $activeLotsCount = PharmacyLot::query()
             ->where('status', 'active')
             ->where('qty_remaining', '>', 0)
+            ->whereHas('item', fn ($item) => $item->ofCatalog($catalog))
             ->whereExists(function ($query) {
                 $query->select(DB::raw(1))
                     ->from('pharmacy_stock_balances')
@@ -933,7 +1199,7 @@ class PharmacyInventoryService
         return [
             'locations' => $locations,
             'totals' => [
-                'items' => PharmacyItem::query()->count(),
+                'items' => PharmacyItem::query()->ofCatalog($catalog)->count(),
                 'lots_active' => $activeLotsCount,
                 'low' => $low->count(),
                 'empty' => $empty->count(),
@@ -968,9 +1234,9 @@ class PharmacyInventoryService
         ];
     }
 
-    public function alertSnapshot(): array
+    public function alertSnapshot(?string $catalog = 'drug'): array
     {
-        $summary = $this->dashboardSummary();
+        $summary = $this->dashboardSummary($catalog);
 
         return [
             'low' => $summary['totals']['low'],
@@ -1179,6 +1445,28 @@ class PharmacyInventoryService
                 'type' => $b->location?->type,
             ],
         ];
+    }
+
+    private function assertItemCatalog(string $itemCatalog, ?string $catalog): void
+    {
+        if ($catalog === null || $itemCatalog === $catalog) {
+            return;
+        }
+
+        throw new RuntimeException(
+            $itemCatalog === 'nondrug'
+                ? 'รายการนี้เป็นเวชภัณฑ์มิใช่ยา ให้รับเข้าที่คลังเวชภัณฑ์'
+                : 'รายการนี้เป็นยา ให้รับเข้าที่คลังยา'
+        );
+    }
+
+    private function assertLocationCatalog(PharmacyLocation $location, ?string $catalog): void
+    {
+        if ($catalog === null || ($location->catalog ?: 'drug') === $catalog) {
+            return;
+        }
+
+        throw new RuntimeException('สถานที่จัดเก็บไม่ตรงกับคลังที่เลือก');
     }
 
     private function ensureBaseUnit(PharmacyItem $item): PharmacyItemUnit

@@ -4,10 +4,10 @@ namespace App\Data;
 
 /**
  * รายการยาเบาหวานที่ต้องปรับตามค่า eGFR
- * อ้างอิงไฟล์ demo/รายการยาเบาหวานที่ปรับตามค่า eGFR.docx
+ * อ้างอิงไฟล์ ยาที่กำหนดตามค่า egfr.xlsx
  *
  * ตรวจหลัก: หาช่วง eGFR → ได้ Max mg/day → เทียบขนาดที่สั่งจริง
- * severity ในกฎ: contraindicated = ห้ามใช้, ok = ใช้ได้ภายใต้ Max (ถ้ามี)
+ * severity ในกฎ: contraindicated = ห้ามใช้, alert = ช่วงเตือน+Max, ok = ใช้ได้ภายใต้ Max (ถ้ามี)
  */
 final class EgfrDrugAlertCatalog
 {
@@ -37,6 +37,7 @@ final class EgfrDrugAlertCatalog
 
             self::drug('1690084', 'Empagliflozin 25 mg', 'SGLT2 — Empagliflozin', 25, self::empagliflozin25Rules()),
             self::drug('1590011', 'Empagliflozin 10 mg (Jardiance)', 'SGLT2 — Empagliflozin', 10, self::empagliflozin10Rules()),
+            self::drug('1640014', 'Glyxambi 10/5 (Empagliflozin 10 + Linagliptin 5)', 'SGLT2 — Empagliflozin', 10, self::empagliflozin10Rules()),
             self::drug('1640033', 'Glyxambi 25/5 (Empagliflozin+Linagliptin)', 'SGLT2 — Empagliflozin', 25, self::empagliflozin25Rules()),
 
             self::drug('1580014', 'Dapagliflozin (Forxiga) 10 mg', 'SGLT2 — Dapagliflozin', 10, self::dapagliflozinRules()),
@@ -119,18 +120,21 @@ final class EgfrDrugAlertCatalog
     /** @return list<array<string, mixed>> */
     private static function empagliflozin10Rules(): array
     {
+        // ตามไฟล์: <20 ห้ามใช้ | <30 ALERT | 30–44 ALERT Max 10 | ≥45 ใช้ได้ Max 10
         return [
-            ['max_exclusive' => 30, 'severity' => 'contraindicated', 'note' => 'ห้ามใช้เมื่อ eGFR < 30'],
-            ['min_inclusive' => 30, 'severity' => 'ok', 'max_dose_mg' => 10, 'note' => 'eGFR ≥ 30 → Max 10 mg/วัน'],
+            ['max_exclusive' => 20, 'severity' => 'contraindicated', 'note' => 'ห้ามใช้เมื่อ eGFR < 20'],
+            ['min_inclusive' => 20, 'max_exclusive' => 30, 'severity' => 'alert', 'max_dose_mg' => 10, 'note' => 'eGFR < 30 → ALERT · Max 10 mg/วัน'],
+            ['min_inclusive' => 30, 'max_exclusive' => 45, 'severity' => 'alert', 'max_dose_mg' => 10, 'note' => 'eGFR 30–44 → ALERT · Max 10 mg/วัน'],
+            ['min_inclusive' => 45, 'severity' => 'ok', 'max_dose_mg' => 10, 'note' => 'eGFR ≥ 45 → Max 10 mg/วัน'],
         ];
     }
 
     /** @return list<array<string, mixed>> */
     private static function empagliflozin25Rules(): array
     {
+        // ตามไฟล์: Empagliflozin 25 / Glyxambi 25/5 → ห้ามใช้เมื่อ eGFR < 45 (คอลัมน์ <20, <30, 30–44)
         return [
-            ['max_exclusive' => 30, 'severity' => 'contraindicated', 'note' => 'ห้ามใช้เมื่อ eGFR < 30'],
-            ['min_inclusive' => 30, 'max_exclusive' => 45, 'severity' => 'ok', 'max_dose_mg' => 10, 'note' => 'eGFR 30–44 → Max 10 mg/วัน'],
+            ['max_exclusive' => 45, 'severity' => 'contraindicated', 'note' => 'ห้ามใช้เมื่อ eGFR < 45 (Empagliflozin 25 mg)'],
             ['min_inclusive' => 45, 'severity' => 'ok', 'max_dose_mg' => 25, 'note' => 'eGFR ≥ 45 → Max 25 mg/วัน'],
         ];
     }
@@ -179,8 +183,9 @@ final class EgfrDrugAlertCatalog
     /** @return list<array<string, mixed>> */
     private static function glimepirideRules(): array
     {
+        // ตามไฟล์: eGFR < 30 → ห้ามใช้
         return [
-            ['max_exclusive' => 30, 'severity' => 'ok', 'max_dose_mg' => 2, 'note' => 'eGFR < 30 → ใช้ระวัง Max 2 mg/วัน'],
+            ['max_exclusive' => 30, 'severity' => 'contraindicated', 'note' => 'ห้ามใช้เมื่อ eGFR < 30'],
             ['min_inclusive' => 30, 'severity' => 'ok', 'max_dose_mg' => 8, 'note' => 'eGFR ≥ 30 → Max 8 mg/วัน'],
         ];
     }
@@ -188,8 +193,9 @@ final class EgfrDrugAlertCatalog
     /** @return list<array<string, mixed>> */
     private static function semaglutideRules(): array
     {
+        // ตามไฟล์: eGFR < 15 → ห้ามใช้
         return [
-            ['max_exclusive' => 15, 'severity' => 'ok', 'max_dose_mg' => 14, 'note' => 'eGFR < 15 → ข้อมูลจำกัด ตรวจขนาดยา'],
+            ['max_exclusive' => 15, 'severity' => 'contraindicated', 'note' => 'ห้ามใช้เมื่อ eGFR < 15'],
             ['min_inclusive' => 15, 'severity' => 'ok', 'max_dose_mg' => 14, 'note' => 'eGFR ≥ 15 → Max 14 mg/วัน'],
         ];
     }

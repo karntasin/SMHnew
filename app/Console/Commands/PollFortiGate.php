@@ -7,7 +7,7 @@ use Illuminate\Console\Command;
 
 class PollFortiGate extends Command
 {
-    protected $signature = 'fortigate:poll {--no-notify : Skip FSHH Chat alerts}';
+    protected $signature = 'fortigate:poll {--no-notify : Skip S-Chat alerts}';
 
     protected $description = 'Poll FortiGate F100 resources, interfaces, and security logs';
 

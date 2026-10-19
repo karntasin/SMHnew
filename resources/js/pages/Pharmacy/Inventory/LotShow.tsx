@@ -1,10 +1,11 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import PharmacySubNav, { pharmacyBreadcrumbs } from '@/pages/Pharmacy/PharmacySubNav';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ThaiDatePicker } from '@/components/ui/thai-date-picker';
 import {
     Dialog,
     DialogContent,
@@ -25,6 +26,7 @@ import {
     Tag,
     Trash2,
 } from 'lucide-react';
+import { warehouseActive, warehouseHome, wh } from '@/pages/Pharmacy/inventoryCatalog';
 
 type Lot = {
     id: number;
@@ -145,6 +147,21 @@ export default function LotShow({
         });
     }, [lot]);
 
+    const computedInvoiceTotal = useMemo(() => {
+        const packageQty = Number(editForm.received_package_qty);
+        const unitPrice = Number(editForm.invoice_unit_price);
+        if (
+            !editForm.invoice_unit_price.trim()
+            || editForm.received_package_qty === ''
+            || Number.isNaN(packageQty)
+            || Number.isNaN(unitPrice)
+            || unitPrice < 0
+        ) {
+            return '';
+        }
+        return (Math.round(packageQty * unitPrice * 100) / 100).toFixed(2);
+    }, [editForm.received_package_qty, editForm.invoice_unit_price]);
+
     const printLabel = () => window.print();
 
     const handleUpdateSubmit = (e: FormEvent) => {
@@ -152,7 +169,7 @@ export default function LotShow({
         setIsSaving(true);
 
         router.put(
-            route('pharmacy.inventory.lots.update', lot.id),
+            wh('lots.update', lot.id),
             {
                 lot_no: editForm.lot_no,
                 location_id: Number(editForm.location_id),
@@ -167,7 +184,7 @@ export default function LotShow({
                 invoice_no: editForm.invoice_no || null,
                 invoice_date: editForm.invoice_date || null,
                 invoice_unit_price: editForm.invoice_unit_price ? Number(editForm.invoice_unit_price) : null,
-                invoice_total_price: editForm.invoice_total_price ? Number(editForm.invoice_total_price) : null,
+                invoice_total_price: computedInvoiceTotal ? Number(computedInvoiceTotal) : null,
                 notes: editForm.notes || null,
                 regenerate_qr: editForm.regenerate_qr,
                 sync_stock: editForm.sync_stock,
@@ -186,7 +203,7 @@ export default function LotShow({
 
     const handleDeleteSubmit = () => {
         setIsDeleting(true);
-        router.delete(route('pharmacy.inventory.lots.destroy', lot.id), {
+        router.delete(wh('lots.destroy', lot.id), {
             data: {
                 adjust_balance: deleteAdjustBalance,
             },
@@ -202,7 +219,7 @@ export default function LotShow({
 
     const handleRegenerateQr = () => {
         router.post(
-            route('pharmacy.inventory.lots.regenerate-qr', lot.id),
+            wh('lots.regenerate-qr', lot.id),
             {},
             {
                 onSuccess: () => {
@@ -217,8 +234,8 @@ export default function LotShow({
     return (
         <AppLayout
             breadcrumbs={pharmacyBreadcrumbs([
-                { title: 'คลังยา / ห้องยา', href: route('pharmacy.inventory.index') },
-                { title: 'Lot / QR ยา', href: route('pharmacy.inventory.lots') },
+                { title: warehouseHome(), href: wh('index') },
+                { title: 'Lot / QR ยา', href: wh('lots') },
                 { title: `Lot ${lot.lot_no}` },
             ])}
         >
@@ -254,7 +271,7 @@ export default function LotShow({
 
             {/* SCREEN VIEW */}
             <div className="container mx-auto space-y-6 px-4 py-6 print:hidden">
-                <PharmacySubNav active="pharmacy.inventory.index" />
+                <PharmacySubNav active={warehouseActive()} />
 
                 {/* FLASH ALERT */}
                 {(flash?.success || flash?.error) && (
@@ -272,7 +289,7 @@ export default function LotShow({
                 {/* TOP BACK LINK & ACTIONS */}
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <Button asChild variant="ghost" size="sm" className="rounded-xl text-muted-foreground hover:text-foreground">
-                        <Link href={route('pharmacy.inventory.lots')}>
+                        <Link href={wh('lots')}>
                             <ArrowLeft className="mr-1.5 h-4 w-4" />
                             กลับไปยังรายการ LOT / QR ทั้งหมด
                         </Link>
@@ -361,7 +378,7 @@ export default function LotShow({
                         </div>
 
                         <div className="pt-1 text-center">
-                            <Link href={route('pharmacy.inventory.labels')} className="text-xs text-violet-600 hover:underline">
+                            <Link href={wh('labels')} className="text-xs text-violet-600 hover:underline">
                                 ไปที่หน้าพิมพ์ฉลากยาหลายดวง (Batch Labels) →
                             </Link>
                         </div>
@@ -546,23 +563,19 @@ export default function LotShow({
 
                             <div className="space-y-1.5">
                                 <Label htmlFor="edit-show-expires-at">วันหมดอายุ (Expiry Date)</Label>
-                                <Input
-                                    id="edit-show-expires-at"
-                                    type="date"
+                                <ThaiDatePicker
+                                    label="วันหมดอายุ"
                                     value={editForm.expires_at}
-                                    onChange={(e) => setEditForm({ ...editForm, expires_at: e.target.value })}
-                                    className="rounded-xl"
+                                    onChange={(expires_at) => setEditForm({ ...editForm, expires_at })}
                                 />
                             </div>
 
                             <div className="space-y-1.5">
                                 <Label htmlFor="edit-show-received-at">วันที่รับเข้า (Received Date)</Label>
-                                <Input
-                                    id="edit-show-received-at"
-                                    type="date"
+                                <ThaiDatePicker
+                                    label="วันที่รับเข้า"
                                     value={editForm.received_at}
-                                    onChange={(e) => setEditForm({ ...editForm, received_at: e.target.value })}
-                                    className="rounded-xl"
+                                    onChange={(received_at) => setEditForm({ ...editForm, received_at })}
                                 />
                             </div>
 
@@ -641,12 +654,10 @@ export default function LotShow({
 
                             <div className="space-y-1.5">
                                 <Label htmlFor="edit-show-invoice-date">วันที่ใบส่งของ</Label>
-                                <Input
-                                    id="edit-show-invoice-date"
-                                    type="date"
+                                <ThaiDatePicker
+                                    label="วันที่ใบส่งของ"
                                     value={editForm.invoice_date}
-                                    onChange={(e) => setEditForm({ ...editForm, invoice_date: e.target.value })}
-                                    className="rounded-xl"
+                                    onChange={(invoice_date) => setEditForm({ ...editForm, invoice_date })}
                                 />
                             </div>
 
@@ -668,14 +679,18 @@ export default function LotShow({
                                 <Label htmlFor="edit-show-total-price">ราคารวม (บาท)</Label>
                                 <Input
                                     id="edit-show-total-price"
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    value={editForm.invoice_total_price}
-                                    onChange={(e) => setEditForm({ ...editForm, invoice_total_price: e.target.value })}
-                                    placeholder="0.00"
-                                    className="rounded-xl"
+                                    type="text"
+                                    readOnly
+                                    tabIndex={-1}
+                                    value={computedInvoiceTotal !== '' ? computedInvoiceTotal : '—'}
+                                    className="rounded-xl bg-muted/40"
+                                    aria-label="ราคารวม คำนวณอัตโนมัติ"
                                 />
+                                <p className="text-[11px] text-muted-foreground">
+                                    {computedInvoiceTotal !== ''
+                                        ? `คำนวณจาก ${editForm.received_package_qty || 0} × ${editForm.invoice_unit_price}`
+                                        : 'คำนวณอัตโนมัติจากจำนวนรับเข้า × ราคาต่อหน่วย'}
+                                </p>
                             </div>
                         </div>
 

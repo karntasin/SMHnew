@@ -28,6 +28,7 @@ interface Quiz {
     title: string;
     description: string;
     passing_score: number;
+    purpose?: 'lesson' | 'pre' | 'post';
     randomize_questions?: boolean;
     questions: Question[];
 }
@@ -249,6 +250,22 @@ export default function QuizBuilder({ quiz, onChange, courseId }: Props) {
                     />
                 </div>
                 <div className="space-y-1.5">
+                    <Label>ใช้เป็น</Label>
+                    <Select
+                        value={quiz.purpose || 'lesson'}
+                        onValueChange={(value) => onChange({ ...quiz, purpose: value as Quiz['purpose'], passing_score: passingScore })}
+                    >
+                        <SelectTrigger>
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="pre">ก่อนเรียน</SelectItem>
+                            <SelectItem value="post">หลังเรียน</SelectItem>
+                            <SelectItem value="lesson">แบบทดสอบบทเรียน</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="space-y-1.5">
                     <Label>คะแนนผ่าน (%)</Label>
                     <Input
                         type="number"
@@ -256,7 +273,7 @@ export default function QuizBuilder({ quiz, onChange, courseId }: Props) {
                         max={100}
                         value={passingScore}
                         onChange={(e) =>
-                            onChange({ ...quiz, passing_score: parseInt(e.target.value, 10) || 70 })
+                            onChange({ ...quiz, passing_score: parseInt(e.target.value, 10) || 80 })
                         }
                     />
                 </div>

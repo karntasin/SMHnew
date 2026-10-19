@@ -42,6 +42,7 @@ import {
     Eye,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { IcCharts, IcPdfButton, dateInput, type IcChart } from '@/pages/IC/ic-ui';
 
 interface EducationRecord {
     id: number;
@@ -54,7 +55,9 @@ interface EducationRecord {
     location: string | null;
     objectives?: string | null;
     content_summary?: string | null;
-    materials_url?: string | null;
+    notes?: string | null;
+    description?: string | null;
+    can_edit?: boolean;
     total_participants?: number;
     attendees_count?: number;
     attendees?: Attendee[];
@@ -68,6 +71,7 @@ interface Attendee {
     department: string | null;
     post_test_score: number | null;
     passed: boolean;
+    can_edit?: boolean;
 }
 
 interface Stats {
@@ -88,6 +92,7 @@ interface Props {
         training_type?: string;
         month?: string;
     };
+    charts?: IcChart[];
 }
 
 const defaultStats: Stats = {
@@ -107,7 +112,7 @@ const recordObjectives = (record: EducationRecord) =>
 const attendeeName = (attendee: Attendee) =>
     attendee.employee_name ?? attendee.attendee_name ?? '-';
 
-export default function Education({ records, stats: rawStats, filters }: Props) {
+export default function Education({ records, stats: rawStats, filters, charts }: Props) {
     const stats = {
         ...defaultStats,
         ...rawStats,
@@ -119,8 +124,10 @@ export default function Education({ records, stats: rawStats, filters }: Props) 
     const [isAttendeeOpen, setIsAttendeeOpen] = useState(false);
     const [selectedRecord, setSelectedRecord] = useState<EducationRecord | null>(null);
     const [viewingRecord, setViewingRecord] = useState<EducationRecord | null>(null);
+    const [editingId, setEditingId] = useState<number | null>(null);
+    const [editingAttendeeId, setEditingAttendeeId] = useState<number | null>(null);
 
-    const { data, setData, post, processing, reset } = useForm({
+    const { data, setData, post, put, processing, reset } = useForm({
         topic: '',
         training_type: '',
         target_audience: '',
@@ -141,31 +148,73 @@ export default function Education({ records, stats: rawStats, filters }: Props) 
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        post('/ic/education', {
+        const options = {
             onSuccess: () => {
-                toast.success('บันทึกการอบรมเรียบร้อยแล้ว');
+                toast.success(editingId ? 'อัปเดตการอบรมเรียบร้อยแล้ว' : 'บันทึกการอบรมเรียบร้อยแล้ว');
                 reset();
+                setEditingId(null);
                 setIsOpen(false);
             },
+        };
+        if (editingId) {
+            put(`/ic/education/${editingId}`, options);
+            return;
+        }
+        post('/ic/education', options);
+    };
+
+    const openEdit = (record: EducationRecord) => {
+        setEditingId(record.id);
+        setData({
+            topic: record.topic || '',
+            training_type: record.training_type || '',
+            target_audience: record.target_audience || '',
+            trainer_name: record.trainer_name || '',
+            training_date: dateInput(record.training_date),
+            duration_hours: record.duration_hours || 1,
+            location: record.location || '',
+            objectives: recordObjectives(record) || '',
+            description: record.notes || record.description || '',
         });
+        setIsOpen(true);
     };
 
     const handleAddAttendee = (record: EducationRecord) => {
         setSelectedRecord(record);
+        setEditingAttendeeId(null);
         attendeeForm.reset();
+        setIsAttendeeOpen(true);
+    };
+
+    const openEditAttendee = (record: EducationRecord, attendee: Attendee) => {
+        setSelectedRecord(record);
+        setEditingAttendeeId(attendee.id);
+        attendeeForm.setData({
+            employee_code: attendee.employee_code || '',
+            employee_name: attendeeName(attendee) === '-' ? '' : attendeeName(attendee),
+            department: attendee.department || '',
+            post_test_score: attendee.post_test_score != null ? String(attendee.post_test_score) : '',
+        });
+        setViewingRecord(null);
         setIsAttendeeOpen(true);
     };
 
     const submitAttendee = (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedRecord) return;
-        attendeeForm.post(`/ic/education/${selectedRecord.id}/attendee`, {
+        const options = {
             onSuccess: () => {
-                toast.success('เพิ่มผู้เข้าอบรมเรียบร้อยแล้ว');
+                toast.success(editingAttendeeId ? 'อัปเดตผู้เข้าอบรมเรียบร้อยแล้ว' : 'เพิ่มผู้เข้าอบรมเรียบร้อยแล้ว');
                 setIsAttendeeOpen(false);
+                setEditingAttendeeId(null);
                 attendeeForm.reset();
             },
-        });
+        };
+        if (editingAttendeeId) {
+            attendeeForm.put(`/ic/education/${selectedRecord.id}/attendee/${editingAttendeeId}`, options);
+            return;
+        }
+        attendeeForm.post(`/ic/education/${selectedRecord.id}/attendee`, options);
     };
 
     const trainingTypes = [
@@ -199,15 +248,21 @@ export default function Education({ records, stats: rawStats, filters }: Props) 
     ];
 
     const trainingDialog = (
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <Dialog open={isOpen} onOpenChange={(open) => {
+            setIsOpen(open);
+            if (!open) {
+                setEditingId(null);
+                reset();
+            }
+        }}>
             <DialogTrigger asChild>
-                <Button className="gap-2 rounded-xl bg-rose-600 hover:bg-rose-700">
+                <Button className="gap-2 rounded-xl bg-rose-600 hover:bg-rose-700" onClick={() => setEditingId(null)}>
                     <Plus className="h-4 w-4" /> เพิ่มการอบรม
                 </Button>
             </DialogTrigger>
                                 <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
                                     <DialogHeader>
-                                        <DialogTitle>เพิ่มการอบรม IC</DialogTitle>
+                                        <DialogTitle>{editingId ? 'แก้ไขการอบรม IC' : 'เพิ่มการอบรม IC'}</DialogTitle>
                                     </DialogHeader>
                                     <form onSubmit={handleSubmit} className="space-y-4 py-4">
                                         <div className="space-y-2">
@@ -309,7 +364,7 @@ export default function Education({ records, stats: rawStats, filters }: Props) 
                                         </div>
 
                                         <Button type="submit" className="w-full rounded-xl bg-rose-600 hover:bg-rose-700" disabled={processing}>
-                                            บันทึกการอบรม
+                                            {editingId ? 'บันทึกการแก้ไข' : 'บันทึกการอบรม'}
                                         </Button>
                                     </form>
                                 </DialogContent>
@@ -330,8 +385,14 @@ export default function Education({ records, stats: rawStats, filters }: Props) 
                 { title: 'อบรม', href: '/ic/education' },
             ]}
             subNav={<IcSubNav active="ic.education" />}
-            actions={trainingDialog}
+            actions={
+                <div className="flex flex-wrap gap-2">
+                    <IcPdfButton module="education" />
+                    {trainingDialog}
+                </div>
+            }
         >
+            <IcCharts charts={charts} />
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                 <StatCard label="การอบรมทั้งหมด" value={stats.total_trainings ?? 0} icon={BookOpen} tone="slate" />
                 <StatCard label="ผู้เข้าอบรมสะสม" value={stats.total_attendees ?? 0} icon={Users} tone="rose" />
@@ -421,6 +482,11 @@ export default function Education({ records, stats: rawStats, filters }: Props) 
                                             </div>
                                         )}
                                         <div className="flex gap-2 pt-2">
+                                            {record.can_edit && (
+                                                <Button variant="outline" size="sm" className="rounded-xl" onClick={() => openEdit(record)}>
+                                                    แก้ไข
+                                                </Button>
+                                            )}
                                             <Button
                                                 variant="outline"
                                                 size="sm"
@@ -447,7 +513,7 @@ export default function Education({ records, stats: rawStats, filters }: Props) 
                     <Dialog open={isAttendeeOpen} onOpenChange={setIsAttendeeOpen}>
                         <DialogContent>
                             <DialogHeader>
-                                <DialogTitle>เพิ่มผู้เข้าอบรม</DialogTitle>
+                                <DialogTitle>{editingAttendeeId ? 'แก้ไขผู้เข้าอบรม' : 'เพิ่มผู้เข้าอบรม'}</DialogTitle>
                             </DialogHeader>
                             {selectedRecord && (
                                 <form onSubmit={submitAttendee} className="space-y-4 py-4">
@@ -496,7 +562,7 @@ export default function Education({ records, stats: rawStats, filters }: Props) 
                                     </div>
 
                                     <Button type="submit" className="w-full" disabled={attendeeForm.processing}>
-                                        เพิ่มผู้เข้าอบรม
+                                        {editingAttendeeId ? 'บันทึกการแก้ไข' : 'เพิ่มผู้เข้าอบรม'}
                                     </Button>
                                 </form>
                             )}
@@ -585,6 +651,11 @@ export default function Education({ records, stats: rawStats, filters }: Props) 
                                                                         </Badge>
                                                                     ) : (
                                                                         <Badge variant="secondary">รอประเมิน</Badge>
+                                                                    )}
+                                                                    {viewingRecord.can_edit && (
+                                                                        <Button variant="ghost" size="sm" className="ml-2" onClick={() => openEditAttendee(viewingRecord, attendee)}>
+                                                                            แก้ไข
+                                                                        </Button>
                                                                     )}
                                                                 </TableCell>
                                                             </TableRow>

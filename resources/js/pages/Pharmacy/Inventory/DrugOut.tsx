@@ -22,7 +22,9 @@ import PharmacySubNav, { pharmacyBreadcrumbs } from '@/pages/Pharmacy/PharmacySu
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ThaiDatePicker } from '@/components/ui/thai-date-picker';
 import axios from 'axios';
+import { warehouseActive, warehouseHome, wh } from '@/pages/Pharmacy/inventoryCatalog';
 
 type Location = {
     id: number;
@@ -154,7 +156,7 @@ export default function DrugOut({
     const loadStockInfo = async (drugIcode: string, locId: number, preferredUnitId?: number) => {
         setIsLoadingStock(true);
         try {
-            const res = await axios.get(route('pharmacy.inventory.drug-out.stock-info'), {
+            const res = await axios.get(wh('drug-out.stock-info'), {
                 params: { icode: drugIcode, location_id: locId },
             });
             if (res.data?.found) {
@@ -197,7 +199,7 @@ export default function DrugOut({
         }
         const timer = setTimeout(async () => {
             try {
-                const res = await axios.get(route('pharmacy.inventory.drugs.search'), { params: { q: searchQ } });
+                const res = await axios.get(wh('drugs.search'), { params: { q: searchQ } });
                 setSearchHits(res.data || []);
             } catch (e) {
                 console.error(e);
@@ -220,7 +222,7 @@ export default function DrugOut({
         setScanError('');
         setScanSuccessNote('');
         try {
-            const res = await axios.get(route('pharmacy.inventory.scan.resolve'), { params: { code } });
+            const res = await axios.get(wh('scan.resolve'), { params: { code } });
             if (res.data?.data) {
                 const payload = res.data.data;
                 const icode = payload.item?.icode || payload.icode;
@@ -265,7 +267,7 @@ export default function DrugOut({
         setIsSubmittingIssue(true);
 
         router.post(
-            route('pharmacy.inventory.drug-out.issue'),
+            wh('drug-out.issue'),
             {
                 location_id: locationId,
                 icode: selectedDrug.icode,
@@ -299,7 +301,7 @@ export default function DrugOut({
         setIsSubmittingReturn(true);
 
         router.post(
-            route('pharmacy.inventory.drug-out.return'),
+            wh('drug-out.return'),
             {
                 location_id: locationId,
                 icode: selectedDrug.icode,
@@ -331,13 +333,13 @@ export default function DrugOut({
 
     return (
         <AppLayout breadcrumbs={pharmacyBreadcrumbs([
-            { title: 'คลังยา / ห้องยา', href: route('pharmacy.inventory.index') },
+            { title: warehouseHome(), href: wh('index') },
             { title: 'ยาออกหน่วย' },
         ])}>
             <Head title="ระบบยาออกหน่วย (ตัดยาออกหน่วย / คืนยาเข้าห้องยา)" />
 
             <div className="container mx-auto space-y-6 px-4 py-6">
-                <PharmacySubNav active="pharmacy.inventory.index" />
+                <PharmacySubNav active={warehouseActive()} />
 
                 {/* Header Card */}
                 <div className="rounded-[2rem] border border-rose-100 bg-gradient-to-br from-slate-900 via-rose-950 to-slate-900 p-6 text-white shadow-xl md:p-8">
@@ -859,11 +861,10 @@ export default function DrugOut({
                                                     {/* Expiry Date */}
                                                     <div className="space-y-1.5">
                                                         <Label className="text-xs font-bold">วันหมดอายุของยาที่รับคืน</Label>
-                                                        <Input
-                                                            type="date"
+                                                        <ThaiDatePicker
+                                                            label="วันหมดอายุของยาที่รับคืน"
                                                             value={returnExpiresAt}
-                                                            onChange={(e) => setReturnExpiresAt(e.target.value)}
-                                                            className="rounded-xl bg-background"
+                                                            onChange={setReturnExpiresAt}
                                                         />
                                                     </div>
                                                 </div>
@@ -961,7 +962,7 @@ export default function DrugOut({
                                 </ul>
                                 <div className="pt-2 border-t border-border">
                                     <Button asChild variant="outline" size="sm" className="w-full rounded-xl text-xs">
-                                        <Link href={route('pharmacy.inventory.stock-card')}>
+                                        <Link href={wh('stock-card')}>
                                             เปิดดูบัตรคุมยา (Stock Card) →
                                         </Link>
                                     </Button>
@@ -1037,7 +1038,7 @@ export default function DrugOut({
 
                             <div className="flex items-center gap-2">
                                 <Button asChild variant="outline" className="rounded-xl text-xs">
-                                    <Link href={route('pharmacy.inventory.movements')}>
+                                    <Link href={wh('movements')}>
                                         เปิดดูประวัติเคลื่อนไหวรวมทั้งโรงพยาบาล →
                                     </Link>
                                 </Button>

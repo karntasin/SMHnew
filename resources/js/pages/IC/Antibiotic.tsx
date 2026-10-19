@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from '@/lib/axios';
+import { IcCharts, IcEditButton, IcPdfButton, dateInput, type IcChart } from '@/pages/IC/ic-ui';
 
 interface AntibioticRecord {
     id: number;
@@ -48,9 +49,13 @@ interface AntibioticRecord {
     antibiotic_class: string | null;
     route: string;
     dose: string | null;
+    frequency?: string | null;
     indication: string;
     culture_site: string | null;
     organism: string | null;
+    sensitivity_pattern?: string | null;
+    notes?: string | null;
+    can_edit?: boolean;
     appropriateness: 'appropriate' | 'inappropriate' | 'need_review' | 'pending';
     reviewed_by: string | null;
     recommendation: string | null;
@@ -76,10 +81,12 @@ interface Props {
         antibiotic_class?: string;
         ward?: string;
     };
+    charts?: IcChart[];
 }
 
-export default function Antibiotic({ records, stats, filters }: Props) {
+export default function Antibiotic({ records, stats, filters, charts }: Props) {
     const [isOpen, setIsOpen] = useState(false);
+    const [editingId, setEditingId] = useState<number | null>(null);
     const [isReviewOpen, setIsReviewOpen] = useState(false);
     const [selectedRecord, setSelectedRecord] = useState<AntibioticRecord | null>(null);
     const [showFilters, setShowFilters] = useState(false);
@@ -105,7 +112,7 @@ export default function Antibiotic({ records, stats, filters }: Props) {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const { data, setData, post, processing, reset, errors } = useForm({
+    const { data, setData, post, put, processing, reset, errors } = useForm({
         hn: '',
         an: '',
         patient_name: '',
@@ -185,13 +192,43 @@ export default function Antibiotic({ records, stats, filters }: Props) {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        post('/ic/antibiotic', {
+        const options = {
             onSuccess: () => {
-                toast.success('บันทึกข้อมูลเรียบร้อยแล้ว');
+                toast.success(editingId ? 'อัปเดตข้อมูลเรียบร้อยแล้ว' : 'บันทึกข้อมูลเรียบร้อยแล้ว');
                 reset();
+                setEditingId(null);
                 setIsOpen(false);
             },
+        };
+        if (editingId) {
+            put(`/ic/antibiotic/${editingId}`, options);
+            return;
+        }
+        post('/ic/antibiotic', options);
+    };
+
+    const openEdit = (record: AntibioticRecord) => {
+        setEditingId(record.id);
+        setData({
+            hn: record.hn || '',
+            an: record.an || '',
+            patient_name: record.patient_name || '',
+            ward_name: record.ward_name || '',
+            start_date: dateInput(record.start_date),
+            end_date: dateInput(record.end_date),
+            antibiotic_name: record.antibiotic_name || '',
+            antibiotic_class: record.antibiotic_class || '',
+            route: record.route || '',
+            dose: record.dose || '',
+            frequency: record.frequency || '',
+            indication: record.indication || '',
+            culture_site: record.culture_site || '',
+            organism: record.organism || '',
+            sensitivity_pattern: record.sensitivity_pattern || '',
+            notes: record.notes || '',
         });
+        setDrugSearchQuery(record.antibiotic_name || '');
+        setIsOpen(true);
     };
 
     const handleReview = (record: AntibioticRecord) => {
@@ -246,7 +283,7 @@ export default function Antibiotic({ records, stats, filters }: Props) {
     };
 
     const addRecordDialog = (
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <Dialog open={isOpen} onOpenChange={(open) => { setIsOpen(open); if (!open) { setEditingId(null); reset(); } }}>
             <DialogTrigger asChild>
                 <Button className="gap-2 rounded-xl bg-rose-600 hover:bg-rose-700">
                     <Plus className="h-4 w-4" /> บันทึกการใช้ยา
@@ -418,7 +455,7 @@ export default function Antibiotic({ records, stats, filters }: Props) {
                                             </div>
 
                                             <Button type="submit" className="w-full rounded-xl bg-rose-600 hover:bg-rose-700" disabled={processing}>
-                                                บันทึกข้อมูล
+                                                {editingId ? 'บันทึกการแก้ไข' : 'บันทึกข้อมูล'}
                                             </Button>
                                         </form>
                                     </div>
@@ -440,8 +477,14 @@ export default function Antibiotic({ records, stats, filters }: Props) {
                 { title: 'ยาปฏิชีวนะ', href: '/ic/antibiotic' },
             ]}
             subNav={<IcSubNav active="ic.antibiotic" />}
-            actions={addRecordDialog}
+            actions={
+                <div className="flex flex-wrap gap-2">
+                    <IcPdfButton module="antibiotic" />
+                    {addRecordDialog}
+                </div>
+            }
         >
+            <IcCharts charts={charts} />
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                 <StatCard label="บันทึกทั้งหมด" value={stats.total_records} icon={Pill} tone="slate" />
                 <StatCard label="รอ Review" value={stats.pending_review} icon={Clock} tone="amber" />
@@ -576,6 +619,7 @@ export default function Antibiotic({ records, stats, filters }: Props) {
                                                     <td className="p-3">{indications.find(i => i.value === record.indication)?.label || record.indication}</td>
                                                     <td className="p-3">{getAppropriateBadge(record.appropriateness)}</td>
                                                     <td className="p-3">
+                                                        {record.can_edit && <IcEditButton onClick={() => openEdit(record)} />}
                                                         <Button variant="ghost" size="sm" className="rounded-xl" onClick={() => handleReview(record)}>
                                                             Review
                                                         </Button>

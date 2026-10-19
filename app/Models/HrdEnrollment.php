@@ -7,8 +7,14 @@ use Illuminate\Database\Eloquent\Model;
 class HrdEnrollment extends Model
 {
     protected $fillable = [
-        'user_id', 'course_id', 'status', 'pre_test_score', 'post_test_score',
+        'user_id', 'course_id', 'status', 'completed_at', 'expires_at',
+        'pre_test_score', 'post_test_score',
         'satisfaction_score', 'certificate_path', 'notes'
+    ];
+
+    protected $casts = [
+        'completed_at' => 'datetime',
+        'expires_at' => 'date',
     ];
 
     public function user()

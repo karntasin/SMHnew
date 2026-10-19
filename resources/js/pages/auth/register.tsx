@@ -1,5 +1,5 @@
 import { Head, usePage } from '@inertiajs/react';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, FileDown } from 'lucide-react';
 
 import TextLink from '@/components/text-link';
 import LineLoginButton from '@/components/line-login-button';
@@ -43,6 +43,16 @@ export default function Register({ lineLoginEnabled = false, lineQr = null }: Re
                         <p className="text-center text-xs leading-relaxed text-gray-500">
                             หลังยืนยัน LINE จะให้กรอกเลขบัตรประชาชน ตำแหน่ง และแผนก
                         </p>
+                        <div className="text-center pt-1">
+                            <a
+                                href={route('settings.manuals.registration.download')}
+                                download
+                                className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 hover:text-emerald-800 underline underline-offset-2"
+                            >
+                                <FileDown className="h-3.5 w-3.5" />
+                                ดาวน์โหลดคู่มือขั้นตอนการสมัครสมาชิก (PDF)
+                            </a>
+                        </div>
                     </>
                 ) : (
                     <p className="flex items-start gap-2 text-sm text-amber-800 dark:text-amber-200">

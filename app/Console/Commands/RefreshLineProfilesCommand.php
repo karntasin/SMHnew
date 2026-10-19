@@ -90,7 +90,7 @@ class RefreshLineProfilesCommand extends Command
                 $failed++;
             }
 
-            // Sync fresh profile to FSHH Chat
+            // Sync fresh profile to S-Chat
             try {
                 $chatSync->syncUser($user);
             } catch (\Throwable) {

@@ -53,7 +53,9 @@
                     <div class="card">
                         <div class="card-label">ผลล่าสุด</div>
                         <div class="card-value">
-                            @if ($latest)
+                            @if ($latestIsNa)
+                                N/A
+                            @elseif ($latest)
                                 {{ $formatNum($latest->result_value) }}
                             @else
                                 -
@@ -72,7 +74,9 @@
                     <div class="card">
                         <div class="card-label">ผลการประเมิน</div>
                         <div class="card-value">
-                            @if ($latestPass === null)
+                            @if ($latestIsNa)
+                                <span class="badge badge-na">N/A</span>
+                            @elseif ($latestPass === null)
                                 <span class="badge badge-na">ไม่มีข้อมูล</span>
                             @elseif ($latestPass)
                                 <span class="badge badge-pass">ผ่าน</span>
@@ -87,7 +91,7 @@
                     <div class="card">
                         <div class="card-label">จำนวนงวด</div>
                         <div class="card-value">{{ $entries->count() }}</div>
-                        <div class="card-sub">ผ่าน {{ $passCount }} · ไม่ผ่าน {{ $failCount }}</div>
+                        <div class="card-sub">ผ่าน {{ $passCount }} · ไม่ผ่าน {{ $failCount }}@if ($naCount > 0) · N/A {{ $naCount }}@endif</div>
                     </div>
                 </td>
             </tr>
@@ -154,15 +158,16 @@
                 </thead>
                 <tbody>
                     @foreach ($entries as $i => $entry)
-                        @php $pass = $isPass($entry->result_value); @endphp
                         <tr>
                             <td class="center">{{ $i + 1 }}</td>
                             <td class="wrap">{{ $formatPeriod($entry->period_date) }}</td>
-                            <td class="num wrap">{{ $formatNum($entry->numerator) }}</td>
-                            <td class="num wrap">{{ $formatNum($entry->denominator) }}</td>
-                            <td class="num wrap"><strong>{{ $formatNum($entry->result_value) }}</strong></td>
+                            <td class="num wrap">{{ $entry->is_na ? '-' : $formatNum($entry->numerator) }}</td>
+                            <td class="num wrap">{{ $entry->is_na ? '-' : $formatNum($entry->denominator) }}</td>
+                            <td class="num wrap"><strong>{{ $entry->is_na ? 'N/A' : $formatNum($entry->result_value) }}</strong></td>
                             <td class="center">
-                                @if ($pass)
+                                @if ($entry->is_na)
+                                    <span class="badge badge-na">N/A</span>
+                                @elseif ($isPass($entry->result_value))
                                     <span class="badge badge-pass">ผ่าน</span>
                                 @else
                                     <span class="badge badge-fail">ไม่ผ่าน</span>

@@ -10,7 +10,7 @@ class SyncFshhChatUsers extends Command
 {
     protected $signature = 'fshh-chat:sync';
 
-    protected $description = 'Sync LINE-linked users and department groups into FSHH Chat';
+    protected $description = 'Sync LINE-linked users and department groups into S-Chat';
 
     public function handle(FshhChatSyncService $sync): int
     {
@@ -20,7 +20,7 @@ class SyncFshhChatUsers extends Command
             ->with(['departments', 'haTeams'])
             ->get();
 
-        $this->info('Syncing '.$users->count().' LINE users to FSHH Chat...');
+        $this->info('Syncing '.$users->count().' LINE users to S-Chat...');
         $ok = 0;
         foreach ($users as $user) {
             $sync->syncUser($user);

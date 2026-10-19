@@ -35,6 +35,7 @@ import {
     Info,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { IcCharts, IcEditButton, IcPdfButton, dateInput, icPdfUrl, type IcChart } from '@/pages/IC/ic-ui';
 
 interface Observation {
     id: number;
@@ -55,6 +56,9 @@ interface Observation {
     compliance_rate: number;
     total_opportunities: number;
     total_compliances: number;
+    notes?: string | null;
+    hand_hygiene_method?: string | null;
+    can_edit?: boolean;
     reporter?: { name: string };
 }
 
@@ -86,13 +90,15 @@ interface Props {
         date_from?: string;
         date_to?: string;
     };
+    charts?: IcChart[];
 }
 
-export default function HandHygiene({ observations, stats, filters }: Props) {
+export default function HandHygiene({ observations, stats, filters, charts }: Props) {
     const [isOpen, setIsOpen] = useState(false);
+    const [editingId, setEditingId] = useState<number | null>(null);
     const [showFilters, setShowFilters] = useState(false);
 
-    const { data, setData, post, processing, reset, errors } = useForm({
+    const { data, setData, post, put, processing, reset, errors } = useForm({
         observation_date: new Date().toISOString().split('T')[0],
         ward_name: '',
         observer_name: '',
@@ -113,13 +119,42 @@ export default function HandHygiene({ observations, stats, filters }: Props) {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        post('/ic/hand-hygiene', {
+        const options = {
             onSuccess: () => {
-                toast.success('บันทึกข้อมูล Hand Hygiene เรียบร้อยแล้ว');
+                toast.success(editingId ? 'อัปเดตข้อมูล Hand Hygiene เรียบร้อยแล้ว' : 'บันทึกข้อมูล Hand Hygiene เรียบร้อยแล้ว');
                 reset();
+                setEditingId(null);
                 setIsOpen(false);
             },
+        };
+        if (editingId) {
+            put(`/ic/hand-hygiene/${editingId}`, options);
+            return;
+        }
+        post('/ic/hand-hygiene', options);
+    };
+
+    const openEdit = (row: Observation) => {
+        setEditingId(row.id);
+        setData({
+            observation_date: dateInput(row.observation_date),
+            ward_name: row.ward_name || '',
+            observer_name: row.observer_name || '',
+            profession: row.profession || '',
+            moment_1_opportunities: row.moment_1_opportunities,
+            moment_1_compliances: row.moment_1_compliances,
+            moment_2_opportunities: row.moment_2_opportunities,
+            moment_2_compliances: row.moment_2_compliances,
+            moment_3_opportunities: row.moment_3_opportunities,
+            moment_3_compliances: row.moment_3_compliances,
+            moment_4_opportunities: row.moment_4_opportunities,
+            moment_4_compliances: row.moment_4_compliances,
+            moment_5_opportunities: row.moment_5_opportunities,
+            moment_5_compliances: row.moment_5_compliances,
+            hand_hygiene_method: row.hand_hygiene_method || '',
+            notes: row.notes || '',
         });
+        setIsOpen(true);
     };
 
     const applyFilters = (newFilters: Record<string, string>) => {
@@ -143,7 +178,13 @@ export default function HandHygiene({ observations, stats, filters }: Props) {
     ];
 
     const observeDialog = (
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <Dialog open={isOpen} onOpenChange={(open) => {
+            setIsOpen(open);
+            if (!open) {
+                setEditingId(null);
+                reset();
+            }
+        }}>
             <DialogTrigger asChild>
                 <Button className="gap-2 rounded-xl bg-rose-600 hover:bg-rose-700">
                     <Plus className="h-4 w-4" /> บันทึกการสังเกต
@@ -151,7 +192,7 @@ export default function HandHygiene({ observations, stats, filters }: Props) {
             </DialogTrigger>
                                 <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                                     <DialogHeader>
-                                        <DialogTitle>บันทึกการสังเกต Hand Hygiene</DialogTitle>
+                                        <DialogTitle>{editingId ? 'แก้ไขการสังเกต Hand Hygiene' : 'บันทึกการสังเกต Hand Hygiene'}</DialogTitle>
                                     </DialogHeader>
                                     <form onSubmit={handleSubmit} className="space-y-6 py-4">
                                         <div className="grid grid-cols-2 gap-4">
@@ -261,7 +302,7 @@ export default function HandHygiene({ observations, stats, filters }: Props) {
                                         </div>
 
                                         <Button type="submit" className="w-full rounded-xl bg-rose-600 hover:bg-rose-700" disabled={processing}>
-                                            บันทึกข้อมูล
+                                            {editingId ? 'บันทึกการแก้ไข' : 'บันทึกข้อมูล'}
                                         </Button>
                                     </form>
                                 </DialogContent>
@@ -282,8 +323,14 @@ export default function HandHygiene({ observations, stats, filters }: Props) {
                 { title: 'ล้างมือ', href: '/ic/hand-hygiene' },
             ]}
             subNav={<IcSubNav active="ic.hand-hygiene" />}
-            actions={observeDialog}
+            actions={
+                <div className="flex flex-wrap gap-2">
+                    <IcPdfButton module="hand-hygiene" start={filters.date_from} end={filters.date_to} />
+                    {observeDialog}
+                </div>
+            }
         >
+            <IcCharts charts={charts} />
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                 <StatCard label="เป้าหมาย" value={`${stats.target}%`} icon={Target} tone="slate" />
                 <StatCard
@@ -376,8 +423,8 @@ export default function HandHygiene({ observations, stats, filters }: Props) {
                                 <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setShowFilters(!showFilters)}>
                                     <Filter className="mr-1 h-4 w-4" /> กรอง
                                 </Button>
-                                <Button variant="outline" size="sm" className="rounded-xl">
-                                    <Download className="mr-1 h-4 w-4" /> Export
+                                <Button variant="outline" size="sm" className="rounded-xl" onClick={() => window.open(icPdfUrl('hand-hygiene', filters.date_from, filters.date_to), '_blank')}>
+                                    <Download className="mr-1 h-4 w-4" /> PDF
                                 </Button>
                             </div>
                         }
@@ -426,12 +473,13 @@ export default function HandHygiene({ observations, stats, filters }: Props) {
                                             <th className="p-3 text-center">โอกาส</th>
                                             <th className="p-3 text-center">ปฏิบัติถูกต้อง</th>
                                             <th className="p-3 text-center">Compliance</th>
+                                            <th className="p-3"></th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {observations.data.length === 0 ? (
                                             <tr>
-                                                <td colSpan={7}><EmptyState text="ไม่พบข้อมูล" /></td>
+                                                <td colSpan={8}><EmptyState text="ไม่พบข้อมูล" /></td>
                                             </tr>
                                         ) : (
                                             observations.data.map((obs) => {
@@ -449,6 +497,7 @@ export default function HandHygiene({ observations, stats, filters }: Props) {
                                                                 {obs.compliance_rate}%
                                                             </Badge>
                                                         </td>
+                                                        <td className="p-3">{obs.can_edit && <IcEditButton onClick={() => openEdit(obs)} />}</td>
                                                     </tr>
                                                 );
                                             })

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Pharmacy;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Pharmacy\Concerns\ResolvesPharmacyCatalog;
 use App\Models\Pharmacy\PharmacyItem;
 use App\Models\Pharmacy\PharmacyItemBarcode;
 use App\Models\Pharmacy\PharmacyItemUnit;
@@ -24,11 +25,14 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class PharmacyInventoryAdminController extends Controller
 {
+    use ResolvesPharmacyCatalog;
+
     public function settings(): Response
     {
         $this->ensureDefaultSettings();
 
         $locations = PharmacyLocation::query()
+            ->where('catalog', $this->catalog())
             ->withCount('balances')
             ->orderBy('sort_order')
             ->get();
@@ -43,7 +47,7 @@ class PharmacyInventoryAdminController extends Controller
     public function downloadStockTemplate(Request $request, PharmacyStockExcelService $excelService): StreamedResponse
     {
         $locationId = $request->integer('location_id') ?: null;
-        $scope = $request->input('scope', 'all');
+        $scope = $this->catalog();
 
         return $excelService->exportTemplate($locationId, $scope);
     }
@@ -144,7 +148,7 @@ class PharmacyInventoryAdminController extends Controller
             'sort_order' => 'nullable|integer|min:0',
             'notes' => 'nullable|string|max:2000',
         ]);
-        PharmacyLocation::query()->create($data + ['is_active' => true]);
+        PharmacyLocation::query()->create($data + ['is_active' => true, 'catalog' => $this->catalog()]);
 
         return back()->with('success', 'เพิ่มสถานที่จัดเก็บแล้ว');
     }
@@ -220,9 +224,12 @@ class PharmacyInventoryAdminController extends Controller
                 (string) PharmacySetting::query()->where('key', 'telegram_stock_chat_id')->value('value'),
                 (string) config('services.telegram.stock_alerts.chat_id', ''),
             );
-            $groupLabel = 'กลุ่มคลังยา';
-            $title = '📦 ทดสอบการแจ้งเตือน Telegram [กลุ่มคลังยา]';
-            $body = "การเชื่อมต่อแจ้งเตือนสต็อกยาสำเร็จ!\nเวลาทดสอบ: ".now('Asia/Bangkok')->format('d/m/Y H:i:s');
+            $supply = $this->catalog() === 'nondrug';
+            $groupLabel = $supply ? 'กลุ่มคลังเวชภัณฑ์' : 'กลุ่มคลังยา';
+            $title = $supply
+                ? '📦 ทดสอบการแจ้งเตือน Telegram [คลังเวชภัณฑ์มิใช่ยา]'
+                : '📦 ทดสอบการแจ้งเตือน Telegram [กลุ่มคลังยา]';
+            $body = 'การเชื่อมต่อแจ้งเตือน'.($supply ? 'สต็อกเวชภัณฑ์มิใช่ยา' : 'สต็อกยา')."สำเร็จ!\nเวลาทดสอบ: ".now('Asia/Bangkok')->format('d/m/Y H:i:s');
         } else {
             $chatId = TelegramBotService::firstLikelyChatId(
                 (string) $request->input('telegram_egfr_chat_id', ''),
@@ -314,17 +321,12 @@ class PharmacyInventoryAdminController extends Controller
     public function items(Request $request): Response
     {
         $q = trim((string) $request->query('q', ''));
-        $itemType = trim((string) $request->query('item_type', 'all'));
+        $itemType = $this->catalog();
 
         $query = PharmacyItem::query()
             ->with(['units.parentUnit', 'units.packagingType', 'units.barcodes'])
+            ->ofCatalog($itemType)
             ->orderBy('name');
-
-        if ($itemType === 'drug') {
-            $query->where(fn ($b) => $b->where('item_type', 'drug')->orWhereNull('item_type'));
-        } elseif ($itemType === 'nondrug') {
-            $query->where('item_type', 'nondrug');
-        }
 
         if ($q !== '') {
             $query->where(fn ($b) => $b->where('icode', 'like', "%{$q}%")
@@ -350,7 +352,10 @@ class PharmacyInventoryAdminController extends Controller
 
     public function importItems(Request $request, PharmacyInventoryService $inventory)
     {
-        $type = $request->input('type', 'drug');
+        $type = $this->catalog() === 'nondrug' ? 'nondrug' : $request->input('type', 'drug');
+        if ($type === 'all' && $this->catalog() === 'drug') {
+            $type = 'drug';
+        }
         $limit = $request->integer('limit');
 
         if ($type === 'nondrug') {
@@ -433,8 +438,9 @@ class PharmacyInventoryAdminController extends Controller
     {
         return Inertia::render('Pharmacy/Inventory/Counts', [
             'counts' => PharmacyStockCount::query()->with(['location', 'creator'])
+                ->whereHas('location', fn ($location) => $location->where('catalog', $this->catalog()))
                 ->withCount(['items', 'members', 'photos'])->latest()->limit(100)->get(),
-            'locations' => PharmacyLocation::query()->where('is_active', true)->orderBy('sort_order')->get(),
+            'locations' => $this->catalogLocations(true)->get(),
             'users' => User::query()->orderBy('name')->get(['id', 'name']),
         ]);
     }

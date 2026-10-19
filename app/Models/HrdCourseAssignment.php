@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class HrdCourseAssignment extends Model
 {
     protected $fillable = [
-        'course_id', 'user_id', 'department_id', 'assigned_by', 'due_date', 'status'
+        'course_id', 'user_id', 'department_id', 'position_id', 'assigned_by', 'due_date', 'status'
     ];
 
     protected $casts = [

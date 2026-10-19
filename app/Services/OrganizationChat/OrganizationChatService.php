@@ -23,7 +23,7 @@ class OrganizationChatService
     {
         return [
             'success' => true,
-            'system' => 'FSHH Chat',
+            'system' => 'S-Chat',
             'version' => '6.0-laravel',
             'message' => 'API is working',
             'time' => now()->toIso8601String(),

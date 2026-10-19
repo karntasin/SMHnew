@@ -12,7 +12,7 @@ class HrdCourse extends Model
     protected $fillable = [
         'code', 'title', 'description', 'type', 'start_date', 'end_date',
         'location', 'hours', 'capacity', 'instructor', 'cost', 'created_by', 'is_active',
-        'cover_image', 'is_mandatory', 'expiration_days', 'status', 'allow_guest', 'category_id'
+        'cover_image', 'is_mandatory', 'expiration_days', 'track_behavior', 'status', 'allow_guest', 'category_id'
     ];
 
     protected $casts = [
@@ -20,6 +20,7 @@ class HrdCourse extends Model
         'end_date' => 'datetime',
         'is_active' => 'boolean',
         'is_mandatory' => 'boolean',
+        'track_behavior' => 'boolean',
         'allow_guest' => 'boolean',
     ];
 

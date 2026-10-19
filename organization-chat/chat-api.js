@@ -1,4 +1,5 @@
 import { isValidStickerId, stickerPreviewText } from './stickers.js';
+import { sendWebPush } from './web-push.js';
 
 export const SYSTEM_LINE_ID = '__fshh_system__';
 
@@ -13,6 +14,7 @@ const HEARTBEAT_MS = 120 * 1000;
 
 let pollSchemaReady = false;
 let pollBackfillTried = false;
+let pushSchemaReady = false;
 
 /** Ensure denormalized poll columns exist (safe if already applied). */
 export async function ensurePollOptSchema(env) {
@@ -24,6 +26,7 @@ export async function ensurePollOptSchema(env) {
     "ALTER TABLE conversations ADD COLUMN last_message_type TEXT NOT NULL DEFAULT ''",
     'ALTER TABLE conversations ADD COLUMN last_message_sender_id INTEGER NOT NULL DEFAULT 0',
     "ALTER TABLE conversations ADD COLUMN last_message_at TEXT NOT NULL DEFAULT ''",
+    'ALTER TABLE messages ADD COLUMN deleted_at TEXT',
   ];
   for (const sql of alters) {
     try {
@@ -35,6 +38,18 @@ export async function ensurePollOptSchema(env) {
   try {
     await env.DB.prepare(
       'CREATE INDEX IF NOT EXISTS idx_members_user ON conversation_members(user_id)'
+    ).run();
+  } catch {
+    // ignore
+  }
+  try {
+    await env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS typing (
+        conversation_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (conversation_id, user_id)
+      )`
     ).run();
   } catch {
     // ignore
@@ -146,6 +161,95 @@ export async function recordOutboundMessage(env, {
   )
     .bind(convId, Number(senderId))
     .run();
+
+  try {
+    await notifyConversationPush(env, {
+      conversationId: convId,
+      senderId: Number(senderId),
+      messageType,
+      message,
+    });
+  } catch {
+    // Push is best-effort; the message is already stored.
+  }
+}
+
+async function ensurePushSchema(env) {
+  if (pushSchemaReady || !env?.DB) return;
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      endpoint TEXT NOT NULL UNIQUE,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    )`
+  ).run();
+  try {
+    await env.DB.prepare(
+      'CREATE INDEX IF NOT EXISTS idx_push_user ON push_subscriptions(user_id)'
+    ).run();
+  } catch {
+    // ignore
+  }
+  pushSchemaReady = true;
+}
+
+async function notifyConversationPush(env, { conversationId, senderId, messageType, message, kind, messageId }) {
+  const publicKey = String(env?.VAPID_PUBLIC_KEY || '');
+  const privateKey = String(env?.VAPID_PRIVATE_KEY || '');
+  if (!publicKey || !privateKey || !env?.DB) return;
+  await ensurePushSchema(env);
+
+  const isUnsent = kind === 'unsent';
+  const sender = await env.DB.prepare('SELECT display_name FROM users WHERE id = ?')
+    .bind(Number(senderId))
+    .first();
+  const title = String(sender?.display_name || 'S-Chat').slice(0, 80);
+  const body = isUnsent
+    ? 'ยกเลิกข้อความแล้ว'
+    : String(lastMessagePreview({ message_type: messageType, message }) || 'ข้อความใหม่').slice(0, 180);
+  const convId = String(conversationId);
+
+  const { results: members } = await env.DB.prepare(
+    `SELECT user_id FROM conversation_members
+     WHERE conversation_id = ? AND user_id != ?`
+  )
+    .bind(Number(conversationId), Number(senderId))
+    .all();
+
+  await Promise.all((members || []).map(async (member) => {
+    const userId = Number(member.user_id);
+    const unread = await sumUnread(env, userId);
+    const { results: subs } = await env.DB.prepare(
+      'SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?'
+    )
+      .bind(userId)
+      .all();
+    const payload = JSON.stringify({
+      kind: isUnsent ? 'unsent' : 'message',
+      title,
+      body,
+      messageId: messageId || '',
+      conversationId: convId,
+      url: '/chat?open=' + encodeURIComponent(convId),
+      unread: isUnsent ? unread : (unread > 0 ? unread : 1),
+      tag: 'chat-' + convId,
+    });
+    await Promise.all((subs || []).map(async (sub) => {
+      try {
+        const status = await sendWebPush(sub, payload, { publicKey, privateKey });
+        if (status === 404 || status === 410) {
+          await env.DB.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?')
+            .bind(sub.endpoint)
+            .run();
+        }
+      } catch {
+        // one bad subscription must not block the others
+      }
+    }));
+  }));
 }
 
 function isOnlineFromLogin(lastLogin) {
@@ -229,6 +333,21 @@ function cardFallbackText(card) {
 }
 
 export function serializeMessage(row) {
+  if (row && row.deleted_at) {
+    return {
+      messageId: 'M' + row.id,
+      conversationId: String(row.conversation_id),
+      senderId: String(row.sender_id),
+      receiverId: String(row.receiver_id || 0),
+      messageType: 'unsent',
+      message: '',
+      attachment: null,
+      card: null,
+      timestamp: row.created_at,
+      isRead: Boolean(row.is_read),
+      deletedAt: row.deleted_at,
+    };
+  }
   const type = row.message_type || 'text';
   let attachment = null;
   let card = null;
@@ -283,6 +402,7 @@ function lastMessagePreview(row) {
     const card = parseCardMessage(row.message);
     if (card) return [card.title, card.priority].filter(Boolean).join(' · ') || 'แจ้งเตือน';
   }
+  if (type === 'unsent') return 'ยกเลิกข้อความแล้ว';
   return row.message || '';
 }
 
@@ -757,6 +877,160 @@ async function getMessages(env, userId, conversationId, limit, since, sinceMessa
   return (results || []).reverse().map(serializeMessage);
 }
 
+function messageRowId(value) {
+  const n = Number(String(value || '').replace(/^M/i, ''));
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
+async function listRecentUnsents(env, conversationId) {
+  const { results } = await env.DB.prepare(
+    `SELECT * FROM messages
+     WHERE conversation_id = ? AND deleted_at IS NOT NULL AND deleted_at != ''
+     ORDER BY id DESC LIMIT 80`
+  )
+    .bind(Number(conversationId))
+    .all();
+  return (results || []).map(serializeMessage);
+}
+
+async function getReadCursors(env, userId, conversationId) {
+  const { results } = await env.DB.prepare(
+    `SELECT user_id, last_read_message_id
+     FROM conversation_members
+     WHERE conversation_id = ? AND user_id != ?`
+  )
+    .bind(Number(conversationId), userId)
+    .all();
+  return (results || []).map((row) => ({
+    userId: String(row.user_id),
+    lastReadMessageId: Number(row.last_read_message_id || 0),
+  }));
+}
+
+const TYPING_MS = 6000;
+
+async function getTypingUsers(env, userId, conversationId) {
+  const cutoff = new Date(Date.now() - TYPING_MS).toISOString();
+  const { results } = await env.DB.prepare(
+    `SELECT t.user_id, u.display_name
+     FROM typing t
+     LEFT JOIN users u ON u.id = t.user_id
+     WHERE t.conversation_id = ? AND t.user_id != ? AND t.updated_at >= ?`
+  )
+    .bind(Number(conversationId), userId, cutoff)
+    .all();
+  return (results || []).map((row) => ({
+    userId: String(row.user_id),
+    displayName: row.display_name || '',
+  }));
+}
+
+async function setTypingState(env, userId, conversationId, active) {
+  await requireConversation(env, userId, conversationId);
+  const convId = Number(conversationId);
+  if (!active) {
+    await env.DB.prepare('DELETE FROM typing WHERE conversation_id = ? AND user_id = ?')
+      .bind(convId, userId)
+      .run();
+    return { success: true };
+  }
+  const ts = nowIso();
+  await env.DB.prepare(
+    `INSERT INTO typing (conversation_id, user_id, updated_at)
+     VALUES (?, ?, ?)
+     ON CONFLICT(conversation_id, user_id) DO UPDATE SET updated_at = excluded.updated_at`
+  )
+    .bind(convId, userId, ts)
+    .run();
+  return { success: true };
+}
+
+async function unsendMessage(env, userId, messageIdRaw) {
+  const id = messageRowId(messageIdRaw);
+  if (!id) throw new Error('ไม่พบข้อความ');
+  const row = await env.DB.prepare('SELECT * FROM messages WHERE id = ?').bind(id).first();
+  if (!row) throw new Error('ไม่พบข้อความ');
+  await requireConversation(env, userId, row.conversation_id);
+  if (Number(row.sender_id) !== Number(userId)) throw new Error('ยกเลิกได้เฉพาะข้อความของตัวเอง');
+  const type = String(row.message_type || 'text');
+  if (type === 'card' || type === 'system') throw new Error('ยกเลิกข้อความนี้ไม่ได้');
+  if (row.deleted_at) return { success: true, messageId: 'M' + id, deletedAt: row.deleted_at };
+
+  if (type === 'image' || type === 'file') {
+    try {
+      const data = JSON.parse(row.message || '');
+      if (data && data.fileId) {
+        const meta = await env.DB.prepare('SELECT * FROM chat_files WHERE id = ?')
+          .bind(String(data.fileId))
+          .first();
+        if (meta) {
+          if (env.FILES && meta.r2_key) {
+            try {
+              await env.FILES.delete(meta.r2_key);
+            } catch {
+              // The message is still withdrawn even if the file key is already gone.
+            }
+          }
+          await env.DB.prepare('DELETE FROM chat_files WHERE id = ?').bind(meta.id).run();
+        }
+      }
+    } catch {
+      // Body was not a file payload; still withdraw the message.
+    }
+  }
+
+  const ts = nowIso();
+  await env.DB.prepare(
+    `UPDATE messages
+     SET deleted_at = ?, message = '', message_type = 'unsent'
+     WHERE id = ?`
+  )
+    .bind(ts, id)
+    .run();
+
+  await env.DB.prepare(
+    `UPDATE conversation_members
+     SET unread_count = CASE WHEN unread_count > 0 THEN unread_count - 1 ELSE 0 END
+     WHERE conversation_id = ? AND user_id != ? AND last_read_message_id < ?`
+  )
+    .bind(row.conversation_id, userId, id)
+    .run();
+
+  const conv = await env.DB.prepare('SELECT last_message_id FROM conversations WHERE id = ?')
+    .bind(row.conversation_id)
+    .first();
+  if (Number(conv?.last_message_id) === id) {
+    await env.DB.prepare(
+      `UPDATE conversations
+       SET last_message_text = ?, last_message_type = 'unsent', updated_at = ?
+       WHERE id = ?`
+    )
+      .bind('ยกเลิกข้อความแล้ว', ts, row.conversation_id)
+      .run();
+  } else {
+    await env.DB.prepare(
+      'UPDATE conversations SET updated_at = ? WHERE id = ?'
+    )
+      .bind(ts, row.conversation_id)
+      .run();
+  }
+
+  try {
+    await notifyConversationPush(env, {
+      conversationId: row.conversation_id,
+      senderId: userId,
+      messageType: 'unsent',
+      message: '',
+      kind: 'unsent',
+      messageId: 'M' + id,
+    });
+  } catch {
+    // The message is already withdrawn; a missed signal is recovered on the next poll.
+  }
+
+  return { success: true, messageId: 'M' + id, deletedAt: ts };
+}
+
 async function sendMessage(env, senderId, params) {
   const requestedType = String(params.messageType || params.type || 'text').toLowerCase();
   const messageType = requestedType === 'sticker' ? 'sticker' : 'text';
@@ -977,6 +1251,18 @@ export async function handleChatAction(env, action, params, config) {
       return markRead(env, user.id, params.conversationId);
     }
 
+    case 'setTyping': {
+      const user = await resolveUser(env, params.sessionToken);
+      const active = params.active === true || params.active === 1 || params.active === '1';
+      return setTypingState(env, user.id, params.conversationId, active);
+    }
+
+    case 'unsendMessage':
+    case 'unsend': {
+      const user = await resolveUser(env, params.sessionToken);
+      return unsendMessage(env, user.id, params.messageId || params.id);
+    }
+
     case 'unread':
     case 'unreadCount': {
       const user = await resolveUser(env, params.sessionToken);
@@ -998,15 +1284,25 @@ export async function handleChatAction(env, action, params, config) {
         ? await sumUnread(env, user.id)
         : conversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
       let messages = [];
+      let readCursors = [];
+      let typing = [];
       if (params.conversationId) {
+        const sinceMessageId = params.sinceMessageId || params.since_message_id || null;
         messages = await getMessages(
           env,
           user.id,
           params.conversationId,
-          params.since || params.sinceMessageId ? 200 : 80,
+          params.since || sinceMessageId ? 200 : 80,
           params.since || null,
-          params.sinceMessageId || params.since_message_id || null
+          sinceMessageId
         );
+        const seen = new Set(messages.map((row) => row.messageId));
+        const unsents = await listRecentUnsents(env, params.conversationId);
+        for (const row of unsents) {
+          if (!seen.has(row.messageId)) messages.push(row);
+        }
+        readCursors = await getReadCursors(env, user.id, params.conversationId);
+        typing = await getTypingUsers(env, user.id, params.conversationId);
       }
       return {
         success: true,
@@ -1014,8 +1310,45 @@ export async function handleChatAction(env, action, params, config) {
         conversations,
         partial,
         messages,
+        readCursors,
+        typing,
         serverTime: nowIso(),
       };
+    }
+
+    case 'savePushSubscription': {
+      const user = await resolveUser(env, params.sessionToken);
+      await ensurePushSchema(env);
+      const endpoint = String(params.endpoint || '').trim();
+      const p256dh = String(params.p256dh || '').trim();
+      const auth = String(params.auth || '').trim();
+      if (!endpoint || !p256dh || !auth) throw new Error('ข้อมูลการแจ้งเตือนไม่ครบ');
+      await env.DB.prepare(
+        `INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, created_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(endpoint) DO UPDATE SET
+           user_id = excluded.user_id,
+           p256dh = excluded.p256dh,
+           auth = excluded.auth,
+           created_at = excluded.created_at`
+      )
+        .bind(user.id, endpoint, p256dh, auth, nowIso())
+        .run();
+      return { success: true };
+    }
+
+    case 'deletePushSubscription': {
+      const user = await resolveUser(env, params.sessionToken);
+      await ensurePushSchema(env);
+      const endpoint = String(params.endpoint || '').trim();
+      if (endpoint) {
+        await env.DB.prepare(
+          'DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?'
+        )
+          .bind(endpoint, user.id)
+          .run();
+      }
+      return { success: true };
     }
 
     case 'logout': {

@@ -90,4 +90,9 @@ class EnvController extends Controller
             ],
         ]);
     }
+
+    public function guide(): Response
+    {
+        return Inertia::render('Env/Guide');
+    }
 }

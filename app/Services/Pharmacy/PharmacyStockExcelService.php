@@ -95,7 +95,7 @@ class PharmacyStockExcelService
                 }
                 // เวชภัณฑ์มิใช่ยา
                 $ndRows = DB::connection('hosxp')->table('nondrugitems')
-                    ->where('income', '05')
+                    ->whereIn('income', $this->inventoryService->supplyIncomeCodes())
                     ->select(['icode', 'price', 'unitcost'])
                     ->get();
                 foreach ($ndRows as $nd) {

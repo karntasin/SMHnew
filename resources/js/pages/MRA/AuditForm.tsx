@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { router } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -15,6 +16,8 @@ import {
     FileSearch,
     Sparkles,
     CircleDot,
+    ExternalLink,
+    X,
 } from 'lucide-react';
 import axios from '@/lib/axios';
 import { toast } from 'sonner';
@@ -22,6 +25,32 @@ import { cn } from '@/lib/utils';
 import { maskPatientName } from '@/lib/pii';
 import { QualityPage, StatusPill } from '@/components/quality/quality-ui';
 import MraSubNav, { mraBreadcrumbs } from './MraSubNav';
+
+interface EvidenceField {
+    label: string;
+    field: string;
+    source: string;
+    value: string | null;
+    found: boolean;
+}
+
+interface EvidenceSection {
+    title: string;
+    items: Array<{ label: string; value: string }>;
+}
+
+interface EvidenceDetail {
+    criteria_id: number;
+    criteria_code?: string;
+    criteria_name?: string;
+    value: string | null;
+    message: string | null;
+    evidence_found: boolean;
+    passed?: boolean | null;
+    source?: string | null;
+    details: EvidenceField[];
+    sections?: EvidenceSection[];
+}
 
 interface Criteria {
     id: number;
@@ -145,7 +174,14 @@ export default function MraAuditForm({
     const [expandedCategories, setExpandedCategories] = useState<Set<number>>(
         new Set(categories.filter((c) => !c.is_conditional).map((c) => c.id)),
     );
-    const [autoSummary, setAutoSummary] = useState<{ pass: number; fail: number; skip: number } | null>(null);
+    const [autoSummary, setAutoSummary] = useState<{
+        found: number;
+        missing: number;
+        autoPass: number;
+        warnings: string[];
+    } | null>(null);
+    const [evidenceMap, setEvidenceMap] = useState<Record<number, EvidenceDetail>>({});
+    const [evidenceDialogId, setEvidenceDialogId] = useState<number | null>(null);
 
     useEffect(() => {
         const initialResults: Record<number, AuditResult> = {};
@@ -174,12 +210,22 @@ export default function MraAuditForm({
             }
         });
 
+        const dsd3 = categories.flatMap((category) => category.criteria).find((item) => item.code === 'dsd_3');
+        const dsd4 = categories.flatMap((category) => category.criteria).find((item) => item.code === 'dsd_4');
+        if (dsd3 && dsd4 && initialResults[dsd3.id]?.result === 'na') {
+            initialResults[dsd4.id] = {
+                ...initialResults[dsd4.id],
+                criteria_id: dsd4.id,
+                result: 'na',
+            };
+        }
+
         setResults(initialResults);
     }, [categories, existingResults]);
 
     const handleAutoCheck = async () => {
         if (!audit.vn) {
-            toast.error('ไม่มี VN สำหรับตรวจสอบอัตโนมัติ');
+            toast.error('ไม่มี VN สำหรับดึงหลักฐานจาก HOSxP');
             return;
         }
 
@@ -190,54 +236,144 @@ export default function MraAuditForm({
             });
 
             const autoChecks = response.data.auto_checks || {};
-            let pass = 0;
-            let fail = 0;
-            let skip = 0;
+            const caseMeta = response.data.case_meta || {};
+            const checks = Object.values(autoChecks) as Array<{
+                criteria_id?: number;
+                criteria_code?: string;
+                criteria_name?: string;
+                passed?: boolean | null;
+                value?: string | null;
+                message?: string | null;
+                evidence_found?: boolean;
+                source?: string | null;
+                details?: EvidenceField[];
+                sections?: EvidenceSection[];
+            }>;
+
+            let found = Number(response.data.evidence_found_count ?? 0);
+            let missing = Number(response.data.evidence_missing_count ?? 0);
+            let autoPass = Number(response.data.auto_pass_count ?? 0);
+
+            const nextEvidence: Record<number, EvidenceDetail> = {};
+            checks.forEach((check) => {
+                const criteriaId = Number(check?.criteria_id);
+                if (!criteriaId) return;
+                const hasEvidence = Boolean(check.evidence_found) || check.passed === true || Boolean(check.value);
+                nextEvidence[criteriaId] = {
+                    criteria_id: criteriaId,
+                    criteria_code: check.criteria_code,
+                    criteria_name: check.criteria_name,
+                    value: check.value ?? null,
+                    message: check.message ?? null,
+                    evidence_found: hasEvidence,
+                    passed: check.passed ?? null,
+                    source: check.source ?? null,
+                    details: Array.isArray(check.details) ? check.details : [],
+                    sections: Array.isArray(check.sections) ? check.sections : [],
+                };
+            });
+            setEvidenceMap(nextEvidence);
+
+            found = checks.filter((c) => Boolean(c.evidence_found) || c.passed === true || Boolean(c.value)).length;
+            missing = checks.length - found;
+            autoPass = checks.filter((c) => c.passed === true || Boolean(c.evidence_found)).length;
 
             setResults((prev) => {
                 const updated = { ...prev };
-                Object.values(autoChecks).forEach((check: any) => {
-                    if (!check?.criteria_id) return;
-                    if (check.passed === null || check.passed === undefined) {
-                        skip++;
-                        updated[check.criteria_id] = {
-                            ...updated[check.criteria_id],
-                            criteria_id: check.criteria_id,
-                            hosxp_value: check.value?.toString?.() || updated[check.criteria_id]?.hosxp_value || null,
-                        };
-                        return;
-                    }
-                    if (check.passed) pass++;
-                    else fail++;
-                    updated[check.criteria_id] = {
-                        ...updated[check.criteria_id],
-                        criteria_id: check.criteria_id,
-                        result: check.passed ? 'pass' : 'fail',
-                        hosxp_value: check.value?.toString?.() || null,
+                checks.forEach((check) => {
+                    const criteriaId = Number(check?.criteria_id);
+                    if (!criteriaId) return;
+                    const hasEvidence = Boolean(check.evidence_found) || check.passed === true;
+                    updated[criteriaId] = {
+                        ...updated[criteriaId],
+                        criteria_id: criteriaId,
+                        // มีหลักฐาน = auto ผ่าน; ไม่พบ = ไม่แตะคะแนนเดิม
+                        ...(hasEvidence || check.passed === true ? { result: 'pass' as const } : {}),
+                        hosxp_value:
+                            check.value?.toString?.() ||
+                            check.message?.toString?.() ||
+                            updated[criteriaId]?.hosxp_value ||
+                            null,
                     };
                 });
+
+                const dsd3 = categories.flatMap((category) => category.criteria).find((item) => item.code === 'dsd_3');
+                const dsd4 = categories.flatMap((category) => category.criteria).find((item) => item.code === 'dsd_4');
+                if (dsd3 && dsd4 && updated[dsd3.id]?.result === 'na') {
+                    updated[dsd4.id] = {
+                        ...updated[dsd4.id],
+                        criteria_id: dsd4.id,
+                        result: 'na',
+                    };
+                }
+
                 return updated;
             });
 
-            setAutoSummary({ pass, fail, skip });
-            toast.success(`ตรวจอัตโนมัติแล้ว · ผ่าน ${pass} · ไม่พบ/ไม่ผ่าน ${fail} · ต้องตรวจเอง ${skip}`);
+            const warnings: string[] = Array.isArray(caseMeta.warnings) ? caseMeta.warnings : [];
+            setAutoSummary({ found, missing, autoPass, warnings });
+            toast.success(
+                `ดึงหลักฐาน HOSxP แล้ว · พบ ${found} · ผ่านอัตโนมัติ ${autoPass} · ยังต้องตรวจเอง ${missing}`,
+            );
         } catch (error) {
             console.error(error);
-            toast.error('เกิดข้อผิดพลาดในการตรวจสอบอัตโนมัติ');
+            toast.error('เกิดข้อผิดพลาดในการดึงหลักฐานจาก HOSxP');
         } finally {
             setIsAutoChecking(false);
         }
     };
 
+    const criteriaByCode = useMemo(() => {
+        const map = new Map<string, Criteria>();
+        categories.forEach((category) => {
+            category.criteria.forEach((criterion) => map.set(criterion.code, criterion));
+        });
+        return map;
+    }, [categories]);
+
+    const criteriaById = useMemo(() => {
+        const map = new Map<number, Criteria>();
+        categories.forEach((category) => {
+            category.criteria.forEach((criterion) => map.set(criterion.id, criterion));
+        });
+        return map;
+    }, [categories]);
+
+    const dsd3IsNa = useMemo(() => {
+        const dsd3 = criteriaByCode.get('dsd_3');
+        return dsd3 != null && results[dsd3.id]?.result === 'na';
+    }, [criteriaByCode, results]);
+
     const setResult = (criteriaId: number, result: 'pass' | 'fail' | 'na') => {
-        setResults((prev) => ({
-            ...prev,
-            [criteriaId]: {
-                ...prev[criteriaId],
-                criteria_id: criteriaId,
-                result,
-            },
-        }));
+        setResults((prev) => {
+            const source = criteriaById.get(criteriaId);
+            const dsd3 = criteriaByCode.get('dsd_3');
+            if (source?.code === 'dsd_4' && dsd3 && prev[dsd3.id]?.result === 'na') {
+                return prev;
+            }
+
+            const next = {
+                ...prev,
+                [criteriaId]: {
+                    ...prev[criteriaId],
+                    criteria_id: criteriaId,
+                    result,
+                },
+            };
+
+            if (source?.code === 'dsd_3' && result === 'na') {
+                const dsd4 = criteriaByCode.get('dsd_4');
+                if (dsd4) {
+                    next[dsd4.id] = {
+                        ...next[dsd4.id],
+                        criteria_id: dsd4.id,
+                        result: 'na',
+                    };
+                }
+            }
+
+            return next;
+        });
     };
 
     const setCategoryResult = (category: Category, result: ScoreKey) => {
@@ -360,6 +496,22 @@ export default function MraAuditForm({
     };
 
     const passedGate = scores.accuracy >= passingScore && scores.totalMax > 0;
+    const activeEvidence = evidenceDialogId != null ? evidenceMap[evidenceDialogId] : null;
+
+    useEffect(() => {
+        if (evidenceDialogId == null) return;
+        const prevOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        document.body.style.removeProperty('pointer-events');
+        const onKey = (ev: KeyboardEvent) => {
+            if (ev.key === 'Escape') setEvidenceDialogId(null);
+        };
+        window.addEventListener('keydown', onKey);
+        return () => {
+            document.body.style.overflow = prevOverflow;
+            window.removeEventListener('keydown', onKey);
+        };
+    }, [evidenceDialogId]);
 
     return (
         <QualityPage
@@ -379,7 +531,7 @@ export default function MraAuditForm({
                         disabled={isAutoChecking}
                     >
                         {isAutoChecking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Zap className="mr-2 h-4 w-4" />}
-                        ตรวจจาก HOSxP
+                        ดึงหลักฐาน HOSxP
                     </Button>
                     <Button variant="outline" className="rounded-xl" onClick={() => handleSave(false)} disabled={isSaving}>
                         <Save className="mr-2 h-4 w-4" />
@@ -445,10 +597,19 @@ export default function MraAuditForm({
                             </div>
                         </div>
                         {autoSummary ? (
-                            <p className="mt-3 rounded-2xl bg-white/10 px-3 py-2 text-[11px] leading-relaxed text-sky-100/80">
-                                รอบล่าสุดจาก HOSxP: ผ่าน {autoSummary.pass} · ไม่ผ่าน {autoSummary.fail} · ต้องตรวจเอง{' '}
-                                {autoSummary.skip}
-                            </p>
+                            <div className="mt-3 space-y-2 rounded-2xl bg-white/10 px-3 py-2 text-[11px] leading-relaxed text-sky-100/80">
+                                <p>
+                                    หลักฐาน HOSxP: พบ {autoSummary.found} · ผ่านอัตโนมัติ{' '}
+                                    {autoSummary.autoPass} · ยังต้องตรวจ {autoSummary.missing}
+                                </p>
+                                {autoSummary.warnings?.length ? (
+                                    <ul className="list-disc space-y-1 pl-4 text-amber-100/90">
+                                        {autoSummary.warnings.slice(0, 3).map((w) => (
+                                            <li key={w}>{w}</li>
+                                        ))}
+                                    </ul>
+                                ) : null}
+                            </div>
                         ) : null}
                     </div>
 
@@ -567,8 +728,9 @@ export default function MraAuditForm({
                 {/* Main evaluation */}
                 <div className="space-y-4">
                     <div className="rounded-3xl border border-indigo-100 bg-indigo-50/60 px-4 py-3 text-sm text-indigo-900">
-                        กด <strong>ผ่าน / ไม่ผ่าน / N/A</strong> ทีละข้อ · หมวดเงื่อนไขที่ไม่เกี่ยวข้องใช้ <strong>N/A ทั้งหมวด</strong> ·
-                        ปุ่ม <strong>ตรวจจาก HOSxP</strong> จะเติมเฉพาะข้อที่ดึงข้อมูลได้ และข้อที่ต้องดูเอกสารจะคงไว้ให้ตรวจเอง
+                        กด <strong>ดึงหลักฐาน HOSxP</strong> เพื่อเติมยา / คำวินิจฉัย / ผล Lab · ข้อที่มีหลักฐานจะ{' '}
+                        <strong>ผ่านอัตโนมัติ</strong> (แก้คะแนนได้) · คลิกกล่องม่วงเพื่อดูรายละเอียด · หมวดที่ไม่เกี่ยวข้องใช้{' '}
+                        <strong>N/A</strong>
                     </div>
 
                     {categories.map((category) => {
@@ -672,9 +834,13 @@ export default function MraAuditForm({
                                                                             className="border-amber-200 bg-amber-50 text-amber-800"
                                                                         />
                                                                     ) : null}
-                                                                    {criterion.data_type !== 'manual' ? (
+                                                                    {criterion.data_type !== 'manual' || evidenceMap[criterion.id] ? (
                                                                         <StatusPill
-                                                                            label="Auto"
+                                                                            label={
+                                                                                evidenceMap[criterion.id]?.evidence_found
+                                                                                    ? 'มีหลักฐาน'
+                                                                                    : 'HOSxP'
+                                                                            }
                                                                             className="border-violet-200 bg-violet-50 text-violet-700"
                                                                         />
                                                                     ) : null}
@@ -682,36 +848,74 @@ export default function MraAuditForm({
                                                                 <p className="mt-1.5 text-sm font-medium leading-relaxed text-slate-800">
                                                                     {criterion.name}
                                                                 </p>
-                                                                {result?.hosxp_value ? (
-                                                                    <div className="mt-2 inline-flex max-w-full items-start gap-2 rounded-xl border border-violet-100 bg-violet-50/80 px-2.5 py-1.5 text-xs text-violet-900">
+                                                                {result?.hosxp_value || evidenceMap[criterion.id] ? (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => {
+                                                                            e.preventDefault();
+                                                                            e.stopPropagation();
+                                                                            document.body.style.removeProperty('pointer-events');
+                                                                            document.body.style.removeProperty('overflow');
+                                                                            setEvidenceDialogId(criterion.id);
+                                                                        }}
+                                                                        className="relative z-10 mt-2 inline-flex max-w-full cursor-pointer items-start gap-2 rounded-xl border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-left text-xs text-violet-900 shadow-sm transition hover:border-violet-400 hover:bg-violet-100"
+                                                                        title="ดูรายละเอียดหลักฐาน"
+                                                                    >
                                                                         <Zap className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                                                                        <span className="break-all">
-                                                                            HOSxP: {result.hosxp_value}
+                                                                        <span className="min-w-0 flex-1">
+                                                                            <span className="font-semibold">
+                                                                                {evidenceMap[criterion.id]?.evidence_found
+                                                                                    ? 'พบหลักฐาน'
+                                                                                    : 'หลักฐาน HOSxP'}
+                                                                                <span className="ml-1 font-normal text-violet-600 underline">
+                                                                                    ดูรายละเอียด
+                                                                                </span>
+                                                                            </span>
+                                                                            <span className="mt-0.5 line-clamp-2 block break-all text-violet-800/90">
+                                                                                {result?.hosxp_value ||
+                                                                                    evidenceMap[criterion.id]?.message ||
+                                                                                    'กดเพื่อดูฟิลด์จาก HOSxP'}
+                                                                            </span>
                                                                         </span>
-                                                                    </div>
+                                                                        <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-70" />
+                                                                    </button>
                                                                 ) : null}
                                                             </div>
 
-                                                            <div className="flex shrink-0 gap-1.5">
-                                                                {(['pass', 'fail', 'na'] as const).map((key) => {
-                                                                    const meta = RESULT_META[key];
-                                                                    const active = current === key;
-                                                                    return (
-                                                                        <button
-                                                                            key={key}
-                                                                            type="button"
-                                                                            onClick={() => setResult(criterion.id, key)}
-                                                                            className={cn(
-                                                                                'inline-flex min-w-[4.5rem] items-center justify-center gap-1 rounded-xl border px-2.5 py-2 text-xs font-semibold transition',
-                                                                                active ? meta.active : meta.idle,
-                                                                            )}
-                                                                            title={`${meta.label} (${meta.short})`}
-                                                                        >
-                                                                            {meta.icon}
-                                                                            {meta.label}
-                                                                        </button>
-                                                                    );
-                                                                })}
+                                                            <div className="flex shrink-0 flex-col items-end gap-1.5">
+                                                                {criterion.code === 'dsd_4' && dsd3IsNa ? (
+                                                                    <p className="text-[11px] text-slate-500">
+                                                                        ติดตาม dsd_3 — เป็น N/A อัตโนมัติ
+                                                                    </p>
+                                                                ) : null}
+                                                                <div className="flex gap-1.5">
+                                                                    {(['pass', 'fail', 'na'] as const).map((key) => {
+                                                                        const meta = RESULT_META[key];
+                                                                        const active = current === key;
+                                                                        const locked = criterion.code === 'dsd_4' && dsd3IsNa;
+                                                                        return (
+                                                                            <button
+                                                                                key={key}
+                                                                                type="button"
+                                                                                disabled={locked}
+                                                                                onClick={() => setResult(criterion.id, key)}
+                                                                                className={cn(
+                                                                                    'inline-flex min-w-[4.5rem] items-center justify-center gap-1 rounded-xl border px-2.5 py-2 text-xs font-semibold transition',
+                                                                                    active ? meta.active : meta.idle,
+                                                                                    locked && 'cursor-not-allowed opacity-60',
+                                                                                )}
+                                                                                title={
+                                                                                    locked
+                                                                                        ? 'dsd_3 เป็น N/A จึงตั้งข้อนี้เป็น N/A อัตโนมัติ'
+                                                                                        : `${meta.label} (${meta.short})`
+                                                                                }
+                                                                            >
+                                                                                {meta.icon}
+                                                                                {meta.label}
+                                                                            </button>
+                                                                        );
+                                                                    })}
+                                                                </div>
                                                             </div>
                                                         </div>
 
@@ -772,7 +976,7 @@ export default function MraAuditForm({
                         disabled={isAutoChecking}
                     >
                         {isAutoChecking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Zap className="mr-2 h-4 w-4" />}
-                        ตรวจจาก HOSxP
+                        ดึงหลักฐาน HOSxP
                     </Button>
                     <Button variant="outline" className="rounded-xl" onClick={() => handleSave(false)} disabled={isSaving}>
                         {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
@@ -788,6 +992,184 @@ export default function MraAuditForm({
                     </Button>
                 </div>
             </div>
+
+            {evidenceDialogId != null && typeof document !== 'undefined'
+                ? createPortal(
+                      <div
+                          className="fixed inset-0 z-[300] flex items-center justify-center p-4"
+                          role="dialog"
+                          aria-modal="true"
+                          aria-labelledby="mra-evidence-title"
+                      >
+                          <button
+                              type="button"
+                              className="absolute inset-0 bg-slate-900/60"
+                              aria-label="ปิด"
+                              onClick={() => setEvidenceDialogId(null)}
+                          />
+                          <div className="relative z-10 flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+                              <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+                                  <div className="min-w-0">
+                                      <h2
+                                          id="mra-evidence-title"
+                                          className="flex flex-wrap items-center gap-2 text-base font-semibold text-slate-900"
+                                      >
+                                          <Zap className="h-4 w-4 text-violet-600" />
+                                          รายละเอียดหลักฐาน HOSxP
+                                          {activeEvidence?.criteria_code ? (
+                                              <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-xs font-normal text-slate-600">
+                                                  {activeEvidence.criteria_code}
+                                              </span>
+                                          ) : null}
+                                      </h2>
+                                      <p className="mt-1 text-sm text-slate-600">
+                                          {activeEvidence?.criteria_name ||
+                                              categories
+                                                  .flatMap((c) => c.criteria)
+                                                  .find((c) => c.id === evidenceDialogId)?.name ||
+                                              'ข้อมูลที่ดึงจากระบบ HOSxP สำหรับประกอบการให้คะแนน'}
+                                      </p>
+                                  </div>
+                                  <button
+                                      type="button"
+                                      onClick={() => setEvidenceDialogId(null)}
+                                      className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                                      aria-label="ปิดหน้าต่าง"
+                                  >
+                                      <X className="h-5 w-5" />
+                                  </button>
+                              </div>
+
+                              <div className="space-y-4 overflow-y-auto px-5 py-4">
+                                  <div
+                                      className={cn(
+                                          'rounded-xl border px-3 py-2 text-sm',
+                                          activeEvidence?.evidence_found
+                                              ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                                              : 'border-amber-200 bg-amber-50 text-amber-900',
+                                      )}
+                                  >
+                                      <div className="font-semibold">
+                                          {activeEvidence?.evidence_found
+                                              ? 'พบหลักฐานที่เกี่ยวข้อง'
+                                              : 'ไม่พบ/หลักฐานไม่ครบ'}
+                                      </div>
+                                      <p className="mt-1 text-xs leading-relaxed opacity-90">
+                                          {activeEvidence?.message ||
+                                              results[evidenceDialogId]?.hosxp_value ||
+                                              'กด「ดึงหลักฐาน HOSxP」เพื่อโหลดรายละเอียดฟิลด์'}
+                                      </p>
+                                      {activeEvidence?.source ? (
+                                          <p className="mt-1 font-mono text-[11px] opacity-70">
+                                              แหล่ง: {activeEvidence.source}
+                                          </p>
+                                      ) : null}
+                                  </div>
+
+                                  {activeEvidence?.value ? (
+                                      <div>
+                                          <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                              สรุปสั้น
+                                          </div>
+                                          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm break-all text-slate-800">
+                                              {activeEvidence.value}
+                                          </div>
+                                      </div>
+                                  ) : null}
+
+                                  {activeEvidence?.sections?.length
+                                      ? activeEvidence.sections.map((section) => (
+                                            <div key={section.title}>
+                                                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-violet-600">
+                                                    {section.title}
+                                                </div>
+                                                <div className="space-y-2 rounded-xl border border-violet-100 bg-violet-50/40 p-3">
+                                                    {section.items.map((item, idx) => (
+                                                        <div
+                                                            key={`${section.title}-${idx}-${item.label}`}
+                                                            className="rounded-lg border border-white/80 bg-white px-3 py-2 text-sm shadow-sm"
+                                                        >
+                                                            <div className="font-semibold text-slate-800">
+                                                                {item.label}
+                                                            </div>
+                                                            <div className="mt-0.5 whitespace-pre-wrap break-all text-slate-700">
+                                                                {item.value || '—'}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))
+                                      : null}
+
+                                  {activeEvidence?.details?.length ? (
+                                      <div>
+                                          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                              ฟิลด์จาก HOSxP ({activeEvidence.details.length})
+                                          </div>
+                                          <div className="overflow-hidden rounded-xl border border-slate-200">
+                                              <table className="w-full text-left text-sm">
+                                                  <thead className="bg-slate-50 text-xs text-slate-500">
+                                                      <tr>
+                                                          <th className="px-3 py-2 font-semibold">รายการ</th>
+                                                          <th className="px-3 py-2 font-semibold">ค่า</th>
+                                                          <th className="hidden px-3 py-2 font-semibold sm:table-cell">
+                                                              ตาราง
+                                                          </th>
+                                                      </tr>
+                                                  </thead>
+                                                  <tbody className="divide-y divide-slate-100">
+                                                      {activeEvidence.details.map((row) => (
+                                                          <tr
+                                                              key={`${row.source}-${row.field}-${row.label}`}
+                                                              className={row.found ? 'bg-white' : 'bg-slate-50/60'}
+                                                          >
+                                                              <td className="align-top px-3 py-2">
+                                                                  <div className="font-medium text-slate-800">
+                                                                      {row.label}
+                                                                  </div>
+                                                                  <div className="font-mono text-[10px] text-slate-400">
+                                                                      {row.field}
+                                                                  </div>
+                                                              </td>
+                                                              <td className="align-top whitespace-pre-wrap break-all px-3 py-2 text-slate-700">
+                                                                  {row.value || (
+                                                                      <span className="text-slate-400">—</span>
+                                                                  )}
+                                                              </td>
+                                                              <td className="hidden align-top px-3 py-2 font-mono text-[11px] text-slate-500 sm:table-cell">
+                                                                  {row.source}
+                                                              </td>
+                                                          </tr>
+                                                      ))}
+                                                  </tbody>
+                                              </table>
+                                          </div>
+                                      </div>
+                                  ) : (
+                                      <p className="text-sm text-slate-500">
+                                          {results[evidenceDialogId]?.hosxp_value
+                                              ? `ค่าที่บันทึกไว้: ${results[evidenceDialogId]?.hosxp_value}`
+                                              : 'ยังไม่มีรายละเอียดฟิลด์ — กด「ดึงหลักฐาน HOSxP」อีกครั้ง'}
+                                      </p>
+                                  )}
+                              </div>
+
+                              <div className="border-t border-slate-100 px-5 py-3 text-right">
+                                  <Button
+                                      type="button"
+                                      variant="outline"
+                                      className="rounded-xl"
+                                      onClick={() => setEvidenceDialogId(null)}
+                                  >
+                                      ปิด
+                                  </Button>
+                              </div>
+                          </div>
+                      </div>,
+                      document.body,
+                  )
+                : null}
         </QualityPage>
     );
 }

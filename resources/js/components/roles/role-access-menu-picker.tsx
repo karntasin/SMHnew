@@ -18,9 +18,20 @@ export interface AccessMenuNode {
     id: number;
     title: string;
     icon: string;
+    route?: string | null;
     permission_name: string | null;
     permission_valid?: boolean;
     children: AccessMenuNode[];
+}
+
+export interface MenuCoverage {
+    total_menus: number;
+    navigable_menus: number;
+    assignable_menus: number;
+    folder_menus: number;
+    missing_permission: number;
+    orphan_permission: number;
+    roots: number;
 }
 
 interface ExtraPermission {
@@ -32,6 +43,7 @@ interface ExtraPermission {
 interface Props {
     menuTree: AccessMenuNode[];
     extraPermissions?: ExtraPermission[];
+    menuCoverage?: MenuCoverage | null;
     selected: string[];
     onChange: (permissions: string[]) => void;
 }
@@ -218,13 +230,15 @@ function AccessMenuItem({
     }
 
     const isChecked = selected.includes(node.permission_name);
+    const invalid = node.permission_valid === false;
 
     return (
-        <label key={node.id} className={cn(rowClass, 'cursor-pointer')}>
+        <label key={node.id} className={cn(rowClass, 'cursor-pointer', invalid && 'opacity-70')}>
             <Checkbox
                 checked={isChecked}
                 onCheckedChange={() => onTogglePermission(node.permission_name!)}
                 className="mt-1"
+                disabled={invalid}
             />
             <MenuPickerIcon icon={node.icon} level={level} active={isChecked} />
             <span className="min-w-0 flex-1">
@@ -238,6 +252,7 @@ function AccessMenuItem({
                 </span>
                 <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
                     {formatPermissionLabel(node.permission_name)}
+                    {invalid ? ' · ยังไม่มีในระบบสิทธิ์' : ''}
                 </span>
             </span>
         </label>
@@ -247,6 +262,7 @@ function AccessMenuItem({
 export function RoleAccessMenuPicker({
     menuTree,
     extraPermissions = [],
+    menuCoverage = null,
     selected,
     onChange,
 }: Props) {
@@ -256,6 +272,8 @@ export function RoleAccessMenuPicker({
         () => filterMenuTree(menuTree, searchQuery),
         [menuTree, searchQuery],
     );
+
+    const rootCount = menuTree.length;
 
     const filteredExtra = useMemo(() => {
         const q = searchQuery.trim().toLowerCase();
@@ -330,12 +348,23 @@ export function RoleAccessMenuPicker({
                 )}
             </div>
 
-            <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
-                <span>เมนูที่เข้าถึงได้</span>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground px-1">
+                <span>
+                    เมนูที่เข้าถึงได้ · กลุ่มหลัก {rootCount} กลุ่ม
+                    {menuCoverage ? ` · เมนูนำทาง ${menuCoverage.assignable_menus}/${menuCoverage.navigable_menus}` : ''}
+                </span>
                 <Badge variant="secondary">
                     {menuPermissionCount.selected}/{menuPermissionCount.total}
                 </Badge>
             </div>
+
+            {menuCoverage && (menuCoverage.missing_permission > 0 || menuCoverage.orphan_permission > 0) && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                    พบเมนูที่ยังผูกสิทธิ์ไม่ครบ {menuCoverage.missing_permission + menuCoverage.orphan_permission} รายการ
+                    — ระบบพยายามซิงก์อัตโนมัติเมื่อเปิดหน้านี้ หากยังไม่ครบให้รัน
+                    {' '}<code className="rounded bg-amber-100 px-1">php artisan menus:sync-permissions</code>
+                </div>
+            )}
 
             <ScrollArea className="h-[min(520px,60vh)] rounded-xl border bg-muted/20 p-2">
                 <div className="space-y-0.5 pr-2">

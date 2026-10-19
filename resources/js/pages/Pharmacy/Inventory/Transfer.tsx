@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { Head, router } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import { ChevronDown, ChevronUp, Layers, Plus, Trash2 } from 'lucide-react';
 import AppLayout from '@/layouts/app-layout';
 import InlineBarcodeScanner from '@/components/pharmacy/InlineBarcodeScanner';
@@ -7,6 +7,7 @@ import PharmacySubNav, { pharmacyBreadcrumbs } from '@/pages/Pharmacy/PharmacySu
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ThaiDatePicker } from '@/components/ui/thai-date-picker';
 import axios from 'axios';
 import {
     inventoryFieldLabel,
@@ -19,10 +20,17 @@ import {
     inventorySummaryBox,
     inventorySummaryCard,
 } from '@/pages/Pharmacy/Inventory/ui-classes';
+import { warehouseActive, warehouseHome, warehouseSupply, wh } from '@/pages/Pharmacy/inventoryCatalog';
 
 type Location = { id: number; code: string; name: string; type: string };
 type Drug = { icode: string; name: string; strength?: string | null; unit?: string | null; item_type?: string; income_name?: string };
 type PackagingType = { id: number; code: string; name: string };
+type OtherStock = { id: number; name: string; qty_on_hand: number };
+type SourceStock = {
+    qty_on_hand: number;
+    active_lots: Array<{ qty_remaining: number }>;
+    other_locations: OtherStock[];
+};
 type ChainLevel = {
     packaging_type_id: string;
     name: string;
@@ -31,10 +39,11 @@ type ChainLevel = {
     use_scanned_barcode?: boolean;
 };
 
-function defaultLevels(baseUnit: string, types: PackagingType[]): ChainLevel[] {
-    const findId = (...codes: string[]) => String(types.find((type) => codes.includes(type.code))?.id ?? '');
-    const packType = types.find((t) => t.code === 'pack') || types.find((t) => t.name.includes('แพ็ค'));
-    const boxType = types.find((t) => t.code === 'box') || types.find((t) => t.name.includes('กล่อง'));
+function localDateInputValue(date = new Date()): string {
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+function baseOnlyLevels(baseUnit: string, types: PackagingType[]): ChainLevel[] {
     const baseType = types.find((t) => t.name.toLowerCase() === (baseUnit || '').toLowerCase())
         || types.find((t) => baseUnit && t.name.includes(baseUnit))
         || types.find((t) => ['tablet', 'base'].includes(t.code));
@@ -44,20 +53,6 @@ function defaultLevels(baseUnit: string, types: PackagingType[]): ChainLevel[] {
             name: baseType?.name || baseUnit || 'หน่วยย่อย',
             packaging_type_id: String(baseType?.id ?? ''),
             contains_qty: '1',
-            barcode: '',
-            use_scanned_barcode: false,
-        },
-        {
-            name: packType?.name || 'แพ็ค',
-            packaging_type_id: String(packType?.id ?? findId('pack')),
-            contains_qty: '10',
-            barcode: '',
-            use_scanned_barcode: false,
-        },
-        {
-            name: boxType?.name || 'กล่อง',
-            packaging_type_id: String(boxType?.id ?? findId('box', 'outer_box')),
-            contains_qty: '10',
             barcode: '',
             use_scanned_barcode: false,
         },
@@ -73,6 +68,7 @@ export default function Transfer({
     packagingTypes?: PackagingType[];
     initialBarcode?: string;
 }) {
+    const todayValue = localDateInputValue();
     const warehouses = locations.filter((l) => l.type === 'warehouse');
     const pharmacies = locations.filter((l) => l.type === 'pharmacy');
     const [icode, setIcode] = useState('');
@@ -85,8 +81,14 @@ export default function Transfer({
     const [scanError, setScanError] = useState('');
     const [scanSuccessNote, setScanSuccessNote] = useState('');
     const [showHierarchyEditor, setShowHierarchyEditor] = useState(false);
-    const [levels, setLevels] = useState<ChainLevel[]>(() => defaultLevels('หน่วยย่อย', packagingTypes));
-    const [selectedLevelIndex, setSelectedLevelIndex] = useState<number>(1);
+    const [levels, setLevels] = useState<ChainLevel[]>(() => baseOnlyLevels('หน่วยย่อย', packagingTypes));
+    const [selectedLevelIndex, setSelectedLevelIndex] = useState<number>(0);
+    const [stockError, setStockError] = useState(false);
+    const [fromLocationId, setFromLocationId] = useState(String(warehouses[0]?.id ?? locations[0]?.id ?? ''));
+    const [sourceStock, setSourceStock] = useState<SourceStock | null>(null);
+    const [stockLoading, setStockLoading] = useState(false);
+    const pageErrors = (usePage().props as { errors?: Record<string, string | string[]> }).errors ?? {};
+    const errorMessages = Object.values(pageErrors).flatMap((value) => (Array.isArray(value) ? value : [value])).filter(Boolean);
 
     const currentScannedBarcode = (barcode || scanCode || '').trim();
 
@@ -141,6 +143,62 @@ export default function Transfer({
     const activeFactor = levelFactors[activeLevelIndex] || 1;
     const baseUnitName = levels[0]?.name || selected?.unit || 'หน่วยฐาน';
     const stockDeductQty = (Number(qty) || 0) * activeFactor;
+    const availableQty = useMemo(() => {
+        if (!sourceStock) return null;
+        const onHand = Number(sourceStock.qty_on_hand) || 0;
+        const lotSum = sourceStock.active_lots.reduce((sum, lot) => sum + (Number(lot.qty_remaining) || 0), 0);
+        return Math.min(onHand, lotSum);
+    }, [sourceStock]);
+    const exceedsStock = availableQty !== null && stockDeductQty > availableQty + 0.0001;
+    const formatQty = (value: number) => value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+
+    useEffect(() => {
+        if (!icode || !fromLocationId) {
+            setSourceStock(null);
+            setStockError(false);
+            setStockLoading(false);
+            return;
+        }
+
+        let cancelled = false;
+        setSourceStock(null);
+        setStockError(false);
+        setStockLoading(true);
+        axios.get(wh('drug-out.stock-info'), { params: { icode, location_id: fromLocationId } })
+            .then((res) => {
+                if (cancelled) return;
+                const data = res.data;
+                const otherLocations = Array.isArray(data?.other_locations)
+                    ? data.other_locations.map((location: OtherStock) => ({
+                        id: Number(location.id),
+                        name: String(location.name || 'คลัง'),
+                        qty_on_hand: Number(location.qty_on_hand) || 0,
+                    })).filter((location: OtherStock) => location.id > 0 && location.qty_on_hand > 0)
+                    : [];
+                if (!data?.found) {
+                    setSourceStock({ qty_on_hand: 0, active_lots: [], other_locations: otherLocations });
+                    return;
+                }
+                setSourceStock({
+                    qty_on_hand: Number(data.qty_on_hand) || 0,
+                    active_lots: Array.isArray(data.active_lots) ? data.active_lots : [],
+                    other_locations: otherLocations,
+                });
+            })
+            .catch(() => {
+                if (!cancelled) {
+                    setSourceStock(null);
+                    setStockError(true);
+                }
+            })
+            .finally(() => {
+                if (!cancelled) setStockLoading(false);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [icode, fromLocationId]);
 
     const chooseDrug = async (drug: Drug) => {
         setSelected(drug);
@@ -149,7 +207,7 @@ export default function Transfer({
         setQ(drug.name);
 
         try {
-            const res = await axios.get(route('pharmacy.inventory.drugs.units', { icode: drug.icode }));
+            const res = await axios.get(wh('drugs.units', { icode: drug.icode }));
             const existing = (res.data?.data?.units ?? []) as Array<{
                 name: string;
                 contains_qty: number;
@@ -157,7 +215,7 @@ export default function Transfer({
                 barcodes?: string[];
                 factor_to_base: number;
             }>;
-            if (existing.length >= 2) {
+            if (existing.length >= 1) {
                 const sorted = [...existing].sort((a, b) => a.factor_to_base - b.factor_to_base);
                 const hasMatched = currentScannedBarcode !== '' && sorted.some((u) => u.barcodes?.includes(currentScannedBarcode));
                 const mapped: ChainLevel[] = sorted.map((unit, index) => {
@@ -167,7 +225,7 @@ export default function Transfer({
                     const isSynced = currentScannedBarcode !== '' && (
                         hasMatched
                             ? unit.barcodes?.includes(currentScannedBarcode)
-                            : index === sorted.length - 1
+                            : false
                     );
                     return {
                         name: matchedType?.name || (index === 0 ? (drug.unit || unit.name) : unit.name),
@@ -177,8 +235,11 @@ export default function Transfer({
                         use_scanned_barcode: Boolean(isSynced),
                     };
                 });
+                const matchedIndex = hasMatched
+                    ? sorted.findIndex((unit) => unit.barcodes?.includes(currentScannedBarcode))
+                    : 0;
                 setLevels(mapped);
-                setSelectedLevelIndex(mapped.length > 1 ? 1 : 0);
+                setSelectedLevelIndex(matchedIndex >= 0 ? matchedIndex : 0);
                 setShowHierarchyEditor(false);
                 return;
             }
@@ -186,18 +247,14 @@ export default function Transfer({
             // fallback
         }
 
-        const fresh = defaultLevels(drug.unit || 'เม็ด', packagingTypes);
-        const mappedFresh = fresh.map((lvl, index, arr) => {
-            const isSynced = currentScannedBarcode !== '' && index === arr.length - 1;
-            return {
-                ...lvl,
-                barcode: isSynced ? currentScannedBarcode : '',
-                use_scanned_barcode: isSynced,
-            };
-        });
-        setLevels(mappedFresh);
-        setSelectedLevelIndex(fresh.length > 1 ? 1 : 0);
-        setShowHierarchyEditor(true);
+        const fresh = baseOnlyLevels(drug.unit || 'หน่วย', packagingTypes).map((lvl) => ({
+            ...lvl,
+            barcode: currentScannedBarcode || '',
+            use_scanned_barcode: currentScannedBarcode !== '',
+        }));
+        setLevels(fresh);
+        setSelectedLevelIndex(0);
+        setShowHierarchyEditor(false);
     };
 
     const resolveBarcode = async (scanned: string) => {
@@ -207,7 +264,7 @@ export default function Transfer({
         setBarcode(trimmed);
         setScanCode(trimmed);
         try {
-            const response = await axios.get(route('pharmacy.inventory.scan.resolve'), { params: { code: trimmed } });
+            const response = await axios.get(wh('scan.resolve'), { params: { code: trimmed } });
             const found = response.data?.data;
             if (found?.item) {
                 await chooseDrug(found.item);
@@ -235,7 +292,7 @@ export default function Transfer({
             return;
         }
         const t = setTimeout(() => {
-            axios.get(route('pharmacy.inventory.drugs.search'), { params: { q } }).then((res) => {
+            axios.get(wh('drugs.search'), { params: { q } }).then((res) => {
                 setHits(res.data?.data ?? []);
             });
         }, 250);
@@ -258,6 +315,7 @@ export default function Transfer({
 
     const onSubmit = (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
+        if (exceedsStock || stockLoading || stockError) return;
         const fd = new FormData(e.currentTarget);
         const payload: Record<string, unknown> = Object.fromEntries(fd.entries());
         
@@ -269,19 +327,26 @@ export default function Transfer({
             barcode: lvl.barcode || null,
         }));
         payload.qty = Number(qty) || 0;
-        router.post(route('pharmacy.inventory.transfer.store'), payload);
+        router.post(wh('transfer.store'), payload, { preserveScroll: true });
     };
 
     return (
         <AppLayout breadcrumbs={pharmacyBreadcrumbs([
-            { title: 'คลังยา / ห้องยา', href: route('pharmacy.inventory.index') },
-            { title: 'เบิกเข้าห้องยา' },
+            { title: warehouseHome(), href: wh('index') },
+            { title: warehouseSupply() ? 'เบิกเข้าจุดจ่าย' : 'เบิกเข้าห้องยา' },
         ])}>
-            <Head title="เบิกเข้าห้องยา" />
+            <Head title={warehouseSupply() ? "เบิกเข้าจุดจ่ายเวชภัณฑ์" : "เบิกเข้าห้องยา"} />
             <div className="container mx-auto space-y-6 px-4 py-6">
-                <PharmacySubNav active="pharmacy.inventory.index" />
+                <PharmacySubNav active={warehouseActive()} />
                 <form onSubmit={onSubmit} className={inventoryFormShell}>
-                    <h1 className="text-xl font-bold text-foreground">เบิกจากคลัง → ห้องยา</h1>
+                    {errorMessages.length > 0 && (
+                        <div className="rounded-xl border border-rose-300 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800 dark:border-rose-800 dark:bg-rose-950/50 dark:text-rose-200">
+                            {errorMessages.map((message) => (
+                                <div key={message}>{message}</div>
+                            ))}
+                        </div>
+                    )}
+                    <h1 className="text-xl font-bold text-foreground">{warehouseSupply() ? "เบิกจากคลังเวชภัณฑ์ → จุดจ่าย" : "เบิกจากคลัง → ห้องยา"}</h1>
                     <p className="text-sm text-muted-foreground">
                         สแกนหรือเลือกยา พร้อมระบุหน่วยที่ต้องการเบิก (เช่น เบิกเป็นกล่องหรือแพ็ค) ระบบจะคำนวณตัดสต็อกเป็นหน่วยเม็ดให้อัตโนมัติ
                     </p>
@@ -399,12 +464,36 @@ export default function Transfer({
                             </div>
                             <div className="mt-1.5 space-y-1 text-xs text-muted-foreground">
                                 <div>• อัตราแปลงหน่วย: 1 {activeUnitName} = <b>{activeFactor}</b> {baseUnitName}</div>
+                                <div>• คงเหลือในคลังต้นทาง: <b>{stockLoading ? 'กำลังโหลด...' : availableQty === null ? '—' : formatQty(availableQty)}</b> {baseUnitName}</div>
                                 <div>• ตัดยอดคลังใหญ่: <b>{stockDeductQty.toLocaleString()}</b> {baseUnitName}</div>
-                                <div>• โอนเข้าห้องยา: <b>{stockDeductQty.toLocaleString()}</b> {baseUnitName}</div>
+                                <div>• {warehouseSupply() ? 'โอนเข้าจุดจ่าย' : 'โอนเข้าห้องยา'}: <b>{stockDeductQty.toLocaleString()}</b> {baseUnitName}</div>
                             </div>
-                            <div className="mt-2.5 rounded-lg border border-emerald-200 bg-emerald-50/80 p-2 text-sm font-bold text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200">
-                                📦 เบิก {qty || 0} {activeUnitName} = ตัดจ่าย {stockDeductQty.toLocaleString()} {baseUnitName}
+                            <div className={`mt-2.5 rounded-lg border p-2 text-sm font-bold ${exceedsStock || stockError ? 'border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-800 dark:bg-rose-950/60 dark:text-rose-200' : 'border-emerald-200 bg-emerald-50/80 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200'}`}>
+                                {stockError
+                                    ? 'โหลดยอดคงเหลือไม่สำเร็จ จึงยังยืนยันเบิกไม่ได้'
+                                    : exceedsStock
+                                        ? `เบิกเกินกว่าของที่มีในคลัง (ต้องการ ${formatQty(stockDeductQty)} ${baseUnitName} คงเหลือ ${formatQty(availableQty ?? 0)} ${baseUnitName})`
+                                        : `📦 เบิก ${qty || 0} ${activeUnitName} = ตัดจ่าย ${formatQty(stockDeductQty)} ${baseUnitName}`}
                             </div>
+                            {(sourceStock?.other_locations.length ?? 0) > 0 && (availableQty === 0 || exceedsStock) && (
+                                <div className="mt-2.5 space-y-1.5">
+                                    <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">ต้นทางนี้ไม่มีของพอ มีสต็อกที่</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {sourceStock?.other_locations.map((location) => (
+                                            <Button
+                                                key={location.id}
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                className="h-8 border-amber-300 bg-amber-50 text-amber-950 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+                                                onClick={() => setFromLocationId(String(location.id))}
+                                            >
+                                                {location.name} คงเหลือ {formatQty(location.qty_on_hand)} {baseUnitName}
+                                            </Button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -629,14 +718,20 @@ export default function Transfer({
                     <div className="grid gap-4 md:grid-cols-2">
                         <div className="space-y-2">
                             <Label className={inventoryFieldLabel}>จากคลังต้นทาง *</Label>
-                            <select name="from_location_id" className={inventorySelectClass} defaultValue={warehouses[0]?.id} required>
+                            <select
+                                name="from_location_id"
+                                className={inventorySelectClass}
+                                value={fromLocationId}
+                                onChange={(e) => setFromLocationId(e.target.value)}
+                                required
+                            >
                                 {locations.map((l) => (
                                     <option key={l.id} value={l.id}>{l.name} ({l.type})</option>
                                 ))}
                             </select>
                         </div>
                         <div className="space-y-2">
-                            <Label className={inventoryFieldLabel}>ไปห้องยาปลายทาง *</Label>
+                            <Label className={inventoryFieldLabel}>{warehouseSupply() ? 'ไปจุดจ่ายปลายทาง *' : 'ไปห้องยาปลายทาง *'}</Label>
                             <select name="to_location_id" className={inventorySelectClass} defaultValue={pharmacies[0]?.id || locations[0]?.id} required>
                                 {locations.map((l) => (
                                     <option key={l.id} value={l.id}>{l.name} ({l.type})</option>
@@ -646,12 +741,23 @@ export default function Transfer({
                     </div>
 
                     <div className="space-y-2">
-                        <Label className={inventoryFieldLabel}>หมายเหตุ</Label>
-                        <Input name="note" placeholder="เช่น เบิกเติมห้องยา OPD ประจำวัน" />
+                        <Label className={inventoryFieldLabel}>{warehouseSupply() ? 'วันที่เบิกเข้าจุดจ่าย *' : 'วันที่เบิกเข้าห้องยา *'}</Label>
+                        <ThaiDatePicker
+                            name="transferred_at"
+                            label={warehouseSupply() ? 'วันที่เบิกเข้าจุดจ่าย' : 'วันที่เบิกเข้าห้องยา'}
+                            required
+                            defaultValue={todayValue}
+                            max={todayValue}
+                        />
                     </div>
 
-                    <Button type="submit" className="rounded-xl bg-violet-700 hover:bg-violet-800" disabled={!icode}>
-                        ยืนยันเบิกเข้าห้องยา
+                    <div className="space-y-2">
+                        <Label className={inventoryFieldLabel}>หมายเหตุ</Label>
+                        <Input name="note" placeholder={warehouseSupply() ? 'เช่น เบิกเติมจุดจ่ายเวชภัณฑ์ประจำวัน' : 'เช่น เบิกเติมห้องยา OPD ประจำวัน'} />
+                    </div>
+
+                    <Button type="submit" className="rounded-xl bg-violet-700 hover:bg-violet-800" disabled={!icode || exceedsStock || stockLoading || stockError}>
+                        {warehouseSupply() ? 'ยืนยันเบิกเข้าจุดจ่าย' : 'ยืนยันเบิกเข้าห้องยา'}
                     </Button>
                 </form>
             </div>

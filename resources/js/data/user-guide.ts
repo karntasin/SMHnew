@@ -397,6 +397,7 @@ export const guideModules: GuideModule[] = [
             'PM Tracking แผนบำรุงรักษา',
             'รายงานอุบัติการณ์',
             'ตรวจสภาพครุภัณฑ์และรายงานความเสี่ยง',
+            'คู่มือใช้งานในระบบ',
         ],
         steps: [
             { title: 'เข้าภาพรวม ENV', description: 'ดู Dashboard สรุปสถานะ' },
@@ -404,6 +405,7 @@ export const guideModules: GuideModule[] = [
             { title: 'ติดตาม PM', description: 'บันทึกการบำรุงรักษาตามแผน' },
             { title: 'รายงานเหตุการณ์', description: 'บันทึกเหตุการณ์และมอบหมายผู้รับผิดชอบ' },
         ],
+        tips: ['อ่านคู่มือฉบับเต็มได้ที่เมนู ENV → คู่มือใช้งาน หรือเปิด /env/guide'],
     },
 
     // ── งานธุรการ ──

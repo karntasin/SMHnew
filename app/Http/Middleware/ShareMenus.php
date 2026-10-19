@@ -14,6 +14,12 @@ class ShareMenus
     {
         $user = $request->user();
 
+        $routeName = (string) $request->route()?->getName();
+        $inventoryCatalog = str_starts_with($routeName, 'pharmacy.supplies.')
+            ? 'nondrug'
+            : (str_starts_with($routeName, 'pharmacy.inventory.') ? 'drug' : null);
+        Inertia::share('inventoryCatalog', $inventoryCatalog);
+
         Inertia::share('menus', function () use ($user) {
             if (!$user) return [];
 
@@ -31,7 +37,7 @@ class ShareMenus
             // Recursive builder (filtered by permission)
             $buildTree = function ($parentId = null) use (&$buildTree, $indexed, $user, $getRouteUrl) {
                 return $indexed
-                    ->filter(function ($menu) use ($parentId, $user) {
+                    ->filter(function ($menu) use ($parentId, $user, $indexed) {
                         if ($menu->parent_id !== $parentId) return false;
 
                         if (in_array((string) $menu->route, ['dashboard', '/dashboard'], true)
@@ -49,15 +55,33 @@ class ShareMenus
                             }
                         }
 
+                        // Settings Hub: เห็นได้ถ้ามีสิทธิ์ hub หรือเมนูย่อยอย่างน้อยหนึ่งรายการ
+                        if (in_array($menu->route, ['settings.hub', 'km.learn.hub'], true)) {
+                            if (! $menu->permission_name || $user->can($menu->permission_name) || $user->can('km.learn.dashboard')) {
+                                return true;
+                            }
+
+                            return $indexed
+                                ->filter(fn ($child) => (int) $child->parent_id === (int) $menu->id)
+                                ->contains(function ($child) use ($user) {
+                                    return filled($child->permission_name) && $user->can($child->permission_name);
+                                });
+                        }
+
                         return !$menu->permission_name || $user->can($menu->permission_name);
                     })
                     ->map(function ($menu) use (&$buildTree, $getRouteUrl) {
+                        // Settings Hub: sidebar แสดงลิงก์เดียว ไม่ขยายเมนูย่อย
+                        $children = in_array($menu->route, ['settings.hub', 'km.learn.hub'], true)
+                            ? collect()
+                            : $buildTree($menu->id)->values();
+
                         $menuData = [
                             'id' => $menu->id,
                             'title' => $menu->title,
                             'icon' => $menu->icon,
                             'route' => $getRouteUrl($menu->route),
-                            'children' => $buildTree($menu->id)->values(),
+                            'children' => $children,
                         ];
                         return (object) $menuData;
                     })

@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\Menu;
+use App\Services\MenuPermissionSyncService;
 use Illuminate\Database\Seeder;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -33,6 +34,8 @@ class SyncSidebarMenusSeeder extends Seeder
             ['title' => 'ภาพรวมตัวชี้วัด', 'icon' => 'LayoutDashboard', 'route' => 'quality-indicators.dashboard', 'order' => 2],
             ['title' => 'นำเข้า Excel', 'icon' => 'Upload', 'route' => 'quality-indicators.import.index', 'order' => 3],
             ['title' => 'คู่มือตัวชี้วัด', 'icon' => 'BookOpen', 'route' => 'quality-indicators.guide', 'order' => 4],
+            ['title' => 'แบบประเมินตนเอง SAR', 'icon' => 'ClipboardCheck', 'route' => '/quality-indicators?type=organization&category=แบบประเมินตนเอง SAR', 'order' => 5, 'permission_name' => 'quality-indicators.org.sar'],
+            ['title' => 'แผนยุทธศาสตร์ รพ.', 'icon' => 'Target', 'route' => '/quality-indicators?type=organization&category=แผนยุทธศาสตร์ รพ.', 'order' => 6, 'permission_name' => 'quality-indicators.org.strategy'],
         ], 'ตัวชี้วัดคุณภาพ');
 
         $this->syncChildren($quality, [
@@ -79,14 +82,15 @@ class SyncSidebarMenusSeeder extends Seeder
         ], 'เภสัชกรรม', 'Pill', 8, [
             ['title' => 'ภาพรวมเภสัชกรรม', 'icon' => 'LayoutDashboard', 'route' => 'pharmacy.index', 'order' => 1],
             ['title' => 'คลังยา / ห้องยา', 'icon' => 'Warehouse', 'route' => 'pharmacy.inventory.index', 'order' => 2],
-            ['title' => 'แจ้งเตือนการใช้ยา', 'icon' => 'AlertTriangle', 'route' => 'pharmacy.drug-alerts', 'order' => 3],
-            ['title' => 'ตัวชี้วัด RDU', 'icon' => 'Activity', 'route' => 'rdu.index', 'order' => 4],
-            ['title' => 'Case Audit', 'icon' => 'ClipboardList', 'route' => 'rdu.cases', 'order' => 5],
-            ['title' => 'การใช้ยารวม', 'icon' => 'Pill', 'route' => 'rdu.drugs', 'order' => 6],
-            ['title' => 'ยาปฏิชีวนะ', 'icon' => 'Syringe', 'route' => 'rdu.drugs.antibiotics', 'order' => 7],
-            ['title' => 'ตามแผนก/แพทย์', 'icon' => 'Building2', 'route' => 'rdu.drugs.by-department', 'order' => 8],
-            ['title' => 'ภาพรวมการใช้ยา', 'icon' => 'LayoutDashboard', 'route' => 'drug-usage.index', 'order' => 9],
-            ['title' => 'รายงานรายการยา', 'icon' => 'ClipboardList', 'route' => 'drug-usage.report', 'order' => 10],
+            ['title' => 'คลังเวชภัณฑ์มิใช่ยา', 'icon' => 'Package', 'route' => 'pharmacy.supplies.index', 'order' => 3, 'permission_name' => 'pharmacy.inventory.index'],
+            ['title' => 'แจ้งเตือนการใช้ยา', 'icon' => 'AlertTriangle', 'route' => 'pharmacy.drug-alerts', 'order' => 4],
+            ['title' => 'ตัวชี้วัด RDU', 'icon' => 'Activity', 'route' => 'rdu.index', 'order' => 5],
+            ['title' => 'Case Audit', 'icon' => 'ClipboardList', 'route' => 'rdu.cases', 'order' => 6],
+            ['title' => 'การใช้ยารวม', 'icon' => 'Pill', 'route' => 'rdu.drugs', 'order' => 7],
+            ['title' => 'ยาปฏิชีวนะ', 'icon' => 'Syringe', 'route' => 'rdu.drugs.antibiotics', 'order' => 8],
+            ['title' => 'ตามแผนก/แพทย์', 'icon' => 'Building2', 'route' => 'rdu.drugs.by-department', 'order' => 9],
+            ['title' => 'ภาพรวมการใช้ยา', 'icon' => 'LayoutDashboard', 'route' => 'drug-usage.index', 'order' => 10],
+            ['title' => 'รายงานรายการยา', 'icon' => 'ClipboardList', 'route' => 'drug-usage.report', 'order' => 11],
         ], 'เภสัชกรรม');
 
         // Remove legacy drug-usage group under Quality (now under Pharmacy).
@@ -124,7 +128,21 @@ class SyncSidebarMenusSeeder extends Seeder
             ['title' => 'หลักสูตร', 'icon' => 'BookOpen', 'route' => 'km.learn.courses.index', 'order' => 2],
             ['title' => 'การอบรมของฉัน', 'icon' => 'User', 'route' => 'km.learn.my-training', 'order' => 3],
             ['title' => 'สมรรถนะของฉัน', 'icon' => 'Star', 'route' => 'km.learn.my-skills', 'order' => 4],
-        ], 'พัฒนาบุคลากร');
+            ['title' => 'แฟ้มประวัติ', 'icon' => 'FileText', 'route' => 'km.learn.passport', 'order' => 5],
+            ['title' => 'แผนพัฒนาของฉัน', 'icon' => 'ClipboardList', 'route' => 'km.learn.idp', 'order' => 6],
+            ['title' => 'ปฐมนิเทศ', 'icon' => 'CheckSquare', 'route' => 'km.learn.orientation', 'order' => 7],
+            ['title' => 'สำรวจความต้องการ', 'icon' => 'MessageSquare', 'route' => 'km.learn.tna', 'order' => 8],
+            ['title' => 'อนุมัติอบรมภายนอก', 'icon' => 'CheckCircle', 'route' => 'km.learn.external-approvals', 'order' => 9],
+            ['title' => 'มอบหมายหลักสูตร', 'icon' => 'Users', 'route' => 'km.learn.assignments', 'order' => 10],
+            ['title' => 'ความครบถ้วน', 'icon' => 'BarChart3', 'route' => 'km.learn.compliance', 'order' => 11],
+            ['title' => 'พจนานุกรมสมรรถนะ', 'icon' => 'Award', 'route' => 'km.learn.competencies', 'order' => 12],
+            ['title' => 'รวมแบบประเมิน', 'icon' => 'ClipboardList', 'route' => 'km.learn.assessments', 'order' => 13],
+            ['title' => 'แผนประจำปี', 'icon' => 'Calendar', 'route' => 'km.learn.plans', 'order' => 14],
+            ['title' => 'รายงาน HA', 'icon' => 'FileSpreadsheet', 'route' => 'km.learn.reports', 'order' => 15],
+            ['title' => 'ติดตามการนำไปใช้', 'icon' => 'Timer', 'route' => 'km.learn.behavior', 'order' => 16],
+            ['title' => 'ประเมินการทำงาน', 'icon' => 'ClipboardCheck', 'route' => 'km.learn.work-evaluations', 'order' => 18],
+            ['title' => 'แบบประเมินกลาง', 'icon' => 'FileText', 'route' => 'km.learn.satisfaction-template', 'order' => 17],
+        ], 'พัฒนาบุคลากร', 'km.learn.hub');
 
         $this->moveStaleLeaves($quality, [
             'quality-docs.index', 'quality-indicators.index', 'mra.index', 'ic.index',
@@ -183,10 +201,23 @@ class SyncSidebarMenusSeeder extends Seeder
             ['title' => 'ยื่นใบลา', 'icon' => 'Plus', 'route' => 'leave.create', 'order' => 2],
         ], 'ระบบบันทึกการลา');
 
+        $this->syncGroup($admin, ['จัดการงานเอกสาร'], 'จัดการงานเอกสาร', 'FileText', 8, [
+            ['title' => 'พิมพ์หนังสือราชการ', 'icon' => 'Mic', 'route' => 'admin-docs.memos.index', 'order' => 1],
+            ['title' => 'สรุปหนังสือด้วย AI', 'icon' => 'FileSignature', 'route' => 'admin-docs.ai_summarizer', 'order' => 2],
+            ['title' => 'ตั้งค่าหัวกระดาษ', 'icon' => 'Settings2', 'route' => 'admin-docs.memos.settings', 'order' => 3],
+        ], 'จัดการงานเอกสาร');
+
         $this->moveStaleLeaves($admin, [
             'rooms.index', 'rooms.calendar', 'maintenance.dashboard', 'vehicles.index',
             'documents.dashboard', 'equipment-borrowing.dashboard', 'leave.index',
         ]);
+
+        // FSHH-Q: sync เป็น root แยก (คงจาก migration) พร้อม permission
+        $this->syncGroupRoot(['ระบบคิว (FSHH-Q)', 'FSHH-Q', 'ระบบคิว'], 'ระบบคิว (FSHH-Q)', 'MonitorPlay', 99, [
+            ['title' => 'ตั้งค่าจอแสดงผล', 'icon' => 'Settings', 'route' => 'admin.tv.settings.edit', 'order' => 1],
+            ['title' => 'จัดการสื่อ/ประกาศ', 'icon' => 'Clapperboard', 'route' => 'admin.tv.playlist.index', 'order' => 2],
+            ['title' => 'ตั้งค่าห้องตรวจ', 'icon' => 'Stethoscope', 'route' => 'admin.tv.rooms.index', 'order' => 3],
+        ], 'ระบบคิว (FSHH-Q)');
 
         $techRoot = Menu::query()
             ->whereNull('parent_id')
@@ -196,6 +227,8 @@ class SyncSidebarMenusSeeder extends Seeder
             Menu::where('parent_id', $techRoot->id)->delete();
             $techRoot->delete();
         }
+
+        app(MenuPermissionSyncService::class)->sync();
 
         $this->command?->info('ซิงก์เมนูย่อยใน sidebar ตามโมดูลเรียบร้อยแล้ว');
     }
@@ -238,7 +271,7 @@ class SyncSidebarMenusSeeder extends Seeder
 
     /**
      * @param  list<string>  $titles
-     * @param  list<array{title:string,icon:string,route:string,order:int}>  $children
+     * @param  list<array{title:string,icon:string,route:string,order:int,permission_name?:string}>  $children
      */
     private function syncGroup(
         Menu $parent,
@@ -247,7 +280,8 @@ class SyncSidebarMenusSeeder extends Seeder
         string $icon,
         int $order,
         array $children,
-        string $permissionGroup
+        string $permissionGroup,
+        ?string $hubRoute = null,
     ): void {
         $group = Menu::query()
             ->where(function ($q) use ($titles, $title) {
@@ -260,18 +294,37 @@ class SyncSidebarMenusSeeder extends Seeder
         $data = [
             'title' => $title,
             'icon' => $icon,
-            'route' => null,
+            'route' => $hubRoute,
             'parent_id' => $parent->id,
             'order' => $order,
-            'permission_name' => null,
+            'permission_name' => $hubRoute,
         ];
 
         $group = $group ? tap($group)->update($data) : Menu::create($data);
+        if ($hubRoute) {
+            $this->ensurePermission($hubRoute, $permissionGroup);
+        }
         $this->syncChildren($group, $children, $permissionGroup);
     }
 
     /**
-     * @param  list<array{title:string,icon:string,route:string,order:int}>  $children
+     * @param  list<string>  $titles
+     * @param  list<array{title:string,icon:string,route:string,order:int,permission_name?:string}>  $children
+     */
+    private function syncGroupRoot(
+        array $titles,
+        string $title,
+        string $icon,
+        int $order,
+        array $children,
+        string $permissionGroup
+    ): void {
+        $group = $this->ensureGroup(null, $titles, $title, $icon, $order);
+        $this->syncChildren($group, $children, $permissionGroup);
+    }
+
+    /**
+     * @param  list<array{title:string,icon:string,route:string,order:int,permission_name?:string}>  $children
      */
     private function syncChildren(Menu $parent, array $children, string $permissionGroup, bool $deleteStale = true): void
     {
@@ -285,17 +338,19 @@ class SyncSidebarMenusSeeder extends Seeder
         }
 
         foreach ($children as $child) {
+            $permissionName = $child['permission_name'] ?? $child['route'];
+
             Menu::updateOrCreate(
                 ['parent_id' => $parent->id, 'route' => $child['route']],
                 [
                     'title' => $child['title'],
                     'icon' => $child['icon'],
                     'order' => $child['order'],
-                    'permission_name' => $child['route'],
+                    'permission_name' => $permissionName,
                 ]
             );
 
-            $this->ensurePermission($child['route'], $permissionGroup);
+            $this->ensurePermission($permissionName, $permissionGroup);
         }
     }
 

@@ -6,14 +6,7 @@ import {
   Wrench, 
   Car, 
   FileText, 
-  Settings,
   ChevronRight,
-  LayoutDashboard,
-  PlusCircle,
-  List,
-  Inbox,
-  Send,
-  CheckSquare,
   Building2,
   Stethoscope,
   ClipboardList
@@ -91,13 +84,16 @@ export default function AdminHub() {
     },
     {
       title: 'จัดการงานเอกสาร',
-      description: 'ระบบผู้ช่วย AI สรุปเนื้อหาเอกสารและแปลงเป็นไฟล์ Word',
+      description: 'พิมพ์บันทึกข้อความ หนังสือภายนอก และคำสั่งตามคำพูด แล้วดาวน์โหลดเป็นไฟล์ Word',
       icon: FileText,
       color: 'text-emerald-600',
       bg: 'bg-emerald-100',
       gradient: 'from-emerald-500 to-teal-500',
-      href: route('admin-docs.ai_summarizer'),
+      href: route('admin-docs.memos.index'),
       links: [
+        { label: 'พิมพ์หนังสือราชการ', href: route('admin-docs.memos.index') },
+        { label: 'เขียนหนังสือใหม่', href: route('admin-docs.memos.create') },
+        { label: 'ตั้งค่าหัวกระดาษ', href: route('admin-docs.memos.settings') },
         { label: 'สรุปหนังสือด้วย AI', href: route('admin-docs.ai_summarizer') },
       ]
     },

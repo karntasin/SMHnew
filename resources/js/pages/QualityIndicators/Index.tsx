@@ -42,6 +42,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Plus, Search, BarChart2, MoreVertical, Pencil, Trash, Trash2, FileDown, Upload, Link2, ClipboardCheck, Target, Layers, Copy, RotateCcw, List } from 'lucide-react';
 import { QualityPage, StatCard, Panel, StatusPill, EmptyState, qualityInput } from '@/components/quality/quality-ui';
 import IndicatorsSubNav from '@/pages/QualityIndicators/IndicatorsSubNav';
+import { formatIndicatorPeriod } from '@/components/ui/thai-date-picker';
 import { cn } from '@/lib/utils';
 
 const formatNum = (value: number | string | null | undefined, digits = 2): string => {
@@ -72,6 +73,7 @@ interface Indicator {
     category: string;
     unit: string;
     frequency: string;
+    series?: Array<{ key: string; label: string; target_operator: string; target_value: number }> | null;
     target_value: number;
     target_operator: string;
     is_active: boolean;
@@ -79,6 +81,7 @@ interface Indicator {
     formula_description: string;
     type?: string;
     entries_count?: number;
+    latest_entry?: { period_date: string; result_value: number | string | null; is_na?: boolean } | null;
     aliases_count?: number;
     is_master?: boolean;
     master_code?: string | null;
@@ -819,19 +822,7 @@ export default function Index({ indicators, type, view = 'list', trashCount = 0,
                                                 }
                                             />
                                         </div>
-                                        {indicator.category === 'แบบประเมินตนเอง SAR' ? (
-                                            <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50/80 px-2 py-0.5 text-xs font-semibold text-blue-700 w-fit">
-                                                <ClipboardCheck className="h-3.5 w-3.5" />
-                                                <span>แบบประเมินตนเอง SAR</span>
-                                            </div>
-                                        ) : indicator.category === 'แผนยุทธศาสตร์ รพ.' ? (
-                                            <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50/80 px-2 py-0.5 text-xs font-semibold text-amber-800 w-fit">
-                                                <Target className="h-3.5 w-3.5" />
-                                                <span>แผนยุทธศาสตร์ รพ.</span>
-                                            </div>
-                                        ) : (
-                                            <p className="mb-1 text-sm text-slate-500">{indicator.category || 'ทั่วไป'}</p>
-                                        )}
+                                        <h3 className="mb-1 line-clamp-2 text-base font-semibold text-slate-900">{indicator.name}</h3>
                                         <p className="mb-2 text-xs font-medium text-emerald-700">{ownerLabel(indicator)}</p>
                                         {(indicator.aliases_count ?? 0) > 0 || indicator.is_master === false ? (
                                             <p className="mb-4 inline-flex items-center gap-1 text-[11px] font-medium text-violet-700">
@@ -843,11 +834,31 @@ export default function Index({ indicators, type, view = 'list', trashCount = 0,
                                         ) : (
                                             <div className="mb-4" />
                                         )}
-                                        <div className="mt-auto flex justify-between border-t border-slate-100 pt-4 text-sm text-slate-600">
-                                            <span>
-                                                เป้าหมาย: {indicator.target_operator} {formatNum(indicator.target_value)} {indicator.unit}
-                                            </span>
-                                            <span className="text-slate-400">{indicator.frequency}</span>
+                                        <div className="mt-auto border-t border-slate-100 pt-4 text-sm text-slate-600">
+                                            {indicator.series && indicator.series.length > 0 ? (
+                                                <div className="space-y-0.5 text-xs">
+                                                    {indicator.series.map((item) => (
+                                                        <p key={item.key}>
+                                                            {item.label}: {item.target_operator} {formatNum(item.target_value)} {indicator.unit}
+                                                        </p>
+                                                    ))}
+                                                    <p className="text-right text-slate-400">{indicator.frequency}</p>
+                                                </div>
+                                            ) : (
+                                                <div className="flex justify-between">
+                                                    <span>
+                                                        เป้าหมาย: {indicator.target_operator} {formatNum(indicator.target_value)} {indicator.unit}
+                                                    </span>
+                                                    <span className="text-slate-400">{indicator.frequency}</span>
+                                                </div>
+                                            )}
+                                            <p className="mt-2 text-xs font-medium text-slate-700">
+                                                {indicator.latest_entry
+                                                    ? indicator.latest_entry.is_na
+                                                        ? `ผลล่าสุด N/A · ${formatIndicatorPeriod(indicator.latest_entry.period_date, indicator.frequency)}`
+                                                        : `ผลล่าสุด ${formatNum(indicator.latest_entry.result_value)} ${indicator.unit} · ${formatIndicatorPeriod(indicator.latest_entry.period_date, indicator.frequency)}`
+                                                    : 'ยังไม่มีผลวัด'}
+                                            </p>
                                         </div>
                                     </div>
                                 </Link>
@@ -1176,6 +1187,7 @@ export default function Index({ indicators, type, view = 'list', trashCount = 0,
                                             <SelectItem value="Monthly">รายเดือน</SelectItem>
                                             <SelectItem value="Quarterly">รายไตรมาส</SelectItem>
                                             <SelectItem value="Yearly">รายปี</SelectItem>
+                                            <SelectItem value="รายผลัด">รายผลัด</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>

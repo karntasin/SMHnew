@@ -114,6 +114,8 @@
                                                 <span class="status-badge status-pass">ผ่าน</span>
                                             @elseif ($row['latest_status'] === false)
                                                 <span class="status-badge status-fail">ไม่ผ่าน</span>
+                                            @elseif ($row['latest_status'] === 'na')
+                                                <span class="status-badge status-none">N/A</span>
                                             @else
                                                 <span class="status-none">-</span>
                                             @endif

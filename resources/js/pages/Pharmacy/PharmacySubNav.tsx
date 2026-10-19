@@ -1,10 +1,11 @@
 import { Link } from '@inertiajs/react';
 import { cn } from '@/lib/utils';
-import { AlertTriangle, LayoutDashboard, Pill, ClipboardList, Warehouse } from 'lucide-react';
+import { AlertTriangle, LayoutDashboard, Package, Pill, ClipboardList, Warehouse } from 'lucide-react';
 
 export type PharmacyChannel =
     | 'pharmacy.index'
     | 'pharmacy.inventory.index'
+    | 'pharmacy.supplies.index'
     | 'pharmacy.drug-alerts'
     | 'rdu.index'
     | 'drug-usage.index';
@@ -29,6 +30,13 @@ const channels: {
         hint: 'สต็อก · lot · QR',
         icon: Warehouse,
         matchPrefixes: ['pharmacy.inventory.'],
+    },
+    {
+        key: 'pharmacy.supplies.index',
+        label: 'คลังเวชภัณฑ์มิใช่ยา',
+        hint: 'นำเข้า · ตรวจนับ · ตัดจ่าย',
+        icon: Package,
+        matchPrefixes: ['pharmacy.supplies.'],
     },
     {
         key: 'pharmacy.drug-alerts',
@@ -68,7 +76,7 @@ export default function PharmacySubNav({ active }: { active: string }) {
                     เภสัชกรรม · ศูนย์พัฒนาคุณภาพ
                 </div>
             </div>
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                 {channels.map((tab) => {
                     const Icon = tab.icon;
                     const isActive = isChannelActive(tab, active);

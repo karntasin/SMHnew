@@ -3,6 +3,7 @@ import AppLayout from '@/layouts/app-layout';
 import { Head } from '@inertiajs/react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import FinanceSubNav from '@/pages/Finance/FinanceSubNav';
 
 export default function FinanceDashboard({ financeUrl }: { financeUrl: string }) {
     const [sessionId, setSessionId] = useState('');
@@ -22,6 +23,9 @@ export default function FinanceDashboard({ financeUrl }: { financeUrl: string })
             <Head title="แดชบอร์ด BMS" />
             
             <div className="flex flex-col h-[calc(100vh-4rem)]">
+                <div className="p-4 pb-0">
+                    <FinanceSubNav active="finance.dashboard" />
+                </div>
                 <div className="p-4 border-b bg-background flex items-center gap-4 shrink-0">
                     <div className="font-medium whitespace-nowrap">BMS Session ID:</div>
                     <Input 

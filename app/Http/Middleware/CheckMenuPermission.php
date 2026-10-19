@@ -84,6 +84,12 @@ class CheckMenuPermission
             return true;
         }
 
+        if ($user->can('km.learn.dashboard') || $user->can('km.learn.hub')) {
+            if (str_starts_with($permissionName, 'km.learn.')) {
+                return true;
+            }
+        }
+
         foreach ($this->legacyPermissionFallbacks($permissionName) as $fallback) {
             if ($user->can($fallback)) {
                 return true;

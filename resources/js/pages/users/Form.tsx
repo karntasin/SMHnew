@@ -10,6 +10,8 @@ import { Separator } from '@/components/ui/separator';
 import { BreadcrumbItem } from '@/types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MultiSelect } from '../../components/ui/multiselect';
+import DepartmentPicker, { type DepartmentOption } from '@/components/department-picker';
+import HaTeamPicker, { type HaTeamOption } from '@/components/ha-team-picker';
 import { User, Mail, Lock, Shield, ArrowLeft, Save } from 'lucide-react';
 
 interface Role {
@@ -23,17 +25,24 @@ interface UserData {
   email: string;
   role?: string;
   positions?: number[];
+  department_ids?: number[];
+  primary_department_id?: number | null;
+  ha_team_ids?: number[];
 }
 
 interface Props {
   user?: UserData;
   roles: Role[];
   positions: any[];
+  departments?: DepartmentOption[];
+  haTeams?: HaTeamOption[];
   currentRole?: string;
 }
 
-export default function UserForm({ user, roles, positions, currentRole }: Props) {
+export default function UserForm({ user, roles, positions, departments = [], haTeams = [], currentRole }: Props) {
   const isEdit = !!user;
+  const initialDeptIds = user?.department_ids || [];
+  const initialPrimary = user?.primary_department_id ?? initialDeptIds[0] ?? null;
 
   const { data, setData, post, put, processing, errors } = useForm({
     name: user?.name || '',
@@ -41,7 +50,47 @@ export default function UserForm({ user, roles, positions, currentRole }: Props)
     password: '',
     role: currentRole || '',
     positions: user?.positions || [],
+    department_ids: initialDeptIds,
+    primary_department_id: initialPrimary,
+    ha_team_ids: user?.ha_team_ids || [],
   });
+
+  const toggleDepartment = (deptId: number) => {
+    const next = data.department_ids.includes(deptId)
+      ? data.department_ids.filter((id) => id !== deptId)
+      : [...data.department_ids, deptId];
+    let primary = data.primary_department_id;
+    if (next.length === 1) {
+      primary = next[0];
+    } else if (primary === null || !next.includes(primary)) {
+      primary = next[0] ?? null;
+    }
+    setData({
+      ...data,
+      department_ids: next,
+      primary_department_id: primary,
+    });
+  };
+
+  const removeDepartment = (deptId: number) => {
+    const next = data.department_ids.filter((id) => id !== deptId);
+    setData({
+      ...data,
+      department_ids: next,
+      primary_department_id: data.primary_department_id === deptId ? next[0] ?? null : data.primary_department_id,
+    });
+  };
+
+  const toggleHaTeam = (teamId: number) => {
+    const next = data.ha_team_ids.includes(teamId)
+      ? data.ha_team_ids.filter((id) => id !== teamId)
+      : [...data.ha_team_ids, teamId];
+    setData('ha_team_ids', next);
+  };
+
+  const removeHaTeam = (teamId: number) => {
+    setData('ha_team_ids', data.ha_team_ids.filter((id) => id !== teamId));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,7 +114,7 @@ export default function UserForm({ user, roles, positions, currentRole }: Props)
             </Link>
             <h1 className="text-2xl font-bold tracking-tight">{isEdit ? 'แก้ไขผู้ใช้งาน' : 'สร้างผู้ใช้งานใหม่'}</h1>
             <p className="text-muted-foreground">
-              {isEdit ? 'อัปเดตข้อมูลผู้ใช้งานและการกำหนดบทบาท' : 'เพิ่มผู้ใช้งานใหม่เข้าสู่ระบบและกำหนดบทบาท'}
+              {isEdit ? 'อัปเดตข้อมูลผู้ใช้งาน แผนก ทีม และการกำหนดบทบาท' : 'เพิ่มผู้ใช้งานใหม่เข้าสู่ระบบ พร้อมแผนก ทีม และบทบาท'}
             </p>
           </div>
 
@@ -174,6 +223,25 @@ export default function UserForm({ user, roles, positions, currentRole }: Props)
                       placeholder="เลือกตำแหน่งงาน"
                     />
                     {errors.positions && <p className="text-sm text-red-500">{errors.positions}</p>}
+                  </div>
+
+                  <div className="space-y-6 md:col-span-2">
+                    <DepartmentPicker
+                      departments={departments}
+                      selectedIds={data.department_ids}
+                      primaryId={data.primary_department_id}
+                      onToggle={toggleDepartment}
+                      onRemove={removeDepartment}
+                      onSetPrimary={(id) => setData('primary_department_id', id)}
+                      error={errors.department_ids || errors.primary_department_id}
+                    />
+                    <HaTeamPicker
+                      teams={haTeams}
+                      selectedIds={data.ha_team_ids}
+                      onToggle={toggleHaTeam}
+                      onRemove={removeHaTeam}
+                      error={errors.ha_team_ids}
+                    />
                   </div>
                 </div>
 

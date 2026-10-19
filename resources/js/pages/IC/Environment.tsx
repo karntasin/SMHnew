@@ -31,6 +31,7 @@ import {
     AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { IcCharts, IcEditButton, IcPdfButton, dateInput, type IcChart } from '@/pages/IC/ic-ui';
 
 interface Check {
     id: number;
@@ -45,6 +46,8 @@ interface Check {
     sterilization_method: string | null;
     indicator_passed: boolean | null;
     corrective_action: string | null;
+    notes?: string | null;
+    can_edit?: boolean;
     reporter?: { name: string };
 }
 
@@ -67,13 +70,15 @@ interface Props {
         check_type?: string;
         result?: string;
     };
+    charts?: IcChart[];
 }
 
-export default function Environment({ checks, stats, filters }: Props) {
+export default function Environment({ checks, stats, filters, charts }: Props) {
     const [isOpen, setIsOpen] = useState(false);
+    const [editingId, setEditingId] = useState<number | null>(null);
     const [showFilters, setShowFilters] = useState(false);
 
-    const { data, setData, post, processing, reset } = useForm({
+    const { data, setData, post, put, processing, reset } = useForm({
         check_date: new Date().toISOString().split('T')[0],
         area_name: '',
         check_type: '',
@@ -90,13 +95,38 @@ export default function Environment({ checks, stats, filters }: Props) {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        post('/ic/environment', {
+        const options = {
             onSuccess: () => {
-                toast.success('บันทึกข้อมูลเรียบร้อยแล้ว');
+                toast.success(editingId ? 'อัปเดตข้อมูลเรียบร้อยแล้ว' : 'บันทึกข้อมูลเรียบร้อยแล้ว');
                 reset();
+                setEditingId(null);
                 setIsOpen(false);
             },
+        };
+        if (editingId) {
+            put(`/ic/environment/${editingId}`, options);
+            return;
+        }
+        post('/ic/environment', options);
+    };
+
+    const openEdit = (check: Check) => {
+        setEditingId(check.id);
+        setData({
+            check_date: dateInput(check.check_date),
+            area_name: check.area_name || '',
+            check_type: check.check_type || '',
+            sampling_site: check.sampling_site || '',
+            organism_found: check.organism_found || '',
+            result: check.result || 'pending',
+            cfu_count: check.cfu_count != null ? String(check.cfu_count) : '',
+            equipment_name: check.equipment_name || '',
+            sterilization_method: check.sterilization_method || '',
+            indicator_passed: check.indicator_passed == null ? '' : check.indicator_passed ? 'true' : 'false',
+            corrective_action: check.corrective_action || '',
+            notes: check.notes || '',
         });
+        setIsOpen(true);
     };
 
     const checkTypes = [
@@ -118,7 +148,7 @@ export default function Environment({ checks, stats, filters }: Props) {
     };
 
     const checkDialog = (
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <Dialog open={isOpen} onOpenChange={(open) => { setIsOpen(open); if (!open) { setEditingId(null); reset(); } }}>
             <DialogTrigger asChild>
                 <Button className="gap-2 rounded-xl bg-rose-600 hover:bg-rose-700">
                     <Plus className="h-4 w-4" /> บันทึกการตรวจ
@@ -267,7 +297,7 @@ export default function Environment({ checks, stats, filters }: Props) {
                                         </div>
 
                                         <Button type="submit" className="w-full rounded-xl bg-rose-600 hover:bg-rose-700" disabled={processing}>
-                                            บันทึกข้อมูล
+                                            {editingId ? 'บันทึกการแก้ไข' : 'บันทึกข้อมูล'}
                                         </Button>
                                     </form>
                                 </DialogContent>
@@ -288,8 +318,14 @@ export default function Environment({ checks, stats, filters }: Props) {
                 { title: 'สิ่งแวดล้อม', href: '/ic/environment' },
             ]}
             subNav={<IcSubNav active="ic.environment" />}
-            actions={checkDialog}
+            actions={
+                <div className="flex flex-wrap gap-2">
+                    <IcPdfButton module="environment" />
+                    {checkDialog}
+                </div>
+            }
         >
+            <IcCharts charts={charts} />
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                 <StatCard label="ตรวจทั้งหมด" value={stats.total_checks} icon={Microscope} tone="slate" />
                 <StatCard label="เดือนนี้" value={stats.this_month} icon={Clock} tone="sky" />
@@ -388,11 +424,12 @@ export default function Environment({ checks, stats, filters }: Props) {
                                             <th className="p-3">ผล</th>
                                             <th className="p-3">เชื้อที่พบ</th>
                                             <th className="p-3">ผู้บันทึก</th>
+                                            <th className="p-3"></th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {checks.data.length === 0 ? (
-                                            <tr><td colSpan={7}><EmptyState text="ไม่พบข้อมูล" /></td></tr>
+                                            <tr><td colSpan={8}><EmptyState text="ไม่พบข้อมูล" /></td></tr>
                                         ) : (
                                             checks.data.map((check) => (
                                                 <tr key={check.id} className="border-t border-slate-100 hover:bg-slate-50/60">
@@ -403,6 +440,7 @@ export default function Environment({ checks, stats, filters }: Props) {
                                                     <td className="p-3">{getResultBadge(check.result)}</td>
                                                     <td className="p-3">{check.organism_found || '-'}</td>
                                                     <td className="p-3">{check.reporter?.name || '-'}</td>
+                                                    <td className="p-3">{check.can_edit && <IcEditButton onClick={() => openEdit(check)} />}</td>
                                                 </tr>
                                             ))
                                         )}

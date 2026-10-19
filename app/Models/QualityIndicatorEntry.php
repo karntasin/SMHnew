@@ -9,10 +9,12 @@ class QualityIndicatorEntry extends Model
 {
     protected $fillable = [
         'quality_indicator_id',
+        'series_key',
         'period_date',
         'numerator',
         'denominator',
         'result_value',
+        'is_na',
         'notes',
         'created_by',
     ];
@@ -22,6 +24,7 @@ class QualityIndicatorEntry extends Model
         'numerator' => 'decimal:2',
         'denominator' => 'decimal:2',
         'result_value' => 'decimal:2',
+        'is_na' => 'boolean',
     ];
 
     public function indicator(): BelongsTo

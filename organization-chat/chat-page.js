@@ -1,5 +1,5 @@
 /**
- * FSHH Chat — LIFF Chat UI (HTML page for Cloudflare Worker)
+ * S-Chat — LIFF Chat UI (HTML page for Cloudflare Worker)
  */
 
 import { STICKER_PACK } from './stickers.js';
@@ -8,6 +8,7 @@ export function buildChatPage(origin, config) {
   const LIFF_ID = JSON.stringify(config.LIFF_ID);
   const WORKER_ORIGIN = JSON.stringify(origin);
   const STICKERS_JSON = JSON.stringify(STICKER_PACK);
+  const VAPID_PUBLIC_KEY = JSON.stringify(config.VAPID_PUBLIC_KEY || '');
 
   return `<!DOCTYPE html>
 <html lang="th">
@@ -18,11 +19,11 @@ export function buildChatPage(origin, config) {
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="FSHH Chat">
-  <title>FSHH Chat</title>
-  <link rel="manifest" href="/manifest.webmanifest">
-  <link id="dynamicFavicon" rel="icon" href="/favicon.png" type="image/png">
-  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <meta name="apple-mobile-web-app-title" content="S-Chat">
+  <title>S-Chat</title>
+  <link rel="manifest" href="/manifest.webmanifest?v=4">
+  <link id="dynamicFavicon" rel="icon" href="/icons/mark.svg?v=2" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/s-chat-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -104,6 +105,14 @@ export function buildChatPage(origin, config) {
       box-shadow: var(--glow);
       font-family: Orbitron, sans-serif;
     }
+    .brand-mark {
+      display: block; width: 88px; height: 88px; margin: 0 auto 16px;
+      filter: drop-shadow(0 10px 22px rgba(34, 211, 238, 0.28));
+    }
+    .brand-mark.sm {
+      width: 38px; height: 38px; margin: 0; flex-shrink: 0;
+      filter: drop-shadow(0 0 10px rgba(34, 211, 238, 0.4));
+    }
     .login-card h1 {
       margin: 0 0 6px; font-size: 1.35rem;
       font-family: Orbitron, "Noto Sans Thai", sans-serif;
@@ -176,7 +185,8 @@ export function buildChatPage(origin, config) {
       padding-top: max(10px, env(safe-area-inset-top));
       display: flex; align-items: center; gap: 10px; z-index: 10;
     }
-    .header-brand { flex: 1; min-width: 0; }
+    .header-brand { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; }
+    .header-brand-text { min-width: 0; }
     .app-header h1 {
       margin: 0; font-size: 0.95rem;
       font-family: Orbitron, "Noto Sans Thai", sans-serif;
@@ -490,6 +500,46 @@ export function buildChatPage(origin, config) {
       cursor: pointer;
       white-space: nowrap;
     }
+    .notify-gate {
+      position: fixed; inset: 0; z-index: 80;
+      background: rgba(4, 10, 18, 0.86);
+      display: flex; align-items: center; justify-content: center;
+      padding: 24px;
+    }
+    .notify-gate.hidden { display: none !important; }
+    .btn-install {
+      margin-top: 10px;
+      width: 100%;
+      background: transparent;
+      color: var(--cyan);
+      border: 1px solid var(--border);
+    }
+    .ios-install {
+      margin-top: 18px;
+      padding: 14px 16px;
+      text-align: left;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      background: rgba(8, 18, 32, 0.96);
+      color: var(--text);
+    }
+    .ios-install.hidden { display: none !important; }
+    .ios-install-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      margin-bottom: 8px;
+    }
+    .ios-install-title { font-weight: 800; }
+    .ios-install-close {
+      border: 0; background: transparent; color: var(--muted);
+      font-weight: 700; cursor: pointer; padding: 4px 8px;
+    }
+    .ios-install ol { margin: 0; padding-left: 1.2rem; color: var(--muted); font-size: 0.86rem; }
+    .ios-install li { margin: 4px 0; }
+    .ios-install p { margin: 0 0 10px; color: var(--muted); font-size: 0.86rem; line-height: 1.45; }
+    .ios-install button.copy-link {
+      border: 0; border-radius: 999px; background: var(--cyan); color: #041018;
+      font-weight: 800; padding: 8px 12px; cursor: pointer;
+    }
     .msg-row.pending .msg-bubble { opacity: .65; }
     .msg-row.failed .msg-bubble {
       border-color: rgba(251, 113, 133, 0.5) !important;
@@ -567,6 +617,99 @@ export function buildChatPage(origin, config) {
     .msg-card-label { color: #8aa0b8; }
     .msg-time { font-size: 0.66rem; color: #6b8299; margin-top: 4px; padding: 0 4px; }
     .msg-row.mine .msg-time { text-align: right; color: #7dd3fc; }
+    .msg-tools { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+    .msg-row.mine .msg-tools { justify-content: flex-end; }
+    .msg-tools .msg-time { margin-top: 0; }
+    .msg-read { font-size: 0.66rem; color: #67e8f9; text-align: right; margin-top: 2px; }
+    .msg-unsend {
+      border: 1px solid rgba(251, 113, 133, 0.45);
+      background: rgba(251, 113, 133, 0.12);
+      color: #fda4af;
+      font-size: 0.78rem;
+      font-weight: 700;
+      cursor: pointer;
+      padding: 6px 12px;
+      min-height: 32px;
+      border-radius: 999px;
+    }
+    .msg-unsend:hover { color: #fff; background: rgba(251, 113, 133, 0.28); }
+    .unsend-menu {
+      position: fixed; z-index: 80;
+      min-width: 168px;
+      padding: 6px;
+      border-radius: 14px;
+      background: rgba(12, 24, 42, 0.96);
+      border: 1px solid rgba(251, 113, 133, 0.35);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+    }
+    .unsend-menu.hidden { display: none !important; }
+    .unsend-menu button {
+      width: 100%;
+      min-height: 40px;
+      border: 0;
+      border-radius: 10px;
+      background: rgba(251, 113, 133, 0.14);
+      color: #fda4af;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .unsend-menu button:hover { color: #fff; background: rgba(251, 113, 133, 0.32); }
+    .unsend-confirm {
+      position: fixed; inset: 0; z-index: 90;
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px;
+      background: rgba(8, 14, 24, 0.62);
+      backdrop-filter: blur(6px);
+    }
+    .unsend-confirm.hidden { display: none !important; }
+    .unsend-confirm-card {
+      width: min(360px, 100%);
+      padding: 28px 22px 20px;
+      text-align: center;
+      border-radius: 24px;
+      background: linear-gradient(180deg, #1a2433 0%, #121a26 100%);
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      box-shadow: 0 24px 60px rgba(2, 8, 18, 0.55);
+    }
+    .unsend-sad {
+      width: 72px; height: 72px; margin: 0 auto 14px;
+      color: #94a3b8;
+    }
+    .unsend-sad svg { width: 100%; height: 100%; display: block; }
+    .unsend-confirm-card p {
+      margin: 0 0 20px;
+      color: #cbd5e1;
+      font-size: 1.02rem;
+      line-height: 1.55;
+    }
+    .unsend-confirm-actions { display: flex; gap: 10px; }
+    .unsend-confirm-actions button {
+      flex: 1; min-height: 44px; border-radius: 14px;
+      font-weight: 700; cursor: pointer;
+    }
+    #unsendConfirmCancel {
+      background: transparent;
+      color: #94a3b8;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+    }
+    #unsendConfirmOk {
+      background: #3f4c5f;
+      color: #e2e8f0;
+      border: 0;
+    }
+    .msg-row.unsent .msg-bubble {
+      background: transparent !important;
+      border: 1px dashed rgba(148, 163, 184, 0.45) !important;
+      color: #94a3b8 !important;
+      box-shadow: none !important;
+      font-style: italic;
+    }
+    .typing-bar {
+      padding: 6px 16px 0;
+      font-size: 0.78rem;
+      color: var(--cyan);
+    }
+    .typing-bar.hidden { display: none; }
 
     .composer {
       flex-shrink: 0; display: flex; gap: 8px; padding: 10px 12px;
@@ -657,12 +800,8 @@ export function buildChatPage(origin, config) {
       flex: 1; display: flex; flex-direction: column; align-items: center;
       justify-content: center; color: var(--muted); text-align: center; padding: 24px;
     }
-    .chat-placeholder .icon {
-      width: 72px; height: 72px; margin-bottom: 14px; border-radius: 18px;
-      display: flex; align-items: center; justify-content: center;
-      font-family: Orbitron, sans-serif; font-size: 1.4rem; color: var(--cyan);
-      border: 1px solid var(--border); background: var(--cyan-dim);
-      box-shadow: var(--glow);
+    .chat-placeholder .brand-mark {
+      width: 84px; height: 84px; margin: 0 0 14px;
     }
 
     .ai-fab {
@@ -756,6 +895,7 @@ export function buildChatPage(origin, config) {
       .btn-logout { padding: 8px 12px; font-size: 0.78rem; }
       .app-header h1 { font-size: 0.85rem; }
       #view-app.show-chat .ai-fab { bottom: calc(96px + env(safe-area-inset-bottom)); }
+      #view-app.show-chat .messages { padding-bottom: 84px; }
       .ai-panel {
         right: 8px; left: 8px; width: auto; bottom: 12px;
         height: min(78vh, calc(100vh - 24px));
@@ -775,28 +915,78 @@ export function buildChatPage(origin, config) {
   </style>
 </head>
 <body>
+<div id="unsendMenu" class="unsend-menu hidden" role="menu">
+  <button type="button" onclick="confirmUnsendFromMenu()">ยกเลิกข้อความ</button>
+</div>
+<div id="unsendConfirm" class="unsend-confirm hidden" role="dialog" aria-modal="true" aria-labelledby="unsendConfirmText">
+  <div class="unsend-confirm-card">
+    <div class="unsend-sad" aria-hidden="true">
+      <svg viewBox="0 0 80 80" fill="none">
+        <circle cx="40" cy="40" r="30" stroke="currentColor" stroke-width="2.5"/>
+        <path d="M27 36c1.4-3 3.4-4.4 5.6-4.4 2.2 0 4.2 1.4 5.6 4.4" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+        <path d="M41.8 36c1.4-3 3.4-4.4 5.6-4.4 2.2 0 4.2 1.4 5.6 4.4" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+        <path d="M28 54c3.4-5 8.2-7.4 12-7.4s8.6 2.4 12 7.4" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+        <path d="M54 42c1.2 3.2.4 6.2-1.6 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <p id="unsendConfirmText">บางอย่างยกเลิกไปแล้ว จะเสียดายไม่ได้นะ</p>
+    <div class="unsend-confirm-actions">
+      <button type="button" id="unsendConfirmCancel">ยังไม่ยกเลิก</button>
+      <button type="button" id="unsendConfirmOk">ยกเลิกเลย</button>
+    </div>
+  </div>
+</div>
 <div id="toastStack" class="toast-stack"></div>
+<div id="notifyGate" class="notify-gate hidden">
+  <div class="login-card">
+    <div class="login-logo">!</div>
+    <h1>เปิดการแจ้งเตือน</h1>
+    <p>อนุญาตการแจ้งเตือนเพื่อให้ไอคอนแอปขึ้นป้ายแดงและมีเสียงเมื่อมีข้อความใหม่</p>
+    <button type="button" class="btn btn-line" onclick="enableNotifications()">อนุญาตการแจ้งเตือน</button>
+  </div>
+</div>
 
 <div id="view-login">
   <div class="login-card">
-    <div class="login-logo">FS</div>
+    <img class="brand-mark" src="/icons/mark.svg" alt="S-Chat">
     <div class="tag">SECURE CHANNEL</div>
-    <h1>FSHH Chat</h1>
+    <h1>S-Chat</h1>
     <p>ระบบแชทภายในองค์กร<br>ยืนยันตัวตนด้วย LINE เพื่อเข้าใช้งาน</p>
     <button class="btn btn-line" id="btnLogin" onclick="loginLINE()">เข้าสู่ระบบด้วย LINE</button>
+    <button type="button" class="btn btn-install hidden" id="btnLoginWeb" onclick="loginLINEWeb()">กรอกบัญชีในหน้านี้</button>
+    <button type="button" class="btn btn-install hidden" id="btnInstall" onclick="installApp()">ติดตั้งแอป</button>
     <div id="loginStatus" class="status-msg hidden"></div>
+    <div id="iosInstallGuide" class="ios-install hidden">
+      <div class="ios-install-head">
+        <div class="ios-install-title">ติดตั้งบน iPhone</div>
+        <button type="button" class="ios-install-close" onclick="dismissIosInstallGuide()">ปิด</button>
+      </div>
+      <div id="iosInstallChrome" class="hidden">
+        <p>Chrome บน iPhone ติดตั้งและแจ้งเตือนไม่ได้ ให้คัดลอกลิงก์ไปเปิดใน Safari แล้วเพิ่มไปที่หน้าจอโฮม</p>
+        <button type="button" class="copy-link" onclick="copyIosLink()">คัดลอกลิงก์</button>
+      </div>
+      <ol id="iosInstallSteps">
+        <li>ลบไอคอน S-Chat เดิมออกจากหน้าจอโฮม ถ้ามีอยู่แล้ว</li>
+        <li>ใน Safari แตะปุ่มแชร์ แล้วเลือก เพิ่มไปยังหน้าจอโฮม</li>
+        <li>เปิดสวิตช์ เปิดเป็นเว็บแอป แล้วแตะเพิ่ม</li>
+        <li>เปิดจากไอคอนที่ไม่มีแถบที่อยู่ของ Safari แล้วกดอนุญาตการแจ้งเตือน</li>
+      </ol>
+    </div>
   </div>
 </div>
 
 <div id="view-app" class="hidden">
   <header class="app-header">
     <div class="header-brand">
-      <h1>FSHH Chat</h1>
+      <img class="brand-mark sm" src="/icons/mark.svg" alt="">
+      <div class="header-brand-text">
+      <h1>S-Chat</h1>
       <div class="header-live">
         <span class="pulse"></span>
         <span>ONLINE</span>
         <span>·</span>
         <span class="me-name" id="headerMe">-</span>
+      </div>
       </div>
     </div>
     <div class="header-actions">
@@ -839,7 +1029,7 @@ export function buildChatPage(origin, config) {
 
     <main id="panel-chat" class="panel">
       <div id="chatEmpty" class="chat-placeholder">
-        <div class="icon">CHAT</div>
+        <img class="brand-mark" src="/icons/mark.svg" alt="">
         <div>เลือกแชท เพื่อน หรือกลุ่ม<br>เพื่อเริ่มคุย</div>
       </div>
       <div id="chatActive" class="hidden" style="display:flex;flex-direction:column;flex:1;min-height:0">
@@ -856,6 +1046,7 @@ export function buildChatPage(origin, config) {
         <div id="stickerPanel" class="sticker-panel hidden">
           <div class="sticker-grid" id="stickerGrid"></div>
         </div>
+        <div id="typingBar" class="typing-bar hidden" aria-live="polite"></div>
         <div class="composer">
           <input type="file" id="fileInput" class="hidden"
             accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt"
@@ -863,6 +1054,7 @@ export function buildChatPage(origin, config) {
           <button type="button" class="btn-attach" id="btnAttach" onclick="pickChatFile()" title="แนบไฟล์">📎</button>
           <button type="button" class="btn-sticker" id="btnSticker" onclick="toggleStickerPanel()" title="สติกเกอร์">☺</button>
           <input type="text" id="messageInput" placeholder="พิมพ์ข้อความ..." maxlength="2000"
+            oninput="onComposerInput()"
             onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage()}"
             onpaste="onPasteFile(event)">
           <button class="btn-send" id="btnSend" onclick="sendMessage()" title="ส่ง">➤</button>
@@ -871,15 +1063,15 @@ export function buildChatPage(origin, config) {
     </main>
   </div>
 
-  <button type="button" id="aiFab" class="ai-fab" onclick="toggleAiPanel()" title="ผู้ช่วย FSHH" aria-label="เปิดผู้ช่วย FSHH">
+  <button type="button" id="aiFab" class="ai-fab" onclick="toggleAiPanel()" title="ผู้ช่วย S-Chat" aria-label="เปิดผู้ช่วย S-Chat">
     <span class="ai-fab-ring"></span>
     <span class="ai-fab-ico">Ai</span>
   </button>
-  <div id="aiPanel" class="ai-panel hidden" role="dialog" aria-label="ผู้ช่วย FSHH">
+  <div id="aiPanel" class="ai-panel hidden" role="dialog" aria-label="ผู้ช่วย S-Chat">
     <div class="ai-head">
       <div class="ai-head-mark">AI</div>
       <div>
-        <h2>ผู้ช่วย FSHH</h2>
+        <h2>ผู้ช่วย S-Chat</h2>
         <p>เว็บแอปกับเว็บสาธารณะแยกชุดกัน · ไม่ผสมข้อมูล</p>
       </div>
       <button type="button" class="ai-head-close" onclick="toggleAiPanel()" aria-label="ปิด">×</button>
@@ -924,6 +1116,7 @@ export function buildChatPage(origin, config) {
 const LIFF_ID = ${LIFF_ID};
 const WORKER_ORIGIN = ${WORKER_ORIGIN};
 const STICKERS = ${STICKERS_JSON};
+const VAPID_PUBLIC_KEY = ${VAPID_PUBLIC_KEY};
 const API_BASE = WORKER_ORIGIN + '/api/gas';
 const STORAGE_SESSION = 'organization_chat_session';
 const STORAGE_USER = 'organization_chat_user';
@@ -954,6 +1147,12 @@ const state = {
   _pollBaselineSet: false,
   audioReady: false,
   sending: false,
+  readCursors: [],
+  typingUsers: [],
+  _receiptId: '',
+  _typingOn: false,
+  _typingSentAt: 0,
+  _typingTimer: null,
   notifyReady: false,
   aiOpen: false,
   aiBusy: false,
@@ -1025,6 +1224,7 @@ function messagePreviewLabel(m) {
     }
     return m.lastMessage || m.message || 'แจ้งเตือน';
   }
+  if (type === 'unsent') return 'ยกเลิกข้อความแล้ว';
   return m.message || m.lastMessage || '';
 }
 
@@ -1218,6 +1418,7 @@ function setLoginStatus(msg, type) {
 function showApp(show) {
   document.getElementById('view-login').classList.toggle('hidden', show);
   document.getElementById('view-app').classList.toggle('hidden', !show);
+  updateIosInstallGuide();
 }
 
 function showToast(title, body, onClick) {
@@ -1235,9 +1436,9 @@ function showToast(title, body, onClick) {
   setTimeout(function() { if (el.parentNode) el.remove(); }, 6000);
 }
 
-var _originalDocTitle = 'FSHH Chat';
+var _originalDocTitle = 'S-Chat';
 var _titleBlinkTimer = null;
-var _originalFaviconHref = '/favicon.png';
+var _originalFaviconHref = '/icons/mark.svg?v=2';
 
 function unlockAudio() {
   try {
@@ -1404,6 +1605,133 @@ function alertNewMessage(senderLabel, preview, conversationId, senderUser) {
   updateTitleBadge(state.lastUnread || 1, senderLabel + ': ' + preview);
 }
 
+function isStandaloneApp() {
+  if (window.navigator.standalone === true) return true;
+  if (window.matchMedia('(display-mode: standalone)').matches) return true;
+  if (window.matchMedia('(display-mode: fullscreen)').matches) return true;
+  return false;
+}
+
+function iosCanRequestNotification() {
+  return ('Notification' in window) && typeof Notification.requestPermission === 'function';
+}
+
+function isIosDevice() {
+  var ua = navigator.userAgent || '';
+  if (/iPhone|iPad|iPod/i.test(ua)) return true;
+  return /Macintosh/i.test(ua) && navigator.maxTouchPoints > 1;
+}
+
+function isIosChrome() {
+  return isIosDevice() && /CriOS|FxiOS|EdgiOS/i.test(navigator.userAgent || '');
+}
+
+function isLineInAppBrowser() {
+  var ua = navigator.userAgent || '';
+  if (ua.indexOf('Line/') >= 0) return true;
+  return liffInClient();
+}
+
+function shouldForceIosSafari() {
+  return isIosDevice() && !isStandaloneApp() && !iosCanRequestNotification() && isLineInAppBrowser();
+}
+
+function explainIosHomeScreenApp() {
+  alert('ลบไอคอน S-Chat เดิมออกก่อน แล้วเปิด Safari แตะแชร์ เลือกเพิ่มไปยังหน้าจอโฮม เปิดสวิตช์ เปิดเป็นเว็บแอป แล้วเปิดจากไอคอนที่ไม่มีแถบที่อยู่ของ Safari จากนั้นกดอนุญาตการแจ้งเตือน');
+}
+
+function openChatInSafari(sessionToken) {
+  var url = lineLoginRedirectUri();
+  if (sessionToken) {
+    url += (url.indexOf('?') >= 0 ? '&' : '?') + 'appSession=' + encodeURIComponent(sessionToken);
+  }
+  setLoginStatus('กำลังเปิด Safari...', '');
+  try {
+    if (typeof liff !== 'undefined' && typeof liff.openWindow === 'function') {
+      liff.openWindow({ url: url, external: true });
+    }
+  } catch (ignore) {}
+}
+
+function isMobileDevice() {
+  var ua = navigator.userAgent || '';
+  if (/Android|iPhone|iPad|iPod/i.test(ua)) return true;
+  if (isIosDevice()) return true;
+  if (navigator.userAgentData && navigator.userAgentData.mobile) return true;
+  return false;
+}
+
+function dismissIosInstallGuide() {
+  try { localStorage.setItem('fshh_hide_ios_install', '1'); } catch (ignore) {}
+  var box = document.getElementById('iosInstallGuide');
+  if (box) box.classList.add('hidden');
+}
+
+function updateIosInstallGuide() {
+  var box = document.getElementById('iosInstallGuide');
+  if (!box) return;
+  var dismissed = false;
+  try { dismissed = localStorage.getItem('fshh_hide_ios_install') === '1'; } catch (ignore) {}
+  var login = document.getElementById('view-login');
+  var onLogin = login && !login.classList.contains('hidden');
+  var show = isIosDevice() && !isStandaloneApp() && !dismissed && onLogin;
+  box.classList.toggle('hidden', !show);
+  var chromeNote = document.getElementById('iosInstallChrome');
+  var steps = document.getElementById('iosInstallSteps');
+  var inChrome = isIosChrome();
+  if (chromeNote) chromeNote.classList.toggle('hidden', !inChrome);
+  if (steps) steps.classList.toggle('hidden', inChrome);
+}
+
+function copyIosLink() {
+  var url = location.origin + '/chat';
+  var done = function() { showToast('คัดลอกลิงก์แล้ว', 'เปิด Safari แล้ววางลิงก์นี้'); };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(done).catch(function() { window.prompt('คัดลอกลิงก์นี้ไปเปิดใน Safari', url); });
+    return;
+  }
+  window.prompt('คัดลอกลิงก์นี้ไปเปิดใน Safari', url);
+}
+
+function showNotifyGate(show) {
+  var el = document.getElementById('notifyGate');
+  if (el) el.classList.toggle('hidden', !show);
+}
+
+function urlBase64ToUint8Array(base64String) {
+  var padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  var base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  var raw = atob(base64);
+  var out = new Uint8Array(raw.length);
+  for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+function subscribePush() {
+  if (!state.sessionToken || !VAPID_PUBLIC_KEY) return Promise.resolve();
+  if (!('Notification' in window) || Notification.permission !== 'granted') return Promise.resolve();
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return Promise.resolve();
+  return registerChatServiceWorker().then(function(reg) {
+    if (!reg || !reg.pushManager) return null;
+    return reg.pushManager.getSubscription().then(function(existing) {
+      if (existing) return existing;
+      return reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      });
+    });
+  }).then(function(sub) {
+    if (!sub) return;
+    var json = sub.toJSON();
+    var keys = json.keys || {};
+    return apiCall('savePushSubscription', {
+      endpoint: json.endpoint,
+      p256dh: keys.p256dh,
+      auth: keys.auth,
+    }, 'POST');
+  }).catch(function() {});
+}
+
 function updateNotifyUi() {
   var denied = ('Notification' in window) && Notification.permission === 'denied';
   var granted = state.notifyReady || (('Notification' in window) && Notification.permission === 'granted');
@@ -1411,24 +1739,83 @@ function updateNotifyUi() {
   var banner = document.getElementById('notifyBanner');
   if (btn) btn.classList.toggle('hidden', granted || denied);
   if (banner) banner.classList.toggle('hidden', granted || denied);
+  if (granted || denied) showNotifyGate(false);
+}
+
+function finishNotifyGrant() {
+  state.notifyReady = true;
+  updateNotifyUi();
+  subscribePush();
+  setUnreadBadge(state.lastUnread || 0);
+  browserNotify('S-Chat', 'เปิดการแจ้งเตือนแล้ว — จะแจ้งเมื่อมีข้อความใหม่', null, true);
+  showToast('การแจ้งเตือน', 'เปิดใช้งานแล้ว');
 }
 
 function enableNotifications() {
   unlockAudio();
   registerChatServiceWorker();
-  if (!('Notification' in window)) {
+  if (!iosCanRequestNotification()) {
+    if (isIosDevice()) {
+      updateIosInstallGuide();
+      explainIosHomeScreenApp();
+      return;
+    }
     alert('เบราว์เซอร์นี้ไม่รองรับการแจ้งเตือน');
     return;
   }
   Notification.requestPermission().then(function(p) {
+    if (p === 'granted') {
+      finishNotifyGrant();
+      return;
+    }
+    state.notifyReady = false;
+    updateNotifyUi();
+    if (p === 'denied') {
+      showNotifyGate(false);
+      alert(isIosDevice()
+        ? 'ถูกปฏิเสธการแจ้งเตือน — เปิดได้ที่ การตั้งค่า > การแจ้งเตือน > S-Chat'
+        : 'ถูกปฏิเสธการแจ้งเตือน — เปิดได้ในการตั้งค่า Chrome ของเว็บไซต์นี้');
+      return;
+    }
+    showNotifyGate(true);
+  }).catch(function() {
+    showNotifyGate(true);
+  });
+}
+
+function requestNotifyOnInstall(allowGate) {
+  unlockAudio();
+  registerChatServiceWorker();
+  if (!('Notification' in window)) return Promise.resolve();
+  if (Notification.permission === 'granted') {
+    state.notifyReady = true;
+    updateNotifyUi();
+    subscribePush();
+    setUnreadBadge(state.lastUnread || 0);
+    return Promise.resolve();
+  }
+  if (Notification.permission === 'denied') {
+    updateNotifyUi();
+    return Promise.resolve();
+  }
+  var asked;
+  try {
+    asked = Notification.requestPermission();
+  } catch (e) {
+    if (allowGate !== false) showNotifyGate(true);
+    return Promise.resolve();
+  }
+  return Promise.resolve(asked).then(function(p) {
     state.notifyReady = p === 'granted';
     updateNotifyUi();
     if (p === 'granted') {
-      browserNotify('FSHH Chat', 'เปิดการแจ้งเตือนแล้ว — จะแจ้งเมื่อมีข้อความใหม่', null, true);
-      showToast('การแจ้งเตือน', 'เปิดใช้งานแล้ว');
-    } else if (p === 'denied') {
-      alert('ถูกปฏิเสธการแจ้งเตือน — เปิดได้ในการตั้งค่า Chrome ของเว็บไซต์นี้');
+      subscribePush();
+      setUnreadBadge(state.lastUnread || 0);
+      return;
     }
+    if (p === 'default' && allowGate !== false) showNotifyGate(true);
+  }).catch(function() {
+    if (allowGate !== false) showNotifyGate(true);
   });
 }
 
@@ -1438,9 +1825,34 @@ function requestNotifyPermission() {
   if (Notification.permission === 'granted') {
     state.notifyReady = true;
     updateNotifyUi();
+    subscribePush();
+    setUnreadBadge(state.lastUnread || 0);
     return;
   }
-  // Do not auto-prompt on load (mobile browsers block it). Show UI instead.
+  if (Notification.permission === 'denied') return;
+  if (isIosDevice() || isStandaloneApp()) requestNotifyOnInstall();
+}
+
+var deferredInstallPrompt = null;
+
+function installApp() {
+  var permPromise = null;
+  if ('Notification' in window && Notification.permission === 'default') {
+    try { permPromise = Notification.requestPermission(); } catch (e) {}
+  }
+  var promptDone = deferredInstallPrompt
+    ? deferredInstallPrompt.prompt()
+    : Promise.resolve();
+  Promise.resolve(promptDone).then(function() {
+    if (deferredInstallPrompt && deferredInstallPrompt.userChoice) return deferredInstallPrompt.userChoice;
+  }).catch(function() {}).then(function() {
+    deferredInstallPrompt = null;
+    var btn = document.getElementById('btnInstall');
+    if (btn) btn.classList.add('hidden');
+    return permPromise;
+  }).then(function() {
+    return requestNotifyOnInstall();
+  });
 }
 
 function registerChatServiceWorker() {
@@ -1460,12 +1872,14 @@ function registerChatServiceWorker() {
 function browserNotify(title, body, conversationId, force) {
   if (!('Notification' in window)) return;
   if (Notification.permission !== 'granted' && !state.notifyReady) return;
-  if (!force && document.visibilityState === 'visible' && document.hasFocus()) return;
+  var viewingRoom = state.active && conversationId
+    && String(state.active.conversationId) === String(conversationId);
+  if (!force && viewingRoom && document.visibilityState === 'visible' && document.hasFocus()) return;
 
   var payload = {
     body: body || '',
-    icon: '/icons/icon-192.png',
-    badge: '/icons/icon-192.png',
+    icon: '/icons/s-chat-192.png',
+    badge: '/icons/badge-96.png?v=3',
     tag: conversationId ? ('chat-' + conversationId) : 'org-chat',
     renotify: true,
     vibrate: [120, 60, 120],
@@ -1474,10 +1888,10 @@ function browserNotify(title, body, conversationId, force) {
 
   registerChatServiceWorker().then(function(reg) {
     if (reg && reg.showNotification) {
-      return reg.showNotification(title || 'FSHH Chat', payload);
+      return reg.showNotification(title || 'S-Chat', payload);
     }
     try {
-      var n = new Notification(title || 'FSHH Chat', payload);
+      var n = new Notification(title || 'S-Chat', payload);
       n.onclick = function() {
         window.focus();
         n.close();
@@ -1562,14 +1976,30 @@ async function apiCall(action, params, method) {
   return unwrap(data);
 }
 
+function lineLoginRedirectUri() {
+  var openId = new URLSearchParams(location.search).get('open');
+  var url = location.origin + '/chat';
+  if (openId) url += '?open=' + encodeURIComponent(openId);
+  return url;
+}
+
+function maybeOpenFromQuery() {
+  var params = new URLSearchParams(location.search);
+  var openId = params.get('open');
+  if (openId) openChat(openId);
+  if (params.has('open') || params.has('sessionToken') || params.has('appSession')) {
+    history.replaceState({}, '', location.pathname);
+  }
+}
+
 async function init() {
   renderStickerGrid();
   var params = new URLSearchParams(location.search);
   var appToken = params.get('sessionToken') || params.get('appSession') || '';
+  var lineError = params.get('error') || params.get('error_description') || '';
   if (appToken) {
     try {
       await bootFromAppSession(appToken);
-      history.replaceState({}, '', location.pathname);
       return;
     } catch (e) {
       localStorage.removeItem(STORAGE_SESSION);
@@ -1578,14 +2008,64 @@ async function init() {
       setLoginStatus('เซสชันจากเว็บหมดอายุ กรุณาเข้าด้วย LINE หรือเปิดจากเว็บอีกครั้ง', 'error');
     }
   }
+  if (!appToken && state.sessionToken) {
+    try {
+      await bootFromAppSession(state.sessionToken);
+      return;
+    } catch (e) {
+      localStorage.removeItem(STORAGE_SESSION);
+      localStorage.removeItem(STORAGE_USER);
+      state.sessionToken = '';
+    }
+  }
   try {
     if (typeof liff === 'undefined') throw new Error('ไม่พบ LIFF SDK');
-    await liff.init({ liffId: LIFF_ID, withLoginOnExternalBrowser: true });
+    await liff.init({
+      liffId: LIFF_ID,
+      withLoginOnExternalBrowser: !isIosDevice(),
+    });
+    if (shouldForceIosSafari()) {
+      if (!liff.isLoggedIn()) {
+        setLoginStatus('กำลังเข้าสู่ระบบด้วย LINE...', '');
+        liff.login({ redirectUri: lineLoginRedirectUri() });
+        return;
+      }
+      await bootApp();
+      if (state.sessionToken) openChatInSafari(state.sessionToken);
+      return;
+    }
     if (liff.isLoggedIn()) {
       await bootApp();
-    } else if (!appToken) {
-      setLoginStatus('กรุณาเข้าสู่ระบบด้วย LINE', '');
+      return;
     }
+    if (lineError) {
+      try { sessionStorage.removeItem('fshh_line_auto_login'); } catch (ignore) {}
+      setLoginStatus('เข้าสู่ระบบ LINE ไม่สำเร็จ กรุณาลองอีกครั้ง', 'error');
+      if (isIosDevice() && !liffInClient()) showIosLineChoice();
+      return;
+    }
+    if (liffInClient()) {
+      setLoginStatus('กำลังเข้าสู่ระบบด้วย LINE บนเครื่อง...', '');
+      liff.login({ redirectUri: lineLoginRedirectUri() });
+      return;
+    }
+    if (isIosDevice()) {
+      showIosLineChoice();
+      setLoginStatus('เลือกใช้ LINE บนเครื่องนี้ หรือกรอกบัญชีในหน้านี้', '');
+      return;
+    }
+    if (isMobileDevice() && sessionStorage.getItem('fshh_skip_auto_login') !== '1') {
+      if (sessionStorage.getItem('fshh_line_auto_login') === '1') {
+        sessionStorage.removeItem('fshh_line_auto_login');
+        setLoginStatus('กรุณาเข้าสู่ระบบด้วย LINE', '');
+        return;
+      }
+      sessionStorage.setItem('fshh_line_auto_login', '1');
+      setLoginStatus('กำลังเปิด LINE เพื่อเข้าสู่ระบบ...', '');
+      liff.login({ redirectUri: lineLoginRedirectUri() });
+      return;
+    }
+    setLoginStatus('กรุณาเข้าสู่ระบบด้วย LINE', '');
   } catch (e) {
     setLoginStatus('เริ่มระบบไม่สำเร็จ: ' + (e.message || e), 'error');
   }
@@ -1601,7 +2081,7 @@ async function bootFromAppSession(token) {
   localStorage.setItem(STORAGE_SESSION, state.sessionToken);
   localStorage.setItem(STORAGE_USER, JSON.stringify(state.me));
   var header = document.getElementById('headerMe');
-  if (header) header.textContent = state.me.displayName || 'FSHH Chat';
+  if (header) header.textContent = state.me.displayName || 'S-Chat';
   showApp(true);
   unlockAudio();
   registerChatServiceWorker();
@@ -1609,11 +2089,48 @@ async function bootFromAppSession(token) {
   await refreshAll();
   startPolling();
   startUsersRefresh();
+  maybeOpenFromQuery();
+}
+
+function liffInClient() {
+  try {
+    return typeof liff !== 'undefined' && typeof liff.isInClient === 'function' && liff.isInClient();
+  } catch (ignore) {
+    return false;
+  }
+}
+
+function showIosLineChoice() {
+  var primary = document.getElementById('btnLogin');
+  var web = document.getElementById('btnLoginWeb');
+  if (primary) {
+    primary.textContent = 'ใช้ LINE บนเครื่องนี้';
+    primary.setAttribute('onclick', 'openLineOnDevice()');
+  }
+  if (web) web.classList.remove('hidden');
+}
+
+function openLineOnDevice() {
+  if (isStandaloneApp() || iosCanRequestNotification()) {
+    loginLINE();
+    return;
+  }
+  location.assign('https://liff.line.me/' + LIFF_ID);
+}
+
+function loginLINEWeb() {
+  try { sessionStorage.removeItem('fshh_skip_auto_login'); } catch (ignore) {}
+  if (typeof liff === 'undefined' || !liff.isLoggedIn()) {
+    liff.login({ redirectUri: lineLoginRedirectUri() });
+    return;
+  }
+  bootApp();
 }
 
 function loginLINE() {
+  try { sessionStorage.removeItem('fshh_skip_auto_login'); } catch (ignore) {}
   if (!liff.isLoggedIn()) {
-    liff.login();
+    liff.login({ redirectUri: lineLoginRedirectUri() });
     return;
   }
   bootApp();
@@ -1707,12 +2224,14 @@ async function bootApp() {
     localStorage.setItem(STORAGE_USER, JSON.stringify(state.me));
     document.getElementById('headerMe').textContent = state.me.displayName || profile.displayName;
     showApp(true);
+    try { sessionStorage.removeItem('fshh_line_auto_login'); } catch (ignore) {}
     unlockAudio();
     registerChatServiceWorker();
     requestNotifyPermission();
     await refreshAll();
     startPolling();
     startUsersRefresh();
+    maybeOpenFromQuery();
   } catch (e) {
     var msg = e.message || String(e);
     if (isTokenExpiredError(msg)) {
@@ -1729,9 +2248,28 @@ async function bootApp() {
   }
 }
 
-function logoutLINE() {
+async function logoutLINE() {
+  try { sessionStorage.setItem('fshh_skip_auto_login', '1'); } catch (ignore) {}
   stopPolling();
   stopUsersRefresh();
+  try {
+    if ('serviceWorker' in navigator) {
+      var reg = await navigator.serviceWorker.getRegistration();
+      if (reg && reg.pushManager) {
+        var sub = await reg.pushManager.getSubscription();
+        if (sub) {
+          var json = sub.toJSON();
+          await apiCall('deletePushSubscription', { endpoint: json.endpoint }, 'POST');
+          await sub.unsubscribe();
+        }
+      }
+      if (reg && reg.getNotifications) {
+        var notes = await reg.getNotifications();
+        (notes || []).forEach(function(note) { note.close(); });
+      }
+    }
+    if (navigator.clearAppBadge) navigator.clearAppBadge().catch(function() {});
+  } catch (ignore) {}
   localStorage.removeItem(STORAGE_SESSION);
   localStorage.removeItem(STORAGE_USER);
   state.sessionToken = '';
@@ -1796,6 +2334,7 @@ async function pollInboxLegacy(forceFull) {
     if (last && !forceFull) {
       var sinceMs = new Date(last).getTime();
       res.messages = all.filter(function(m) {
+        if (m.messageType === 'unsent') return true;
         return new Date(m.timestamp).getTime() > sinceMs;
       });
     } else {
@@ -1833,6 +2372,49 @@ async function fetchPollData(forceFull) {
     console.warn('poll API fallback', e);
     return pollInboxLegacy(forceFull);
   }
+}
+
+function patchUnsentMessage(messageId, conversationId) {
+  if (!messageId) return false;
+  var changed = false;
+  function patch(list) {
+    if (!list || !list.length) return list;
+    return list.map(function(m) {
+      if (String(m.messageId) !== String(messageId)) return m;
+      if (m.messageType === 'unsent') return m;
+      changed = true;
+      return {
+        messageId: m.messageId,
+        conversationId: m.conversationId,
+        senderId: m.senderId,
+        receiverId: m.receiverId,
+        messageType: 'unsent',
+        message: '',
+        timestamp: m.timestamp,
+        deletedAt: new Date().toISOString(),
+      };
+    });
+  }
+  var activeId = state.active && state.active.conversationId;
+  var matchesActive = !conversationId || String(activeId) === String(conversationId);
+  if (matchesActive) state.messages = patch(state.messages);
+  var cacheId = conversationId || activeId;
+  if (cacheId && state.msgCache[cacheId]) {
+    state.msgCache[cacheId] = patch(state.msgCache[cacheId]);
+  }
+  if (changed && matchesActive && activeId) {
+    state.msgCache[activeId] = state.messages.slice();
+    var last = state.messages.length ? state.messages[state.messages.length - 1] : null;
+    if (last && String(last.messageId) === String(messageId)) {
+      (state.conversations || []).forEach(function(c) {
+        if (String(c.conversationId) === String(activeId)) {
+          c.lastMessage = 'ยกเลิกข้อความแล้ว';
+          c.lastMessageType = 'unsent';
+        }
+      });
+    }
+  }
+  return changed;
 }
 
 function applyPollResult(res, forceFull) {
@@ -1880,14 +2462,28 @@ function applyPollResult(res, forceFull) {
     state.lastUnread = unread;
   }
 
+  if (Array.isArray(res.readCursors)) state.readCursors = res.readCursors;
+  if (Array.isArray(res.typing)) {
+    state.typingUsers = res.typing;
+    renderTyping();
+  }
+
   // sync ข้อความห้องที่เปิดอยู่
+  var messageChanged = false;
+  var incoming = [];
   if (state.active && res.messages && res.messages.length) {
     var myId = state.me && state.me.userId;
-    var incoming = [];
     res.messages.forEach(function(m) {
+      if (m.messageType === 'unsent') {
+        if (patchUnsentMessage(m.messageId, m.conversationId || (state.active && state.active.conversationId))) {
+          messageChanged = true;
+        }
+        return;
+      }
       if (!state.knownMessageIds[m.messageId]) {
         state.messages.push(m);
         state.knownMessageIds[m.messageId] = true;
+        messageChanged = true;
         if (String(m.senderId) !== String(myId)) incoming.push(m);
       }
     });
@@ -1898,8 +2494,17 @@ function applyPollResult(res, forceFull) {
         seen[m.messageId] = true;
         return true;
       });
-      state.msgCache[state.active.conversationId] = state.messages.slice();
-      renderMessages();
+    }
+  }
+  var receipt = readReceiptMessageId();
+  if (receipt !== state._receiptId) {
+    state._receiptId = receipt;
+    messageChanged = true;
+  }
+  if (messageChanged && state.active) {
+    state.msgCache[state.active.conversationId] = state.messages.slice();
+    renderMessages(incoming.length > 0);
+    if (incoming.length) {
       notifyNewMessages(incoming);
       apiCall('markRead', { conversationId: state.active.conversationId }, 'POST').catch(function() {});
     }
@@ -2044,6 +2649,9 @@ async function openChatWithUser(userId) {
 }
 
 function openChat(conversationId, otherUserId, otherUser) {
+  if (state.active && String(state.active.conversationId) !== String(conversationId)) {
+    pulseTyping(false);
+  }
   var conv = state.conversations.find(function(c) {
     return String(c.conversationId) === String(conversationId);
   });
@@ -2051,6 +2659,10 @@ function openChat(conversationId, otherUserId, otherUser) {
     otherUser = (conv && conv.otherUser) || resolveUser(otherUserId);
   }
   var seq = ++state.openSeq;
+  state.readCursors = [];
+  state.typingUsers = [];
+  state._receiptId = '';
+  renderTyping();
   state.active = {
     conversationId: conversationId,
     otherUser: otherUser,
@@ -2089,7 +2701,7 @@ function openChat(conversationId, otherUserId, otherUser) {
     state.messages.forEach(function(m) {
       if (m.messageId) state.knownMessageIds[m.messageId] = true;
     });
-    renderMessages();
+    renderMessages(true);
   } else {
     state.messages = [];
     document.getElementById('messages').innerHTML =
@@ -2099,6 +2711,7 @@ function openChat(conversationId, otherUserId, otherUser) {
   document.getElementById('messageInput').focus();
   closeStickerPanel();
   restartPolling();
+  syncActiveChat();
 
   // background sync — ไม่บล็อก UI
   loadMessages(conversationId, seq).then(function() {
@@ -2110,10 +2723,16 @@ function openChat(conversationId, otherUserId, otherUser) {
 
 function closeChat() {
   closeStickerPanel();
+  pulseTyping(false);
   document.getElementById('view-app').classList.remove('show-chat');
   state.active = null;
+  state.readCursors = [];
+  state.typingUsers = [];
+  state._receiptId = '';
+  renderTyping();
   renderList();
   restartPolling();
+  syncActiveChat();
 }
 
 async function loadMessages(conversationId, seq) {
@@ -2131,7 +2750,7 @@ async function loadMessages(conversationId, seq) {
       state.messages.forEach(function(m) {
         if (m.messageId) state.knownMessageIds[m.messageId] = true;
       });
-      renderMessages();
+      renderMessages(true);
     }
   } catch (e) {
     console.warn('loadMessages', e);
@@ -2142,9 +2761,229 @@ async function loadMessages(conversationId, seq) {
   }
 }
 
-function renderMessages() {
+function readReceiptMessageId() {
+  var cursors = state.readCursors || [];
+  if (!cursors.length || !state.me) return '';
+  var threshold = null;
+  cursors.forEach(function(c) {
+    var n = Number(c.lastReadMessageId) || 0;
+    threshold = threshold === null ? n : Math.min(threshold, n);
+  });
+  if (!threshold) return '';
+  var best = 0;
+  var myId = state.me.userId;
+  state.messages.forEach(function(m) {
+    if (String(m.senderId) !== String(myId)) return;
+    if (m._pending || m.messageType === 'unsent' || m.messageType === 'system') return;
+    var id = Number(String(m.messageId || '').replace(/^M/i, ''));
+    if (id > 0 && id <= threshold && id > best) best = id;
+  });
+  return best ? ('M' + best) : '';
+}
+
+function renderTyping() {
+  var bar = document.getElementById('typingBar');
+  if (!bar) return;
+  var people = state.typingUsers || [];
+  if (!state.active || !people.length) {
+    bar.textContent = '';
+    bar.classList.add('hidden');
+    return;
+  }
+  var group = state.active.type === 'group';
+  var label = 'กำลังพิมพ์...';
+  if (group) {
+    var name = people[0].displayName || 'สมาชิก';
+    label = people.length === 1
+      ? name + ' กำลังพิมพ์...'
+      : name + ' และอีก ' + (people.length - 1) + ' คนกำลังพิมพ์...';
+  }
+  bar.textContent = label;
+  bar.classList.remove('hidden');
+}
+
+function onComposerInput() {
+  syncTypingFromInput();
+}
+
+function syncTypingFromInput() {
+  var input = document.getElementById('messageInput');
+  var hasText = !!(state.active && input && input.value.trim());
+  pulseTyping(hasText);
+}
+
+function ensureTypingHeartbeat() {
+  if (state._typingTimer) return;
+  state._typingTimer = setInterval(syncTypingFromInput, 2000);
+}
+
+function pulseTyping(active) {
+  if (!state.active || !state.active.conversationId) return;
+  var now = Date.now();
+  if (active) {
+    if (state._typingOn && now - (state._typingSentAt || 0) < 2000) return;
+    state._typingOn = true;
+    state._typingSentAt = now;
+  } else if (!state._typingOn) {
+    return;
+  } else {
+    state._typingOn = false;
+  }
+  apiCall('setTyping', {
+    conversationId: state.active.conversationId,
+    active: active ? 1 : 0,
+  }, 'POST').catch(function() {});
+}
+
+var unsendMenuId = '';
+
+function hideUnsendMenu() {
+  unsendMenuId = '';
+  var menu = document.getElementById('unsendMenu');
+  if (menu) menu.classList.add('hidden');
+}
+
+function showUnsendMenu(x, y, messageId) {
+  var menu = document.getElementById('unsendMenu');
+  if (!menu || !messageId) return;
+  unsendMenuId = String(messageId);
+  menu.classList.remove('hidden');
+  menu.style.left = '0px';
+  menu.style.top = '0px';
+  var rect = menu.getBoundingClientRect();
+  var left = Math.max(8, Math.min(x, window.innerWidth - rect.width - 8));
+  var top = Math.max(8, Math.min(y, window.innerHeight - rect.height - 8));
+  menu.style.left = left + 'px';
+  menu.style.top = top + 'px';
+}
+
+function confirmUnsendFromMenu() {
+  var id = unsendMenuId;
+  hideUnsendMenu();
+  if (id) unsendOwnMessage(id);
+}
+
+function initUnsendGestures() {
   var box = document.getElementById('messages');
+  if (!box || box.getAttribute('data-unsend-bound')) return;
+  box.setAttribute('data-unsend-bound', '1');
+  var timer = null;
+  var start = null;
+  function ownRow(target) {
+    if (!target || !target.closest) return null;
+    return target.closest('.msg-row[data-unsend="1"]');
+  }
+  box.addEventListener('contextmenu', function(e) {
+    var row = ownRow(e.target);
+    if (!row) return;
+    e.preventDefault();
+    showUnsendMenu(e.clientX, e.clientY, row.getAttribute('data-id'));
+  });
+  box.addEventListener('touchstart', function(e) {
+    var row = ownRow(e.target);
+    if (!row || !e.touches || !e.touches[0]) return;
+    var t = e.touches[0];
+    start = { x: t.clientX, y: t.clientY, id: row.getAttribute('data-id') };
+    clearTimeout(timer);
+    timer = setTimeout(function() {
+      if (!start) return;
+      showUnsendMenu(start.x, start.y, start.id);
+    }, 480);
+  }, { passive: true });
+  box.addEventListener('touchmove', function(e) {
+    if (!start || !e.touches || !e.touches[0]) return;
+    var t = e.touches[0];
+    if (Math.abs(t.clientX - start.x) > 12 || Math.abs(t.clientY - start.y) > 12) {
+      clearTimeout(timer);
+      start = null;
+    }
+  }, { passive: true });
+  function endPress() {
+    clearTimeout(timer);
+    start = null;
+  }
+  box.addEventListener('touchend', endPress);
+  box.addEventListener('touchcancel', endPress);
+  box.addEventListener('scroll', hideUnsendMenu);
+  document.addEventListener('click', function(e) {
+    var menu = document.getElementById('unsendMenu');
+    if (!menu || menu.classList.contains('hidden')) return;
+    if (menu.contains(e.target)) return;
+    hideUnsendMenu();
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') hideUnsendMenu();
+  });
+}
+
+function askUnsendConfirm() {
+  return new Promise(function(resolve) {
+    var box = document.getElementById('unsendConfirm');
+    var ok = document.getElementById('unsendConfirmOk');
+    var cancel = document.getElementById('unsendConfirmCancel');
+    if (!box || !ok || !cancel) {
+      resolve(false);
+      return;
+    }
+    box.classList.remove('hidden');
+    function finish(yes) {
+      box.classList.add('hidden');
+      ok.removeEventListener('click', onOk);
+      cancel.removeEventListener('click', onCancel);
+      box.removeEventListener('click', onMask);
+      document.removeEventListener('keydown', onKey);
+      resolve(yes);
+    }
+    function onOk() { finish(true); }
+    function onCancel() { finish(false); }
+    function onMask(e) { if (e.target === box) finish(false); }
+    function onKey(e) { if (e.key === 'Escape') finish(false); }
+    ok.addEventListener('click', onOk);
+    cancel.addEventListener('click', onCancel);
+    box.addEventListener('click', onMask);
+    document.addEventListener('keydown', onKey);
+  });
+}
+
+async function unsendOwnMessage(messageId) {
+  if (!messageId) return;
+  if (!(await askUnsendConfirm())) return;
+  try {
+    var res = await apiCall('unsendMessage', { messageId: messageId }, 'POST');
+    if (!res || res.success === false) throw new Error((res && res.error) || 'ยกเลิกไม่สำเร็จ');
+    state.messages = state.messages.map(function(m) {
+      if (m.messageId !== messageId) return m;
+      return {
+        messageId: m.messageId,
+        conversationId: m.conversationId,
+        senderId: m.senderId,
+        receiverId: m.receiverId,
+        messageType: 'unsent',
+        message: '',
+        timestamp: m.timestamp,
+        deletedAt: res.deletedAt || new Date().toISOString(),
+      };
+    });
+    if (state.active) {
+      state.msgCache[state.active.conversationId] = state.messages.slice();
+    }
+    state._receiptId = readReceiptMessageId();
+    renderMessages(false);
+    pollInbox(false);
+    hideUnsendMenu();
+  } catch (e) {
+    alert('ยกเลิกข้อความไม่สำเร็จ: ' + (e.message || e));
+  }
+}
+
+function renderMessages(forceScroll) {
+  var box = document.getElementById('messages');
+  if (!box) return;
+  var nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 120;
+  var prevScroll = box.scrollTop;
   var myId = state.me && state.me.userId;
+  var receiptId = readReceiptMessageId();
+  state._receiptId = receiptId;
   if (!state.messages.length) {
     box.innerHTML = '<div class="empty-state" style="padding:20px">ยังไม่มีข้อความ — ส่งข้อความแรกได้เลย</div>';
     return;
@@ -2157,6 +2996,7 @@ function renderMessages() {
     var cls = mine ? 'mine' : 'theirs';
     if (m._pending) cls += ' pending';
     if (m._failed) cls += ' failed';
+    if (m.messageType === 'unsent') cls += ' unsent';
     if (m.messageType === 'sticker') cls += ' sticker-msg';
     if (m.messageType === 'image') cls += ' image-msg';
     if (m.messageType === 'card') {
@@ -2186,16 +3026,29 @@ function renderMessages() {
         '<div class="file-chip-size">' + esc(formatBytes(att && att.size)) + '</div></div></a>';
     } else if (m.messageType === 'card') {
       body = renderAlertCard(m);
+    } else if (m.messageType === 'unsent') {
+      body = 'ยกเลิกข้อความแล้ว';
     } else {
       body = esc(m.message);
     }
+    var canUnsend = mine && !m._pending && !m._failed &&
+      m.messageType !== 'unsent' && m.messageType !== 'card' && m.messageType !== 'system';
+    var unsend = canUnsend
+      ? '<button type="button" class="msg-unsend" data-id="' + esc(m.messageId || '') + '" onclick="unsendOwnMessage(this.dataset.id)">ยกเลิก</button>'
+      : '';
+    var read = mine && receiptId && String(m.messageId) === String(receiptId)
+      ? '<div class="msg-read">อ่านแล้ว</div>'
+      : '';
     return '<div class="msg-row ' + cls + '" data-id="' + esc(m.messageId || '') + '"' +
+      (canUnsend ? ' data-unsend="1"' : '') +
       (m.messageType === 'card' && m.card && m.card.color ? ' style="--card-color:' + esc(m.card.color) + '"' : '') +
       '>' +
       '<div>' + senderName + '<div class="msg-bubble">' + body + '</div>' +
-      '<div class="msg-time">' + (m._pending ? 'กำลังส่ง...' : formatTime(m.timestamp)) + '</div></div></div>';
+      '<div class="msg-tools"><div class="msg-time">' + (m._pending ? 'กำลังส่ง...' : formatTime(m.timestamp)) + '</div>' +
+      unsend + '</div>' + read + '</div></div>';
   }).join('');
-  box.scrollTop = box.scrollHeight;
+  if (forceScroll || nearBottom) box.scrollTop = box.scrollHeight;
+  else box.scrollTop = prevScroll;
 }
 
 async function sendMessage() {
@@ -2270,7 +3123,7 @@ async function uploadChatFile(file) {
   };
   state.messages.push(optimistic);
   state.knownMessageIds[tempId] = true;
-  renderMessages();
+  renderMessages(true);
   state.sending = true;
   if (btn) btn.disabled = true;
   if (bar) {
@@ -2294,7 +3147,7 @@ async function uploadChatFile(file) {
     state.msgCache[state.active.conversationId] = state.messages.filter(function(m) {
       return !m._pending && !String(m.messageId).startsWith('tmp_');
     });
-    renderMessages();
+    renderMessages(true);
     pollInbox(false);
   } catch (e) {
     state.messages = state.messages.map(function(m) {
@@ -2304,7 +3157,7 @@ async function uploadChatFile(file) {
       }
       return m;
     });
-    renderMessages();
+    renderMessages(true);
     alert('แนบไฟล์ไม่สำเร็จ: ' + (e.message || e));
   } finally {
     if (localUrl) URL.revokeObjectURL(localUrl);
@@ -2316,6 +3169,7 @@ async function uploadChatFile(file) {
 
 async function deliverMessage(opts) {
   if (!state.active || state.sending) return;
+  pulseTyping(false);
   var messageType = opts.messageType || 'text';
   var text = String(opts.message || '').trim();
   if (!text) return;
@@ -2333,7 +3187,7 @@ async function deliverMessage(opts) {
   };
   state.messages.push(optimistic);
   state.knownMessageIds[tempId] = true;
-  renderMessages();
+  renderMessages(true);
   state.sending = true;
   btn.disabled = true;
   try {
@@ -2363,7 +3217,7 @@ async function deliverMessage(opts) {
     state.msgCache[state.active.conversationId] = state.messages.filter(function(m) {
       return !m._pending && !String(m.messageId).startsWith('tmp_');
     });
-    renderMessages();
+    renderMessages(true);
     pollInbox(false);
   } catch (e) {
     state.messages = state.messages.map(function(m) {
@@ -2373,7 +3227,7 @@ async function deliverMessage(opts) {
       }
       return m;
     });
-    renderMessages();
+    renderMessages(true);
     alert('ส่งข้อความไม่สำเร็จ: ' + (e.message || e));
   } finally {
     state.sending = false;
@@ -2399,6 +3253,7 @@ function restartPolling() {
 }
 
 function startPolling() {
+  ensureTypingHeartbeat();
   restartPolling();
 }
 
@@ -2668,6 +3523,14 @@ function setUnreadBadge(n) {
       navigator.serviceWorker.controller.postMessage({ type: 'SET_BADGE', count: n || 0 });
     } catch (e) { /* ignore */ }
   }
+  if (!n && navigator.serviceWorker && navigator.serviceWorker.getRegistration) {
+    navigator.serviceWorker.getRegistration().then(function(reg) {
+      if (!reg || !reg.getNotifications) return;
+      reg.getNotifications().then(function(list) {
+        (list || []).forEach(function(note) { note.close(); });
+      });
+    }).catch(function() {});
+  }
 }
 
 function toggleAiPanel() {
@@ -2750,7 +3613,22 @@ async function submitAiAsk(ev) {
   }
 }
 
+function syncActiveChat() {
+  if (!('serviceWorker' in navigator)) return;
+  var id = state.active && state.active.conversationId ? String(state.active.conversationId) : '';
+  var send = function(worker) {
+    if (!worker) return;
+    try { worker.postMessage({ type: 'ACTIVE_CHAT', conversationId: id }); } catch (e) {}
+  };
+  if (navigator.serviceWorker.controller) {
+    send(navigator.serviceWorker.controller);
+    return;
+  }
+  navigator.serviceWorker.ready.then(function(reg) { send(reg && reg.active); }).catch(function() {});
+}
+
 document.addEventListener('visibilitychange', function() {
+  syncActiveChat();
   if (document.visibilityState === 'visible' && state.sessionToken) {
     unlockAudio();
     pollInbox(false);
@@ -2770,10 +3648,63 @@ window.addEventListener('focus', function() {
   }
 });
 document.addEventListener('DOMContentLoaded', function() {
+  initUnsendGestures();
   registerChatServiceWorker();
   updateNotifyUi();
-  init();
+  updateIosInstallGuide();
+  var permissionReady = (isStandaloneApp() || (isIosDevice() && iosCanRequestNotification()))
+    ? requestNotifyOnInstall(false)
+    : Promise.resolve();
+  Promise.resolve(permissionReady).then(function() { init(); });
 });
+
+window.addEventListener('beforeinstallprompt', function(event) {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  var btn = document.getElementById('btnInstall');
+  if (btn) btn.classList.remove('hidden');
+});
+
+window.addEventListener('appinstalled', function() {
+  deferredInstallPrompt = null;
+  var btn = document.getElementById('btnInstall');
+  if (btn) btn.classList.add('hidden');
+  requestNotifyOnInstall();
+});
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', function(event) {
+    var data = event.data || {};
+    if (data.type === 'MESSAGE_UNSENT' && data.messageId) {
+      if (patchUnsentMessage(data.messageId, data.conversationId)) {
+        renderMessages(false);
+        renderList();
+      }
+      if (state.sessionToken) pollInbox(false);
+      return;
+    }
+    if (data.type === 'PUSH_MESSAGE' && state.sessionToken) {
+      pollInbox(false);
+      var viewing = state.active && data.conversationId
+        && String(state.active.conversationId) === String(data.conversationId)
+        && document.visibilityState === 'visible'
+        && document.hasFocus();
+      if (viewing && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+          type: 'CLOSE_NOTIFY',
+          tag: data.tag || ('chat-' + data.conversationId),
+        });
+      }
+      return;
+    }
+    if (data.type !== 'OPEN_CHAT' || !state.sessionToken) return;
+    var id = data.conversationId;
+    if (!id && data.url) {
+      try { id = new URL(data.url, location.origin).searchParams.get('open'); } catch (e) {}
+    }
+    if (id) openChat(id);
+  });
+}
 <\/script>
 </body>
 </html>`;

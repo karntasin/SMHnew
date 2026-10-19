@@ -22,6 +22,11 @@ const sidebarNavItems: NavItem[] = [
         url: '/settings/positions',
         icon: null,
     },
+    {
+        title: 'คู่มือการใช้งาน',
+        url: '/settings/manuals',
+        icon: null,
+    },
 ];
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {

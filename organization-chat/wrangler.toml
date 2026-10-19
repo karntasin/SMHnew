@@ -9,6 +9,8 @@ binding = "AI"
 LIFF_ID = "2011190976-nGVbTYZD"
 LINE_CHANNEL_ID = "2011190976"
 LARAVEL_API_URL = "https://fshh-app.online/organization-chat/api"
+# Public half of the VAPID key. Private key is VAPID_PRIVATE_KEY (secret / .dev.vars).
+VAPID_PUBLIC_KEY = "BONdX3g79v48i7NuI7zw4wgH_R_8Pw5Ci63sjy3YqDyVY0ZKW0hhfnB2MbKKCm2BDReGWx43iE0DbOYGWz2u268"
 
 [assets]
 directory = "./public"

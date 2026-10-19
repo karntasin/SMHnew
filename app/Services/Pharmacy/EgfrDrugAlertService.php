@@ -136,6 +136,25 @@ class EgfrDrugAlertService
                 );
 
                 $dailyMg = $usage['daily_mg'];
+                $doseAssumed = false;
+                // ไม่มีวิธีใช้ใน HOSxP (เจอบ่อยเมื่อ drugusage ว่าง) → สมมติอย่างน้อย 1 เม็ด/วัน
+                if ($dailyMg === null && $strengthMg !== null && $strengthMg > 0) {
+                    $dailyMg = $strengthMg;
+                    $doseAssumed = true;
+                    if (($usage['tablets_per_dose'] ?? null) === null) {
+                        $usage['tablets_per_dose'] = 1.0;
+                    }
+                    if (($usage['times_per_day'] ?? null) === null) {
+                        $usage['times_per_day'] = 1.0;
+                    }
+                    if (($usage['daily_tablets'] ?? null) === null) {
+                        $usage['daily_tablets'] = 1.0;
+                    }
+                    if (trim((string) ($usage['usage_text'] ?? '')) === '') {
+                        $usage['usage_text'] = 'ไม่ระบุวิธีใช้ — สมมติ 1 เม็ด/วัน';
+                    }
+                }
+
                 $maxDose = null;
                 $bandNote = '';
                 $bandSeverity = 'ok';
@@ -156,16 +175,26 @@ class EgfrDrugAlertService
                     $maxDose = isset($eval['max_dose_mg']) ? (float) $eval['max_dose_mg'] : null;
                     $doseExceeded = $maxDose !== null && $dailyMg !== null && $dailyMg > ($maxDose + 0.01);
 
+                    // เม็ดยาความแรงสูงกว่า Max ของช่วง eGFR อยู่แล้ว (เช่น Glyxambi 25 ที่ Max 10)
+                    if (! $doseExceeded && $maxDose !== null && $strengthMg !== null && $strengthMg > ($maxDose + 0.01)) {
+                        $doseExceeded = true;
+                        $dailyMg = $dailyMg ?? $strengthMg;
+                    }
+
                     if ($bandSeverity === 'contraindicated') {
                         $severityHit = 'contraindicated';
+                    } elseif ($bandSeverity === 'alert' && ! $doseExceeded) {
+                        // ช่วง ALERT ในไฟล์ — แจ้งแม้ขนาดยังไม่เกิน Max
+                        $severityHit = 'alert';
                     } elseif ($doseExceeded) {
                         // เกิน Max ตามช่วง eGFR — ถ้าช่วงนั้นเป็น ALERT ในไฟล์ ให้แสดง ALERT
                         $severityHit = $bandSeverity === 'alert' ? 'alert' : 'dose_exceeded';
                         $bandNote = sprintf(
-                            'ALERT · eGFR %.1f อยู่ในช่วงที่ต้องปรับขนาด (Max %.0f mg/วัน) แต่สั่ง %.0f mg/วัน — เกินเพดาน',
+                            'ALERT · eGFR %.1f อยู่ในช่วงที่ต้องปรับขนาด (Max %.0f mg/วัน) แต่สั่ง %.0f mg/วัน — เกินเพดาน%s',
                             (float) $egfr,
                             $maxDose,
-                            $dailyMg
+                            $dailyMg,
+                            $doseAssumed ? ' (ประมาณจากความแรงเม็ด)' : ''
                         );
                     } else {
                         // ไม่เกิน Max → ไม่แจ้ง

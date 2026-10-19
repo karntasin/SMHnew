@@ -334,7 +334,7 @@ export default function ForwardDocumentDialog({
                         />
                         <p className="flex items-center gap-1 text-[11px] text-amber-700/90">
                             <AlertCircle className="h-3 w-3 shrink-0" />
-                            ระบบจะส่งแจ้งเตือนเข้า fshh-chat ล่วงหน้า 1 วัน และแจ้งเตือนติดตามงานหากเลยกำหนด
+                            ระบบจะส่งแจ้งเตือนเข้า S-Chat ล่วงหน้า 1 วัน และแจ้งเตือนติดตามงานหากเลยกำหนด
                         </p>
                     </div>
 

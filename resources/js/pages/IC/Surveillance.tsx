@@ -41,6 +41,7 @@ import {
 } from 'lucide-react';
 import axios from '@/lib/axios';
 import { toast } from 'sonner';
+import { IcCharts, IcEditButton, IcPdfButton, dateInput, type IcChart } from '@/pages/IC/ic-ui';
 
 interface Log {
     id: number;
@@ -52,6 +53,14 @@ interface Log {
     infection_date: string;
     ward_name: string;
     organism: string;
+    admit_date?: string | null;
+    device_related?: string | null;
+    culture_date?: string | null;
+    sensitivity_pattern?: string | null;
+    onset_type?: string | null;
+    outcome?: string | null;
+    notes?: string | null;
+    can_edit?: boolean;
     reporter: { name: string };
 }
 
@@ -75,17 +84,19 @@ interface Props {
         date_from?: string;
         date_to?: string;
     };
+    charts?: IcChart[];
 }
 
-export default function Surveillance({ logs, stats, filters }: Props) {
+export default function Surveillance({ logs, stats, filters, charts }: Props) {
     const [isOpen, setIsOpen] = useState(false);
+    const [editingId, setEditingId] = useState<number | null>(null);
     const [searchResults, setSearchResults] = useState<any[]>([]);
     const [isSearching, setIsSearching] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [showFilters, setShowFilters] = useState(false);
     const [selectedPatient, setSelectedPatient] = useState<any>(null);
 
-    const { data, setData, post, processing, reset, errors } = useForm({
+    const { data, setData, post, put, processing, reset, errors } = useForm({
         hn: '',
         an: '',
         patient_name: '',
@@ -140,17 +151,44 @@ export default function Surveillance({ logs, stats, filters }: Props) {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        post('/ic/surveillance', {
+        const options = {
             onSuccess: () => {
-                toast.success('บันทึกข้อมูลเรียบร้อยแล้ว');
+                toast.success(editingId ? 'อัปเดตข้อมูลเรียบร้อยแล้ว' : 'บันทึกข้อมูลเรียบร้อยแล้ว');
                 reset();
                 setSelectedPatient(null);
+                setEditingId(null);
                 setIsOpen(false);
             },
             onError: () => {
                 toast.error('เกิดข้อผิดพลาด กรุณาตรวจสอบข้อมูล');
             },
+        };
+        if (editingId) {
+            put(`/ic/surveillance/${editingId}`, options);
+            return;
+        }
+        post('/ic/surveillance', options);
+    };
+
+    const openEdit = (log: Log) => {
+        setEditingId(log.id);
+        setData({
+            hn: log.hn || '',
+            an: log.an || '',
+            patient_name: log.patient_name || '',
+            admit_date: dateInput(log.admit_date),
+            infection_date: dateInput(log.infection_date),
+            ward_name: log.ward_name || '',
+            infection_type: log.infection_type || '',
+            device_related: log.device_related || '',
+            organism: log.organism || '',
+            culture_date: dateInput(log.culture_date),
+            sensitivity_pattern: log.sensitivity_pattern || '',
+            status: (log.status as 'suspected') || 'suspected',
+            onset_type: log.onset_type || '',
+            notes: log.notes || '',
         });
+        setIsOpen(true);
     };
 
     const resetForm = () => {
@@ -211,7 +249,10 @@ export default function Surveillance({ logs, stats, filters }: Props) {
     const addCaseDialog = (
         <Dialog open={isOpen} onOpenChange={(open) => {
             setIsOpen(open);
-            if (!open) resetForm();
+            if (!open) {
+                resetForm();
+                setEditingId(null);
+            }
         }}>
             <DialogTrigger asChild>
                 <Button className="gap-2 rounded-xl bg-rose-600 hover:bg-rose-700">
@@ -226,7 +267,7 @@ export default function Surveillance({ logs, stats, filters }: Props) {
                                             <div className="p-2 bg-emerald-100 rounded-lg">
                                                 <Microscope className="h-5 w-5 text-emerald-600" />
                                             </div>
-                                            บันทึกข้อมูลการติดเชื้อใหม่
+                                            {editingId ? 'แก้ไขข้อมูลการติดเชื้อ' : 'บันทึกข้อมูลการติดเชื้อใหม่'}
                                         </DialogTitle>
                                     </DialogHeader>
 
@@ -487,7 +528,7 @@ export default function Surveillance({ logs, stats, filters }: Props) {
                                                         ) : (
                                                             <Sparkles className="h-4 w-4 mr-2" />
                                                         )}
-                                                        บันทึกข้อมูล
+                                                        {editingId ? 'บันทึกการแก้ไข' : 'บันทึกข้อมูล'}
                                                     </Button>
                                                 </div>
                                             </form>
@@ -511,8 +552,14 @@ export default function Surveillance({ logs, stats, filters }: Props) {
                 { title: 'เฝ้าระวัง', href: '/ic/surveillance' },
             ]}
             subNav={<IcSubNav active="ic.surveillance" />}
-            actions={addCaseDialog}
+            actions={
+                <div className="flex flex-wrap gap-2">
+                    <IcPdfButton module="surveillance" start={filters?.date_from} end={filters?.date_to} />
+                    {addCaseDialog}
+                </div>
+            }
         >
+            <IcCharts charts={charts} />
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                 <StatCard label="บันทึกทั้งหมด" value={stats?.total || 0} icon={FileText} tone="slate" />
                 <StatCard label="ยืนยันการติดเชื้อ" value={stats?.confirmed || 0} icon={AlertTriangle} tone="rose" />
@@ -608,12 +655,13 @@ export default function Surveillance({ logs, stats, filters }: Props) {
                                             <th className="p-3">เชื้อก่อโรค</th>
                                             <th className="p-3">สถานะ</th>
                                             <th className="p-3">ผู้รายงาน</th>
+                                            <th className="p-3"></th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {!logs?.data || logs.data.length === 0 ? (
                                             <tr>
-                                                <td colSpan={7}>
+                                                <td colSpan={8}>
                                                     <EmptyState text="ไม่พบข้อมูลการเฝ้าระวัง" />
                                                     <div className="pb-4 text-center">
                                                         <Button variant="link" className="text-rose-600" onClick={() => setIsOpen(true)}>
@@ -663,6 +711,9 @@ export default function Surveillance({ logs, stats, filters }: Props) {
                                                     <td className="p-3">{getStatusBadge(log.status)}</td>
                                                     <td className="p-3">
                                                         <div className="text-sm">{log.reporter?.name || '-'}</div>
+                                                    </td>
+                                                    <td className="p-3">
+                                                        {log.can_edit && <IcEditButton onClick={() => openEdit(log)} />}
                                                     </td>
                                                 </tr>
                                             ))

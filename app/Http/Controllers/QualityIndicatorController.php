@@ -12,6 +12,10 @@ use App\Support\ThaiFiscalPeriod;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
@@ -74,11 +78,29 @@ class QualityIndicatorController extends Controller
                 $query->where('category', $category);
             }
 
-            $indicators = $query->get()->map(function (QualityIndicator $indicator) {
+            $indicators = $query->get();
+            $masterIds = $indicators
+                ->map(function (QualityIndicator $indicator) {
+                    $this->families->overlaySharedFields($indicator);
+
+                    return $this->families->masterOf($indicator)->id;
+                })
+                ->unique()
+                ->values()
+                ->all();
+            $latestEntries = $this->latestEntriesByIndicator($masterIds);
+
+            $indicators = $indicators->map(function (QualityIndicator $indicator) use ($latestEntries) {
                 $this->families->overlaySharedFields($indicator);
                 $master = $this->families->masterOf($indicator);
+                $latest = $latestEntries->get($master->id);
                 $indicator->setAttribute('entries_count', $master->entries()->count());
                 $indicator->setAttribute('aliases_count', max(0, $indicator->family?->indicators()->count() - 1));
+                $indicator->setAttribute('latest_entry', $latest ? [
+                    'period_date' => $latest->period_date?->toDateString(),
+                    'result_value' => $latest->is_na ? null : $latest->result_value,
+                    'is_na' => (bool) $latest->is_na,
+                ] : null);
 
                 return $indicator;
             });
@@ -220,7 +242,7 @@ class QualityIndicatorController extends Controller
         $this->families->overlaySharedFields($indicator);
 
         $master->load(['entries' => function ($query) {
-            $query->orderBy('period_date', 'asc')->limit(36);
+            $query->orderBy('period_date', 'asc')->orderBy('series_key')->limit(120);
         }]);
         $indicator->setRelation('entries', $master->entries);
 
@@ -275,13 +297,23 @@ class QualityIndicatorController extends Controller
 
     public function storeEntry(Request $request, QualityIndicator $indicator)
     {
-        $validated = $this->validateEntry($request);
-        $validated['created_by'] = Auth::id();
         $master = $this->families->masterOf($indicator);
 
-        $entry = $master->entries()->whereDate('period_date', $validated['period_date'])->first();
+        if ($request->exists('series_entries')) {
+            return $this->storeSeriesEntries($request, $master);
+        }
+
+        $validated = $this->validateEntry($request);
+        $validated['series_key'] = '';
+        $validated['created_by'] = Auth::id();
+
+        $entry = $master->entries()
+            ->whereDate('period_date', $validated['period_date'])
+            ->where('series_key', '')
+            ->first();
 
         if ($entry) {
+            unset($validated['created_by']);
             $entry->update($validated);
             $message = 'อัปเดตข้อมูลการวัดผลเรียบร้อย';
         } else {
@@ -299,8 +331,10 @@ class QualityIndicatorController extends Controller
         $validated = $this->validateEntry($request);
 
         $master = $this->families->masterOf($indicator);
+        $seriesKey = (string) ($entry->series_key ?? '');
         $duplicate = $master->entries()
             ->whereDate('period_date', $validated['period_date'])
+            ->where('series_key', $seriesKey)
             ->where('id', '!=', $entry->id)
             ->exists();
 
@@ -326,13 +360,33 @@ class QualityIndicatorController extends Controller
 
     private function validateEntry(Request $request): array
     {
+        $isNa = $request->boolean('is_na');
+        if ($isNa) {
+            $request->merge([
+                'is_na' => true,
+                'numerator' => null,
+                'denominator' => null,
+                'result_value' => null,
+            ]);
+        }
+
         $validated = $request->validate([
             'period_date' => 'required|date',
+            'is_na' => 'sometimes|boolean',
             'numerator' => 'nullable|numeric',
             'denominator' => 'nullable|numeric',
-            'result_value' => 'required|numeric',
+            'result_value' => $isNa ? 'nullable' : 'required|numeric',
             'notes' => 'nullable|string',
         ]);
+
+        $validated['is_na'] = $isNa;
+        if ($isNa) {
+            $validated['numerator'] = null;
+            $validated['denominator'] = null;
+            $validated['result_value'] = null;
+
+            return $validated;
+        }
 
         foreach (['numerator', 'denominator', 'result_value'] as $field) {
             if (array_key_exists($field, $validated) && $validated[$field] !== null && $validated[$field] !== '') {
@@ -343,6 +397,225 @@ class QualityIndicatorController extends Controller
         return $validated;
     }
 
+    private function storeSeriesEntries(Request $request, QualityIndicator $master)
+    {
+        $rows = $request->input('series_entries', []);
+        foreach ($rows as $index => $row) {
+            $rowIsNa = filter_var($row['is_na'] ?? false, FILTER_VALIDATE_BOOLEAN);
+            $rows[$index]['is_na'] = $rowIsNa;
+            if ($rowIsNa) {
+                $rows[$index]['numerator'] = null;
+                $rows[$index]['denominator'] = null;
+                $rows[$index]['result_value'] = null;
+            }
+        }
+        $request->merge(['series_entries' => $rows]);
+
+        $validated = $request->validate([
+            'period_date' => 'required|date',
+            'series_entries' => 'required|array|min:1',
+            'series_entries.*.series_key' => 'required|string|max:40',
+            'series_entries.*.is_na' => 'boolean',
+            'series_entries.*.numerator' => 'nullable|numeric',
+            'series_entries.*.denominator' => 'nullable|numeric',
+            'series_entries.*.result_value' => 'nullable|numeric',
+            'series_entries.*.notes' => 'nullable|string',
+        ]);
+
+        $allowed = collect($master->series ?? [])->pluck('key')->filter()->values();
+        foreach ($validated['series_entries'] as $row) {
+            if (! $allowed->contains($row['series_key'])) {
+                return redirect()->back()->withErrors([
+                    'series_entries' => 'หัวข้อย่อยไม่ตรงกับตัวชี้วัดนี้',
+                ]);
+            }
+        }
+
+        foreach ($validated['series_entries'] as $row) {
+            $rowIsNa = (bool) ($row['is_na'] ?? false);
+            if (! $rowIsNa && ($row['result_value'] === null || $row['result_value'] === '')) {
+                return redirect()->back()->withErrors([
+                    'series_entries' => 'กรุณาระบุผลลัพธ์ หรือเลือก N/A',
+                ]);
+            }
+
+            if ($rowIsNa) {
+                $row['numerator'] = null;
+                $row['denominator'] = null;
+                $row['result_value'] = null;
+            } else {
+                foreach (['numerator', 'denominator', 'result_value'] as $field) {
+                    if (array_key_exists($field, $row) && $row[$field] !== null && $row[$field] !== '') {
+                        $row[$field] = round((float) $row[$field], 2);
+                    }
+                }
+            }
+
+            $entry = $master->entries()
+                ->whereDate('period_date', $validated['period_date'])
+                ->where('series_key', $row['series_key'])
+                ->first();
+
+            $payload = [
+                'series_key' => $row['series_key'],
+                'period_date' => $validated['period_date'],
+                'numerator' => $row['numerator'] ?? null,
+                'denominator' => $row['denominator'] ?? null,
+                'result_value' => $row['result_value'],
+                'is_na' => $rowIsNa,
+                'notes' => $row['notes'] ?? null,
+            ];
+
+            if ($entry) {
+                $entry->update($payload);
+            } else {
+                $master->entries()->create([
+                    ...$payload,
+                    'created_by' => Auth::id(),
+                ]);
+            }
+        }
+
+        return redirect()->back()->with('success', 'บันทึกข้อมูลแต่ละหัวข้อย่อยเรียบร้อย');
+    }
+
+    public function coverage()
+    {
+        return Inertia::render('QualityIndicators/Coverage', $this->coveragePayload());
+    }
+
+    public function exportCoverageExcel()
+    {
+        $payload = $this->coveragePayload();
+        $organization = (int) $payload['organization'];
+        $departments = $payload['departments'];
+        $teams = $payload['teams'];
+        $departmentsWith = $departments->where('count', '>', 0)->count();
+        $teamsWith = $teams->where('count', '>', 0)->count();
+
+        $spreadsheet = new Spreadsheet();
+        $summary = $spreadsheet->getActiveSheet();
+        $summary->setTitle('สรุป');
+        $summary->fromArray(['ส่วน', 'จำนวน', 'ทั้งหมด', 'ยังไม่มี'], null, 'A1', true);
+        $summary->fromArray([
+            ['ระดับองค์กร', $organization, 1, $organization === 0 ? 1 : 0],
+            ['แผนก', $departments->sum('count'), $departments->count(), $departments->count() - $departmentsWith],
+            ['ทีม HA', $teams->sum('count'), $teams->count(), $teams->count() - $teamsWith],
+        ], null, 'A2', true);
+        $this->styleCoverageHeader($summary, 'A1:D1');
+        foreach (range('A', 'D') as $column) {
+            $summary->getColumnDimension($column)->setAutoSize(true);
+        }
+
+        $departmentSheet = $spreadsheet->createSheet();
+        $departmentSheet->setTitle('แผนก');
+        $departmentSheet->fromArray(['แผนก', 'จำนวน', 'สถานะ'], null, 'A1');
+        $row = 2;
+        foreach ($departments as $department) {
+            $departmentSheet->fromArray([
+                [$department['name'], $department['count'], $department['count'] === 0 ? 'ยังไม่มี' : 'มีแล้ว'],
+            ], null, 'A'.$row, true);
+            $row++;
+        }
+        $this->styleCoverageHeader($departmentSheet, 'A1:C1');
+        $departmentSheet->getColumnDimension('A')->setWidth(42);
+        $departmentSheet->getColumnDimension('B')->setWidth(12);
+        $departmentSheet->getColumnDimension('C')->setWidth(14);
+
+        $teamSheet = $spreadsheet->createSheet();
+        $teamSheet->setTitle('ทีม HA');
+        $teamSheet->fromArray(['ตัวย่อ', 'ทีม', 'จำนวน', 'สถานะ'], null, 'A1');
+        $row = 2;
+        foreach ($teams as $team) {
+            $teamSheet->fromArray([
+                [$team['abbreviation'], $team['name'], $team['count'], $team['count'] === 0 ? 'ยังไม่มี' : 'มีแล้ว'],
+            ], null, 'A'.$row, true);
+            $row++;
+        }
+        $this->styleCoverageHeader($teamSheet, 'A1:D1');
+        $teamSheet->getColumnDimension('A')->setWidth(14);
+        $teamSheet->getColumnDimension('B')->setWidth(42);
+        $teamSheet->getColumnDimension('C')->setWidth(12);
+        $teamSheet->getColumnDimension('D')->setWidth(14);
+
+        $filename = 'รายงานจำนวนตัวชี้วัดรายส่วน-'.now()->timezone(config('app.timezone'))->format('Ymd').'.xlsx';
+
+        return response()->streamDownload(function () use ($spreadsheet) {
+            $writer = new Xlsx($spreadsheet);
+            $writer->save('php://output');
+        }, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
+    }
+
+    /**
+     * @return array{organization: int, departments: Collection<int, array{id: int, name: string, count: int}>, teams: Collection<int, array{id: int, abbreviation: string, name: string, count: int}>}
+     */
+    private function coveragePayload(): array
+    {
+        $departmentCounts = QualityIndicator::query()
+            ->where('type', 'department')
+            ->whereNotNull('department_id')
+            ->selectRaw('department_id, COUNT(*) as total')
+            ->groupBy('department_id')
+            ->pluck('total', 'department_id');
+
+        $teamCounts = QualityIndicator::query()
+            ->where('type', 'ha_team')
+            ->whereNotNull('team_id')
+            ->selectRaw('team_id, COUNT(*) as total')
+            ->groupBy('team_id')
+            ->pluck('total', 'team_id');
+
+        $departments = Department::query()
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (Department $department) => [
+                'id' => $department->id,
+                'name' => $department->name,
+                'count' => (int) ($departmentCounts[$department->id] ?? 0),
+            ]);
+
+        $teams = TeamHa::query()
+            ->orderBy('abbreviation')
+            ->get(['id', 'abbreviation', 'name_th'])
+            ->map(fn (TeamHa $team) => [
+                'id' => $team->id,
+                'abbreviation' => $team->abbreviation,
+                'name' => $team->name_th,
+                'count' => (int) ($teamCounts[$team->id] ?? 0),
+            ]);
+
+        $sortCounts = function ($rows) {
+            return $rows->sort(function (array $a, array $b) {
+                if (($a['count'] === 0) !== ($b['count'] === 0)) {
+                    return $a['count'] === 0 ? -1 : 1;
+                }
+                if ($a['count'] !== $b['count']) {
+                    return $b['count'] <=> $a['count'];
+                }
+
+                return strcmp((string) ($a['name'] ?? ''), (string) ($b['name'] ?? ''));
+            })->values();
+        };
+
+        return [
+            'organization' => QualityIndicator::query()->where('type', 'organization')->count(),
+            'departments' => $sortCounts($departments),
+            'teams' => $sortCounts($teams),
+        ];
+    }
+
+    private function styleCoverageHeader($sheet, string $range): void
+    {
+        $sheet->getStyle($range)->applyFromArray([
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '047857']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+        ]);
+        $sheet->freezePane('A2');
+    }
+
     public function dashboard(Request $request)
     {
         $type = $request->query('type'); // optional: department|ha_team|organization|null=all
@@ -351,7 +624,7 @@ class QualityIndicatorController extends Controller
         $category = $request->filled('category') ? trim((string) $request->query('category')) : null;
 
         $query = QualityIndicator::with(['family.master.entries' => function ($q) {
-            $q->orderBy('period_date', 'desc')->limit(1);
+            $q->orderBy('period_date', 'desc')->orderBy('series_key')->limit(24);
         }, 'department', 'team'])
             ->where('is_active', true);
 
@@ -440,9 +713,15 @@ class QualityIndicatorController extends Controller
 
         $entries = $master->entries;
         $latest = $entries->sortByDesc(fn ($e) => (string) $e->period_date)->first();
-        $latestPass = $latest ? $this->isPass($indicator, (float) $latest->result_value) : null;
-        $passCount = $entries->filter(fn ($e) => $this->isPass($indicator, (float) $e->result_value))->count();
-        $failCount = $entries->count() - $passCount;
+        $latestIsNa = $latest ? (bool) $latest->is_na : false;
+        $measurable = $entries->filter(fn ($e) => ! $e->is_na && $e->result_value !== null);
+        $latestMeasurable = $measurable->sortByDesc(fn ($e) => (string) $e->period_date)->first();
+        $latestPass = $latestIsNa
+            ? null
+            : ($latestMeasurable ? $this->isPass($indicator, (float) $latestMeasurable->result_value) : null);
+        $passCount = $measurable->filter(fn ($e) => $this->isPass($indicator, (float) $e->result_value))->count();
+        $failCount = $measurable->count() - $passCount;
+        $naCount = $entries->filter(fn ($e) => (bool) $e->is_na)->count();
 
         [$fontRegularUri, $fontBoldUri] = $pdf->fontUris();
         $now = now()->timezone(config('app.timezone'));
@@ -452,15 +731,17 @@ class QualityIndicatorController extends Controller
             'indicator' => $indicator,
             'entries' => $entries,
             'latest' => $latest,
+            'latestIsNa' => $latestIsNa,
             'latestPass' => $latestPass,
             'passCount' => $passCount,
             'failCount' => $failCount,
+            'naCount' => $naCount,
             'ownerLabel' => $this->ownerLabel($indicator),
             'typeLabel' => $this->typeLabel($indicator->type),
             'generatedAt' => $this->formatThaiDateTime($now),
             'generatedAtDate' => $this->formatThaiDate($now),
             'formatNum' => fn ($v) => $this->formatNum($v),
-            'formatPeriod' => fn ($d) => $this->formatThaiPeriod($d),
+            'formatPeriod' => fn ($d) => $this->formatIndicatorPeriod($d, $indicator->frequency),
             'isPass' => fn ($v) => $this->isPass($indicator, (float) $v),
             'fontRegularUri' => $fontRegularUri,
             'fontBoldUri' => $fontBoldUri,
@@ -673,7 +954,12 @@ class QualityIndicatorController extends Controller
                     : number_format((float) $indicator->target_value, 2))
                 : null;
 
-            if ($tVal !== null) {
+            $seriesDefsForTarget = is_array($indicator->series) ? $indicator->series : [];
+            if ($seriesDefsForTarget !== []) {
+                $targetDisplay = collect($seriesDefsForTarget)->map(function ($serie) use ($indicator) {
+                    return trim(($serie['label'] ?? '').' '.($serie['target_operator'] ?? '').' '.($serie['target_value'] ?? '').' '.($indicator->unit ?? ''));
+                })->implode(' · ');
+            } elseif ($tVal !== null) {
                 $op = trim($indicator->target_operator ?? '');
                 $targetDisplay = ($op === '=' || $op === '') ? $tVal : ($op.' '.$tVal);
                 if (! empty($indicator->unit)) {
@@ -685,11 +971,48 @@ class QualityIndicatorController extends Controller
 
             $yearlyValues = [];
             $hasAnyData = false;
+            $seriesDefs = is_array($indicator->series) ? $indicator->series : [];
+
             foreach ($years as $yr) {
+                if (! empty($byFy[$yr]) && $seriesDefs !== []) {
+                    $yearEntries = collect($byFy[$yr]);
+                    $parts = [];
+                    foreach ($seriesDefs as $serie) {
+                        $match = $yearEntries->first(fn ($e) => (string) $e->series_key === (string) ($serie['key'] ?? ''));
+                        $label = (string) ($serie['label'] ?? $serie['key'] ?? '');
+                        if ($match && $match->is_na) {
+                            $parts[] = $label.' N/A';
+                        } elseif ($match && $match->result_value !== null) {
+                            $parts[] = $label.' '.number_format((float) $match->result_value, 2);
+                        } else {
+                            $parts[] = $label.' -';
+                        }
+                    }
+                    $hasAnyData = true;
+                    $yearlyValues[$yr] = [
+                        'value' => implode(' · ', $parts),
+                        'raw' => null,
+                        'pass' => null,
+                        'entry' => $yearEntries->first(),
+                    ];
+
+                    continue;
+                }
+
                 if (! empty($byFy[$yr])) {
-                    $latestEntry = collect($byFy[$yr])->sortByDesc(fn ($e) => (string) $e->period_date)->first();
-                    $val = $latestEntry->result_value;
-                    if ($val !== null && $val !== '') {
+                    $yearEntries = collect($byFy[$yr])->sortByDesc(fn ($e) => (string) $e->period_date);
+                    $latestEntry = $yearEntries->first();
+                    $measurableEntry = $yearEntries->first(fn ($e) => ! $e->is_na && $e->result_value !== null && $e->result_value !== '');
+                    if ($latestEntry && $latestEntry->is_na) {
+                        $hasAnyData = true;
+                        $yearlyValues[$yr] = [
+                            'value' => 'N/A',
+                            'raw' => null,
+                            'pass' => $measurableEntry ? $this->isPass($indicator, (float) $measurableEntry->result_value) : null,
+                            'entry' => $latestEntry,
+                        ];
+                    } elseif ($latestEntry && $latestEntry->result_value !== null && $latestEntry->result_value !== '') {
+                        $val = $latestEntry->result_value;
                         $hasAnyData = true;
                         $formattedVal = (float) $val == (int) $val ? (string) (int) $val : number_format((float) $val, 2);
                         $isPass = $this->isPass($indicator, (float) $val);
@@ -718,15 +1041,29 @@ class QualityIndicatorController extends Controller
             }
 
             $latest = $entries->sortByDesc(fn ($e) => (string) $e->period_date)->first();
-            $pass = $latest ? $this->isPass($indicator, (float) $latest->result_value) : null;
+            $latestMeasurable = $entries
+                ->filter(fn ($e) => ! $e->is_na && $e->result_value !== null && $e->result_value !== '')
+                ->sortByDesc(fn ($e) => (string) $e->period_date)
+                ->first();
+            $pass = $latestMeasurable ? $this->isPass($indicator, (float) $latestMeasurable->result_value) : null;
 
-            // Evaluate pass/fail against latest year with data
+            // Evaluate pass/fail against latest year with a numeric result. N/A is not a fail.
             $latestStatus = null;
             foreach (array_reverse($years) as $yr) {
+                if (isset($yearlyValues[$yr]) && $yearlyValues[$yr]['pass'] !== null && ($yearlyValues[$yr]['raw'] !== null || $yearlyValues[$yr]['value'] === 'N/A')) {
+                    $latestStatus = $yearlyValues[$yr]['pass'];
+                    break;
+                }
                 if (isset($yearlyValues[$yr]) && $yearlyValues[$yr]['raw'] !== null) {
                     $latestStatus = $yearlyValues[$yr]['pass'];
                     break;
                 }
+            }
+            if ($latestStatus === null && $pass !== null) {
+                $latestStatus = $pass;
+            }
+            if ($latestStatus === null && $entries->contains(fn ($e) => (bool) $e->is_na)) {
+                $latestStatus = 'na';
             }
 
             return [
@@ -825,6 +1162,53 @@ class QualityIndicatorController extends Controller
         }
 
         return number_format((float) $value, $digits, '.', ',');
+    }
+
+    /**
+     * @param  list<int>  $indicatorIds
+     * @return Collection<int, QualityIndicatorEntry>
+     */
+    private function latestEntriesByIndicator(array $indicatorIds): Collection
+    {
+        if ($indicatorIds === []) {
+            return collect();
+        }
+
+        $latestDates = QualityIndicatorEntry::query()
+            ->select('quality_indicator_id')
+            ->selectRaw('MAX(period_date) as period_date')
+            ->whereIn('quality_indicator_id', $indicatorIds)
+            ->groupBy('quality_indicator_id');
+
+        return QualityIndicatorEntry::query()
+            ->joinSub($latestDates, 'latest_periods', function ($join) {
+                $join->on('quality_indicator_entries.quality_indicator_id', '=', 'latest_periods.quality_indicator_id')
+                    ->on('quality_indicator_entries.period_date', '=', 'latest_periods.period_date');
+            })
+            ->orderBy('quality_indicator_entries.series_key')
+            ->get([
+                'quality_indicator_entries.quality_indicator_id',
+                'quality_indicator_entries.period_date',
+                'quality_indicator_entries.result_value',
+                'quality_indicator_entries.is_na',
+                'quality_indicator_entries.series_key',
+            ])
+            ->groupBy('quality_indicator_id')
+            ->map(fn (Collection $rows) => $rows->first(fn ($row) => ($row->series_key ?? '') === '') ?? $rows->first());
+    }
+
+    private function formatIndicatorPeriod(mixed $date, ?string $frequency = null): string
+    {
+        if (! $date) {
+            return '-';
+        }
+
+        $dt = $date instanceof Carbon ? $date : Carbon::parse($date);
+        if ($frequency === 'Yearly') {
+            return 'ปี '.((int) $dt->format('Y') + 543);
+        }
+
+        return $this->formatThaiPeriod($date);
     }
 
     private function formatThaiPeriod(mixed $date): string

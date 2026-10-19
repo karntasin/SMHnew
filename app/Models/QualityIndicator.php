@@ -25,6 +25,7 @@ class QualityIndicator extends Model
         'target_operator',
         'frequency',
         'formula_description',
+        'series',
         'is_active',
         'deleted_by',
         'restored_by',
@@ -34,6 +35,7 @@ class QualityIndicator extends Model
     protected $casts = [
         'is_active' => 'boolean',
         'target_value' => 'decimal:2',
+        'series' => 'array',
         'deleted_at' => 'datetime',
         'restored_at' => 'datetime',
     ];

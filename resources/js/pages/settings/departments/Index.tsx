@@ -40,6 +40,16 @@ const breadcrumbs: BreadcrumbItem[] = [
   { title: 'จัดการแผนก', href: '/settings/departments' },
 ];
 
+interface DepartmentLeader {
+  id: number;
+  role: string;
+  role_label: string;
+  user?: {
+    id: number;
+    name: string;
+  } | null;
+}
+
 interface Department {
   id: number;
   name: string;
@@ -47,6 +57,7 @@ interface Department {
   description: string | null;
   is_active: boolean;
   created_at: string;
+  leaders?: DepartmentLeader[];
 }
 
 interface PaginatedData {
@@ -69,6 +80,15 @@ interface Props {
   filters: {
     search?: string;
   };
+}
+
+function leaderNames(department: Department, role: string): string {
+  const names = (department.leaders ?? [])
+    .filter((leader) => leader.role === role)
+    .map((leader) => leader.user?.name)
+    .filter((name): name is string => Boolean(name));
+
+  return names.length > 0 ? names.join(', ') : '-';
 }
 
 export default function DepartmentIndex({ departments, filters }: Props) {
@@ -110,7 +130,7 @@ export default function DepartmentIndex({ departments, filters }: Props) {
                 จัดการแผนก
               </h1>
               <p className="text-muted-foreground">
-                จัดการข้อมูลแผนกในระบบ
+                จัดการข้อมูลแผนก หัวหน้าแผนกฝ่าย และผู้ช่วย
               </p>
             </div>
           </div>
@@ -157,7 +177,7 @@ export default function DepartmentIndex({ departments, filters }: Props) {
                   <TableRow>
                     <TableHead className="w-[100px]">รหัสย่อ</TableHead>
                     <TableHead>ชื่อแผนก</TableHead>
-                    <TableHead>คำอธิบาย</TableHead>
+                    <TableHead>หัวหน้า / ผู้ช่วย</TableHead>
                     <TableHead className="w-[100px]">สถานะ</TableHead>
                     <TableHead className="text-right w-[100px]">จัดการ</TableHead>
                   </TableRow>
@@ -175,9 +195,23 @@ export default function DepartmentIndex({ departments, filters }: Props) {
                         <TableCell>
                           <Badge variant="outline">{department.code || '-'}</Badge>
                         </TableCell>
-                        <TableCell className="font-medium">{department.name}</TableCell>
-                        <TableCell className="text-muted-foreground max-w-xs truncate">
-                          {department.description || '-'}
+                        <TableCell className="font-medium">
+                          <div>{department.name}</div>
+                          {department.description && (
+                            <div className="text-xs text-muted-foreground max-w-xs truncate">
+                              {department.description}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          <div>
+                            <span className="text-muted-foreground">หัวหน้า: </span>
+                            {leaderNames(department, 'head')}
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">ผู้ช่วย: </span>
+                            {leaderNames(department, 'assistant')}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <Badge variant={department.is_active ? 'default' : 'secondary'}>

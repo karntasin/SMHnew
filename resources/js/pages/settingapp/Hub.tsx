@@ -15,7 +15,8 @@ import {
   FolderOpen,
   Settings,
   ChevronRight,
-  Shield
+  Shield,
+  BookOpen
 } from 'lucide-react';
 import { useTranslation } from '@/hooks/use-translation';
 import { cn } from '@/lib/utils';
@@ -67,7 +68,7 @@ export default function SettingsHub() {
     },
     {
       title: 'ตั้งค่าองค์กร',
-      description: 'จัดการตำแหน่ง ทีม แผนก และรายชื่อผู้มีสิทธิ์เข้าใช้ระบบ',
+      description: 'จัดการตำแหน่ง ทีม HA แผนก หัวหน้าและผู้ช่วยแผนกฝ่าย',
       icon: Building2,
       color: 'text-orange-600',
       bg: 'bg-orange-100',
@@ -76,8 +77,22 @@ export default function SettingsHub() {
       links: [
         { label: 'ตำแหน่ง', href: '/settings/positions' },
         { label: 'ทีม HA', href: '/settings/teamha' },
-        { label: 'แผนก', href: '/settings/departments' },
+        { label: 'แผนก หัวหน้า และผู้ช่วย', href: '/settings/departments' },
         { label: 'จัดการเจ้าหน้าที่', href: '/settings/staff' },
+      ]
+    },
+    {
+      title: 'คู่มือการใช้งานระบบ',
+      description: 'คู่มือการสมัครสมาชิก และคู่มือการตั้งค่าโปรไฟล์ (ดาวน์โหลด PDF ได้)',
+      icon: BookOpen,
+      color: 'text-emerald-600',
+      bg: 'bg-emerald-100',
+      gradient: 'from-emerald-500 to-teal-500',
+      href: '/settings/manuals',
+      links: [
+        { label: 'เปิดอ่านคู่มือทั้งหมด', href: '/settings/manuals' },
+        { label: 'ดาวน์โหลดคู่มือสมัครสมาชิก', href: '/manuals/registration/download' },
+        { label: 'ดาวน์โหลดคู่มือตั้งค่าโปรไฟล์', href: '/settings/manuals/profile/download' },
       ]
     },
     {
@@ -133,8 +148,8 @@ export default function SettingsHub() {
   ];
 
   return (
-    <AppLayout breadcrumbs={[{ title: 'ศูนย์ตั้งค่า', href: '/settings-hub' }]}>
-      <Head title="ศูนย์ตั้งค่า" />
+    <AppLayout breadcrumbs={[{ title: 'ตั้งค่าระบบ', href: '/settings-hub' }]}>
+      <Head title="ตั้งค่าระบบ" />
 
       <div className="min-h-screen bg-slate-50/50">
         {/* Hero Section */}
@@ -152,7 +167,7 @@ export default function SettingsHub() {
               </div>
               
               <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 mb-4">
-                ศูนย์ตั้งค่า
+                ตั้งค่าระบบ
               </h1>
               <p className="text-lg text-slate-600 leading-relaxed">
                 จัดการผู้ใช้ บทบาท สิทธิ์ และการกำหนดค่าระบบจากศูนย์กลางแห่งเดียว

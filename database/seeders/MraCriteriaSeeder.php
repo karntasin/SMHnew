@@ -117,6 +117,7 @@ class MraCriteriaSeeder extends Seeder
             // คะแนนโบนัส (+1)
             foreach (($section['bonus'] ?? []) as $itemCode => $label) {
                 $sort++;
+                $hint = $autoMap[$itemCode] ?? null;
                 MraCriteria::create([
                     'mra_category_id' => $category->id,
                     'code' => $itemCode,
@@ -126,9 +127,9 @@ class MraCriteriaSeeder extends Seeder
                     'name_en' => $itemCode,
                     'description' => 'คะแนนโบนัส (+1) ตามคู่มือ MRA 2563',
                     'audit_guide' => 'ข้อเพิ่มคะแนน — ไม่บังคับ แต่เมื่อเกี่ยวข้องให้ประเมิน 0/1/N/A',
-                    'hosxp_table' => null,
-                    'hosxp_field' => null,
-                    'data_type' => 'manual',
+                    'hosxp_table' => $hint['table'] ?? null,
+                    'hosxp_field' => $hint['field'] ?? null,
+                    'data_type' => $hint ? ($hint['type'] ?? 'both') : 'manual',
                     'max_score' => 1,
                     'sort_order' => $sort,
                     'is_required' => false,
@@ -140,37 +141,22 @@ class MraCriteriaSeeder extends Seeder
     }
 
     /**
-     * จุดเชื่อม HOSxP สำหรับ auto-check (เฉพาะข้อที่ข้อมูลดึงได้จริง)
+     * จุดเชื่อม HOSxP สำหรับดึงหลักฐาน OPD/ER (evidence-only → data_type=both)
+     * อ้างอิง config/mra_auto_check_opd.php
      */
     private function autoFieldHints(string $auditType): array
     {
-        if ($auditType !== 'opd') {
-            // IPD ส่วนใหญ่ต้องตรวจเอกสารกระดาษ/สแกน — ใช้ manual เป็นหลัก
-            return [
-                'dso_1' => ['table' => 'patient', 'field' => 'pname,fname,lname,sex,birthday', 'type' => 'both'],
-                'dso_2' => ['table' => 'patient', 'field' => 'cid', 'type' => 'auto'],
-                'dso_4' => ['table' => 'ipt', 'field' => 'hn,an', 'type' => 'auto'],
-                'dso_5' => ['table' => 'ipt', 'field' => 'regdate,dchdate', 'type' => 'auto'],
-                'ih_1' => ['table' => 'opdscreen', 'field' => 'cc', 'type' => 'both'],
-                'ipe_1' => ['table' => 'opdscreen', 'field' => 'bps,bpd,pulse,temperature,rr', 'type' => 'both'],
+        $configKey = $auditType === 'ipd' ? 'mra_auto_check_ipd.sources' : 'mra_auto_check_opd.sources';
+        $sources = config($configKey, []);
+        $hints = [];
+        foreach ($sources as $code => $meta) {
+            $hints[$code] = [
+                'table' => $meta['table'] ?? null,
+                'field' => $meta['field'] ?? null,
+                'type' => 'both',
             ];
         }
 
-        return [
-            'pp_1' => ['table' => 'patient', 'field' => 'pname,fname,lname,hn,sex,birthday', 'type' => 'auto'],
-            'pp_2' => ['table' => 'patient', 'field' => 'addrpart,moopart,tmbpart,amppart,chwpart', 'type' => 'auto'],
-            'pp_3' => ['table' => 'patient', 'field' => 'cid', 'type' => 'auto'],
-            'pp_4' => ['table' => 'patient', 'field' => 'drugallergy', 'type' => 'both'],
-            'hist_1' => ['table' => 'opdscreen', 'field' => 'cc', 'type' => 'both'],
-            'hist_6' => ['table' => 'patient', 'field' => 'drugallergy', 'type' => 'both'],
-            'pe_1' => ['table' => 'ovst', 'field' => 'vstdate,vsttime', 'type' => 'auto'],
-            'pe_4' => ['table' => 'opdscreen', 'field' => 'pulse,rr,temperature', 'type' => 'both'],
-            'pe_5' => ['table' => 'opdscreen', 'field' => 'bps,bpd', 'type' => 'both'],
-            'pe_6' => ['table' => 'opdscreen', 'field' => 'bw,height', 'type' => 'both'],
-            'pe_7' => ['table' => 'ovstdiag', 'field' => 'icd10', 'type' => 'both'],
-            'tx_1' => ['table' => 'lab_head', 'field' => 'lab_order_number', 'type' => 'both'],
-            'tx_2' => ['table' => 'opitemrece', 'field' => 'icode', 'type' => 'both'],
-            'tx_6' => ['table' => 'ovst', 'field' => 'doctor', 'type' => 'both'],
-        ];
+        return $hints;
     }
 }

@@ -19,7 +19,7 @@ class FshhChatClient
     public function call(string $action, array $payload = [], int $timeout = 12): array
     {
         if (! $this->isConfigured()) {
-            return ['success' => false, 'error' => 'ยังไม่ได้ตั้งค่า FSHH Chat'];
+            return ['success' => false, 'error' => 'ยังไม่ได้ตั้งค่า S-Chat'];
         }
 
         try {
@@ -37,18 +37,18 @@ class FshhChatClient
                 $payload
             ));
         } catch (\Throwable $e) {
-            Log::warning('FSHH Chat sync failed: '.$e->getMessage(), ['action' => $action]);
+            Log::warning('S-Chat sync failed: '.$e->getMessage(), ['action' => $action]);
 
             return ['success' => false, 'error' => $e->getMessage()];
         }
 
         $json = $response->json();
         if (! is_array($json)) {
-            return ['success' => false, 'error' => 'FSHH Chat ตอบกลับไม่ถูกต้อง'];
+            return ['success' => false, 'error' => 'S-Chat ตอบกลับไม่ถูกต้อง'];
         }
 
         if (! $response->successful() || ($json['success'] ?? false) === false) {
-            Log::warning('FSHH Chat rejected', [
+            Log::warning('S-Chat rejected', [
                 'action' => $action,
                 'status' => $response->status(),
                 'body' => $json,

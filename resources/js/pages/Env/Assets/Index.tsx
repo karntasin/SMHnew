@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Link, router, useForm } from '@inertiajs/react';
-import { Box, FileSpreadsheet, Pencil, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
+import { Box, FileSpreadsheet, Pencil, Plus, RefreshCw, Search, Trash2, Wrench } from 'lucide-react';
 import {
     QualityPage,
     Panel,
@@ -64,7 +64,14 @@ interface Asset {
     inspection_status_label?: string;
     status: string;
     purchase_date?: string | null;
+    install_date?: string | null;
+    annual_pm_budget?: number | null;
     warranty_expiry?: string | null;
+    schedule?: {
+        frequency_type?: string;
+        frequency_value?: number;
+        next_pm_date?: string | null;
+    } | null;
     image_path?: string | null;
     image_ref?: string | null;
     sent_at?: string | null;
@@ -167,6 +174,8 @@ export default function Index({
         risk_level: 'C',
         inspection_status: 'not_inspect',
         purchase_date: '',
+        install_date: '',
+        annual_pm_budget: '',
         warranty_expiry: '',
         frequency_type: 'month',
         frequency_value: '12',
@@ -249,10 +258,12 @@ export default function Index({
             risk_level: item.risk_level || 'C',
             inspection_status: item.inspection_status || 'not_inspect',
             purchase_date: item.purchase_date || '',
+            install_date: item.install_date || '',
+            annual_pm_budget: item.annual_pm_budget != null ? String(item.annual_pm_budget) : '',
             warranty_expiry: item.warranty_expiry || '',
-            frequency_type: 'month',
-            frequency_value: '12',
-            next_pm_date: '',
+            frequency_type: item.schedule?.frequency_type || 'month',
+            frequency_value: item.schedule?.frequency_value ? String(item.schedule.frequency_value) : '12',
+            next_pm_date: item.schedule?.next_pm_date || '',
             image: null,
             remove_image: false,
         });
@@ -525,6 +536,11 @@ export default function Index({
                                                 >
                                                     <RefreshCw className="h-4 w-4" />
                                                 </Button>
+                                                <Button size="icon" variant="ghost" className="h-8 w-8" title="แผน PM" asChild>
+                                                    <Link href={route('env.pm.assets.show', item.id)}>
+                                                        <Wrench className="h-4 w-4" />
+                                                    </Link>
+                                                </Button>
                                                 <Button
                                                     size="icon"
                                                     variant="ghost"
@@ -694,9 +710,9 @@ export default function Index({
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="A">A สูง</SelectItem>
-                                    <SelectItem value="B">B กลาง</SelectItem>
-                                    <SelectItem value="C">C ต่ำ</SelectItem>
+                                    <SelectItem value="A">A สูง (High)</SelectItem>
+                                    <SelectItem value="B">B กลาง (Medium)</SelectItem>
+                                    <SelectItem value="C">C ต่ำ (Low)</SelectItem>
                                     <SelectItem value="N">ไม่ระบุ</SelectItem>
                                 </SelectContent>
                             </Select>
@@ -715,16 +731,50 @@ export default function Index({
                                 </SelectContent>
                             </Select>
                         </Field>
-                        {!editingItem && (
-                            <Field label="รอบ PM (เดือน)">
-                                <Input
-                                    type="number"
-                                    min={1}
-                                    value={data.frequency_value}
-                                    onChange={(e) => setData('frequency_value', e.target.value)}
-                                />
-                            </Field>
-                        )}
+                        <Field label="วันที่ติดตั้ง">
+                            <Input
+                                type="date"
+                                value={data.install_date}
+                                onChange={(e) => setData('install_date', e.target.value)}
+                            />
+                        </Field>
+                        <Field label="งบ PM ต่อปี">
+                            <Input
+                                type="number"
+                                min={0}
+                                step="0.01"
+                                value={data.annual_pm_budget}
+                                onChange={(e) => setData('annual_pm_budget', e.target.value)}
+                            />
+                        </Field>
+                        <Field label="หน่วยรอบ PM">
+                            <Select value={data.frequency_type} onValueChange={(v) => setData('frequency_type', v)}>
+                                <SelectTrigger className="rounded-xl">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="day">วัน</SelectItem>
+                                    <SelectItem value="week">สัปดาห์</SelectItem>
+                                    <SelectItem value="month">เดือน</SelectItem>
+                                    <SelectItem value="year">ปี</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </Field>
+                        <Field label="ทุกกี่หน่วย">
+                            <Input
+                                type="number"
+                                min={1}
+                                value={data.frequency_value}
+                                onChange={(e) => setData('frequency_value', e.target.value)}
+                            />
+                        </Field>
+                        <Field label="วัน PM ถัดไป">
+                            <Input
+                                type="date"
+                                value={data.next_pm_date}
+                                onChange={(e) => setData('next_pm_date', e.target.value)}
+                            />
+                        </Field>
 
                         <Field label="รูปภาพ สป." className="sm:col-span-2">
                             <div className="flex flex-wrap items-start gap-3">

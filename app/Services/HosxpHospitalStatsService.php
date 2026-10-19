@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Hospital aggregates shared by the main dashboard and FSHH Chat.
+ * Hospital aggregates shared by the main dashboard and S-Chat.
  * Totals only — no patient names, CID, HN/AN lists.
  */
 class HosxpHospitalStatsService

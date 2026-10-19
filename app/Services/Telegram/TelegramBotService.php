@@ -45,13 +45,27 @@ class TelegramBotService
     public static function firstLikelyChatId(string ...$values): ?string
     {
         foreach ($values as $value) {
-            $trimmed = trim($value);
-            if (self::isLikelyChatId($trimmed)) {
-                return $trimmed;
+            $normalized = self::normalizeChatId($value);
+            if ($normalized !== null && self::isLikelyChatId($normalized)) {
+                return $normalized;
             }
         }
 
         return null;
+    }
+
+    /** ตัดช่องว่าง/อักขระแปลกปลอมออกจาก Chat ID (เหลือแค่ - และตัวเลข) */
+    public static function normalizeChatId(?string $chatId): ?string
+    {
+        $chatId = trim((string) $chatId);
+        if ($chatId === '') {
+            return null;
+        }
+
+        $normalized = preg_replace('/[^\d-]/', '', $chatId) ?? '';
+        $normalized = preg_replace('/(?!^)-/', '', $normalized) ?? '';
+
+        return $normalized !== '' ? $normalized : null;
     }
 
     public static function isLikelyBotToken(?string $token): bool
@@ -63,7 +77,7 @@ class TelegramBotService
 
     public static function isLikelyChatId(?string $chatId): bool
     {
-        $chatId = trim((string) $chatId);
+        $chatId = self::normalizeChatId($chatId) ?? '';
 
         return (bool) preg_match('/^-?\d{5,}$/', $chatId);
     }
@@ -78,7 +92,7 @@ class TelegramBotService
         ?string $parseMode = 'HTML',
         ?string $botToken = null,
     ): array {
-        $chatId = trim((string) ($chatId ?: $this->defaultChatId()));
+        $chatId = self::normalizeChatId($chatId ?: $this->defaultChatId()) ?? '';
         $text = trim($text);
 
         if ($chatId === '' || $text === '') {

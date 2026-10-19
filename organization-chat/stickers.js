@@ -1,4 +1,4 @@
-/** FSHH Chat custom sticker pack (PNG on Worker assets, not D1). */
+/** S-Chat custom sticker pack (PNG on Worker assets, not D1). */
 
 export const STICKER_PACK = [
   { id: 'u1', file: 'u1.png' },

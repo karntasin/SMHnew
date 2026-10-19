@@ -344,7 +344,7 @@ export default function ServerMonitorDashboard({ initial, ranges }: Props) {
 
     return (
         <AppLayout breadcrumbs={[
-            { title: 'ศูนย์ตั้งค่า', href: '/settings-hub' },
+            { title: 'ตั้งค่าระบบ', href: '/settings-hub' },
             { title: 'ตรวจสอบเซิร์ฟเวอร์', href: '/server-monitor' },
         ]}>
             <Head title="ตรวจสอบเซิร์ฟเวอร์" />

@@ -9,8 +9,9 @@ use App\Models\HrdUserCompetency;
 use App\Models\HrdModule;
 use App\Models\HrdLesson;
 use App\Models\HrdQuiz;
-use App\Models\HrdQuizAttempt;
 use App\Models\HrdLearningProgress;
+use App\Models\HrdSatisfactionResponse;
+use App\Services\Hrd\HrdCompletionService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
@@ -22,19 +23,12 @@ class HrdController extends Controller
     public function dashboard()
     {
         $user = Auth::user();
-        
-        // Personal Stats
-        $internalHours = HrdEnrollment::where('user_id', $user->id)
-            ->where('hrd_enrollments.status', 'completed')
-            ->join('hrd_courses', 'hrd_enrollments.course_id', '=', 'hrd_courses.id')
-            ->sum('hrd_courses.hours');
-
-        $externalHours = HrdExternalRecord::where('user_id', $user->id)
-            ->where('status', 'approved')
-            ->sum('hours');
+        $hrd = app(HrdCompletionService::class);
+        $fiscal = $hrd->fiscalBounds();
 
         $stats = [
-            'total_hours' => $internalHours + $externalHours,
+            'total_hours' => $hrd->hoursForUser($user->id),
+            'fiscal_label' => $fiscal['label'],
             'completed_courses' => HrdEnrollment::where('user_id', $user->id)
                 ->where('status', 'completed')
                 ->count() + HrdExternalRecord::where('user_id', $user->id)->where('status', 'approved')->count(),
@@ -105,7 +99,7 @@ class HrdController extends Controller
             ->take(5)
             ->get();
 
-        $canEdit = $user->hasRole(['admin', 'header', 'Admin', 'Header']);
+        $canEdit = app(HrdCompletionService::class)->isEditor($user);
 
         return Inertia::render('HRD/Dashboard', [
             'stats' => $stats,
@@ -115,10 +109,21 @@ class HrdController extends Controller
         ]);
     }
 
+    public function hub()
+    {
+        $hrd = app(HrdCompletionService::class);
+        $user = Auth::user();
+
+        return Inertia::render('HRD/Hub', [
+            'canManageStaff' => $hrd->canManageStaff($user),
+            'canConfigure' => $hrd->isOrgEditor($user),
+        ]);
+    }
+
     public function index(Request $request)
     {
         $user = Auth::user();
-        $canEdit = $user->hasRole(['admin', 'header', 'Admin', 'Header']);
+        $canEdit = app(HrdCompletionService::class)->isEditor($user);
 
         $query = HrdCourse::query();
 
@@ -142,7 +147,7 @@ class HrdController extends Controller
     public function show(HrdCourse $course)
     {
         $user = Auth::user();
-        $canEdit = $user->hasRole(['admin', 'header', 'Admin', 'Header']);
+        $canEdit = app(HrdCompletionService::class)->isEditor($user);
 
         if (! $canEdit && $course->status !== 'published') {
             abort(404);
@@ -210,7 +215,12 @@ class HrdController extends Controller
             ]
         );
 
-        return back()->with('success', 'Lesson completed!');
+        $enrollment = app(HrdCompletionService::class)->syncEnrollment(Auth::id(), $course);
+        $message = $enrollment->status === 'completed'
+            ? 'เรียนครบหลักสูตรแล้ว ระบบบันทึกชั่วโมงและออกเกียรติบัตรให้'
+            : 'บันทึกบทเรียนนี้แล้ว';
+
+        return back()->with('success', $message);
     }
 
     public function myTraining()
@@ -226,9 +236,12 @@ class HrdController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
+        $satisfactionCourseIds = HrdSatisfactionResponse::where('user_id', $user->id)->pluck('course_id');
+
         return Inertia::render('HRD/MyTraining/Index', [
             'enrollments' => $enrollments,
             'externalRecords' => $externalRecords,
+            'satisfactionCourseIds' => $satisfactionCourseIds,
         ]);
     }
 
@@ -323,83 +336,48 @@ class HrdController extends Controller
             'answers' => 'required|array', // [question_id => answer_value]
         ]);
 
-        $score = 0;
-        $questions = $quiz->questions()->with('answers')->get();
-        $totalQuestions = $questions->count();
-        
-        foreach ($questions as $question) {
-            if (!isset($data['answers'][$question->id])) {
-                continue;
-            }
+        $result = app(HrdCompletionService::class)->recordQuizAttempt($quiz, Auth::id(), $data['answers']);
+        $label = $quiz->purpose === 'pre' ? 'ก่อนเรียน' : ($quiz->purpose === 'post' ? 'หลังเรียน' : 'แบบทดสอบ');
+        $outcome = $result['passed'] ? 'ผ่าน' : 'ยังไม่ผ่าน';
 
-            $userAnswer = $data['answers'][$question->id];
+        return back()->with('success', $label.' '.$outcome.' '.$result['score'].'/'.$result['total_points'].' ('.round($result['percentage']).'%)');
+    }
 
-            if ($question->type === 'multiple_choice' || $question->type === 'true_false') {
-                // User sends answer_id
-                $correctAnswer = $question->answers->where('is_correct', true)->first();
-                if ($correctAnswer && $correctAnswer->id == $userAnswer) {
-                    $score += $question->points;
-                }
-            } elseif ($question->type === 'fill_blank') {
-                // User sends text string
-                $correctAnswer = $question->answers->first(); // Assuming one correct answer stored
-                if ($correctAnswer && strtolower(trim($userAnswer)) === strtolower(trim($correctAnswer->answer_text))) {
-                    $score += $question->points;
-                }
-            } elseif ($question->type === 'matching') {
-                // User sends array [answer_id => user_matched_text]
-                // Or better: [answer_id => user_matched_pair_text]
-                // Let's assume user sends: [answer_id_1 => "Right Side 1", answer_id_2 => "Right Side 2"]
-                
-                $isCorrect = true;
-                if (!is_array($userAnswer)) {
-                    $isCorrect = false;
-                } else {
-                    foreach ($question->answers as $ans) {
-                        // Check if user provided a match for this answer item
-                        if (!isset($userAnswer[$ans->id])) {
-                            $isCorrect = false;
-                            break;
-                        }
-                        // Check if the match is correct
-                        if (trim($userAnswer[$ans->id]) !== trim($ans->matching_pair)) {
-                            $isCorrect = false;
-                            break;
-                        }
-                    }
-                }
-                
-                if ($isCorrect) {
-                    $score += $question->points;
-                }
-            }
+    public function certificate(HrdEnrollment $enrollment)
+    {
+        $user = Auth::user();
+        $service = app(HrdCompletionService::class);
+        if ($enrollment->user_id !== $user->id && ! $service->managesUser($user, (int) $enrollment->user_id)) {
+            abort(403);
+        }
+        if ($enrollment->status !== 'completed') {
+            abort(404);
+        }
+        if (! $enrollment->certificate_path || ! Storage::disk('public')->exists($enrollment->certificate_path)) {
+            $service->issueCertificate($enrollment);
+            $enrollment->refresh();
         }
 
-        // Calculate total possible points instead of just question count
-        $totalPoints = $questions->sum('points');
-        $percentage = $totalPoints > 0 ? ($score / $totalPoints) * 100 : 0;
-        $passed = $percentage >= $quiz->passing_score;
-
-        HrdQuizAttempt::create([
-            'user_id' => Auth::id(),
-            'quiz_id' => $quiz->id,
-            'score' => $score,
-            'total_questions' => $totalQuestions, // Or store total_points
-            'passed' => $passed,
-            'started_at' => now(), // Simplified
-            'completed_at' => now(),
+        return response(Storage::disk('public')->get($enrollment->certificate_path), 200, [
+            'Content-Type' => 'text/html; charset=UTF-8',
         ]);
-
-        return back()->with('success', 'Quiz submitted! Score: ' . $score . '/' . $totalPoints . ' (' . round($percentage) . '%)');
     }
 
     public function create()
     {
+        if (! app(HrdCompletionService::class)->isOrgEditor(Auth::user())) {
+            abort(403);
+        }
+
         return Inertia::render('HRD/Courses/Create');
     }
 
     public function store(Request $request)
     {
+        if (! app(HrdCompletionService::class)->isOrgEditor(Auth::user())) {
+            abort(403);
+        }
+
         $validated = $request->validate([
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
@@ -454,9 +432,13 @@ class HrdController extends Controller
 
     public function update(Request $request, HrdCourse $course)
     {
-        if (!Auth::user()->hasRole(['admin', 'header', 'Admin', 'Header'])) {
+        if (! app(HrdCompletionService::class)->isEditor(Auth::user())) {
             abort(403, 'Unauthorized action.');
         }
+
+        $request->merge([
+            'expiration_days' => $request->filled('expiration_days') ? $request->input('expiration_days') : null,
+        ]);
 
         $validated = $request->validate([
             'title' => 'required|string|max:255',
@@ -467,7 +449,16 @@ class HrdController extends Controller
             'hours' => 'required|numeric|min:0',
             'location' => 'nullable|string|max:255',
             'status' => 'nullable|in:draft,published,archived',
+            'is_mandatory' => 'nullable|boolean',
+            'expiration_days' => 'nullable|integer|min:1|max:3650',
+            'track_behavior' => 'nullable|boolean',
         ]);
+
+        $validated['is_mandatory'] = $request->boolean('is_mandatory');
+        $validated['track_behavior'] = $request->boolean('track_behavior');
+        if (empty($validated['expiration_days'])) {
+            $validated['expiration_days'] = null;
+        }
 
         $course->update($validated);
 
@@ -476,7 +467,7 @@ class HrdController extends Controller
 
     public function destroy(HrdCourse $course)
     {
-        if (!Auth::user()->hasRole(['admin', 'header', 'Admin', 'Header'])) {
+        if (! app(HrdCompletionService::class)->isEditor(Auth::user())) {
             abort(403, 'Unauthorized action.');
         }
 

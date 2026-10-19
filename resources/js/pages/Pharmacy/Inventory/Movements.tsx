@@ -2,6 +2,7 @@ import { Head, Link } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import PharmacySubNav, { pharmacyBreadcrumbs } from '@/pages/Pharmacy/PharmacySubNav';
 import { Button } from '@/components/ui/button';
+import { warehouseActive, warehouseHome, warehouseSupply, wh } from '@/pages/Pharmacy/inventoryCatalog';
 
 type Row = {
     id: number;
@@ -32,15 +33,15 @@ const typeLabel: Record<string, string> = {
 export default function Movements({ rows }: { rows: Row[] }) {
     return (
         <AppLayout breadcrumbs={pharmacyBreadcrumbs([
-            { title: 'คลังยา / ห้องยา', href: route('pharmacy.inventory.index') },
+            { title: warehouseHome(), href: wh('index') },
             { title: 'ประวัติเคลื่อนไหว' },
         ])}>
-            <Head title="ประวัติเคลื่อนไหวยา" />
+            <Head title={warehouseSupply() ? "ประวัติเคลื่อนไหวเวชภัณฑ์" : "ประวัติเคลื่อนไหวยา"} />
             <div className="container mx-auto space-y-6 px-4 py-6">
-                <PharmacySubNav active="pharmacy.inventory.index" />
+                <PharmacySubNav active={warehouseActive()} />
                 <div className="flex justify-between">
                     <h1 className="text-xl font-bold">ประวัติเคลื่อนไหวสต็อก</h1>
-                    <Button asChild variant="secondary" className="rounded-xl"><Link href={route('pharmacy.inventory.stock')}>กลับคงเหลือ</Link></Button>
+                    <Button asChild variant="secondary" className="rounded-xl"><Link href={wh('stock')}>กลับคงเหลือ</Link></Button>
                 </div>
                 <div className="overflow-hidden rounded-3xl border bg-white">
                     <table className="min-w-full text-sm">

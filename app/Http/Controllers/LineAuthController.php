@@ -238,7 +238,7 @@ class LineAuthController extends Controller
         try {
             app(FshhChatSyncService::class)->syncUser($user->fresh(['departments', 'haTeams']) ?? $user);
         } catch (\Throwable $e) {
-            Log::warning('FSHH Chat sync after LINE login failed: '.$e->getMessage());
+            Log::warning('S-Chat sync after LINE login failed: '.$e->getMessage());
         }
     }
 

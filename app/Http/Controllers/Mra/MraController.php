@@ -9,6 +9,7 @@ use App\Models\Mra\MraCategory;
 use App\Models\Mra\MraCriteria;
 use App\Models\Hosxp\Patient;
 use App\Services\HosxpService;
+use App\Services\Mra\MraAutoCheckService;
 use App\Services\Mra\MraExcelReportService;
 use App\Services\ThaiPdfService;
 use Carbon\Carbon;
@@ -26,9 +27,12 @@ class MraController extends Controller
 
     protected $hosxpService;
 
-    public function __construct(HosxpService $hosxpService)
+    protected MraAutoCheckService $mraAutoCheckService;
+
+    public function __construct(HosxpService $hosxpService, MraAutoCheckService $mraAutoCheckService)
     {
         $this->hosxpService = $hosxpService;
+        $this->mraAutoCheckService = $mraAutoCheckService;
     }
 
     /**
@@ -377,43 +381,37 @@ class MraController extends Controller
     }
 
     /**
-     * Auto-check criteria จาก HOSxP
+     * ดึงหลักฐานเกณฑ์จาก HOSxP (OPD/ER/IPD)
+     * พบหลักฐานชัดเจน = auto ผ่าน · ไม่พบ = ให้ตรวจเอง
      */
     public function autoCheck(Request $request)
     {
         $vn = $request->input('vn');
-        
+
         if (!$vn) {
             return response()->json(['error' => 'VN is required'], 400);
         }
 
-        $auditType = $request->input('audit_type');
+        $auditType = in_array($request->input('audit_type'), ['opd', 'ipd'], true)
+            ? $request->input('audit_type')
+            : 'opd';
 
-        $criteria = MraCriteria::active()
-            ->whereIn('data_type', ['auto', 'both'])
-            ->when($auditType, function ($q) use ($auditType) {
-                $q->whereHas('category', fn ($cq) => $cq->forAuditType($auditType)->active());
-            })
-            ->get();
+        $payload = $this->mraAutoCheckService->fetchEvidence((string) $vn, $auditType);
 
-        $results = [];
-        foreach ($criteria as $criterion) {
-            $check = $this->hosxpService->autoCheckCriteria($vn, $criterion->code);
-            $results[$criterion->code] = [
-                'criteria_id' => $criterion->id,
-                'criteria_name' => $criterion->name,
-                'passed' => $check['passed'],
-                'value' => $check['value'] ?? null,
-                'message' => $check['message'] ?? null,
-                'max_score' => $criterion->max_score,
-            ];
+        if (!empty($payload['error'])) {
+            return response()->json([
+                'vn' => $vn,
+                'error' => $payload['error'],
+                'auto_checks' => [],
+                'checked_count' => 0,
+                'evidence_found_count' => 0,
+                'evidence_missing_count' => 0,
+                'auto_pass_count' => 0,
+                'case_meta' => $payload['case_meta'] ?? null,
+            ], 404);
         }
 
-        return response()->json([
-            'vn' => $vn,
-            'auto_checks' => $results,
-            'checked_count' => count($results),
-        ]);
+        return response()->json($payload);
     }
 
     /**
@@ -520,6 +518,8 @@ class MraController extends Controller
             'finalize' => 'boolean',
         ]);
 
+        $validated['results'] = $this->applyDsdNaCascade($validated['results']);
+
         DB::transaction(function() use ($validated, $audit) {
             // ลบ details เก่า
             $audit->details()->delete();
@@ -569,6 +569,42 @@ class MraController extends Controller
             : 'บันทึกผลการตรวจสอบเรียบร้อยแล้ว';
 
         return redirect()->back()->with('success', $message);
+    }
+
+    /**
+     * IPD-01: เมื่อ dsd_3 เป็น N/A ให้ dsd_4 เป็น N/A ตาม
+     *
+     * @param  array<int, array<string, mixed>>  $results
+     * @return array<int, array<string, mixed>>
+     */
+    private function applyDsdNaCascade(array $results): array
+    {
+        $ids = collect($results)->pluck('criteria_id')->filter()->all();
+        if ($ids === []) {
+            return $results;
+        }
+
+        $codes = MraCriteria::query()
+            ->whereIn('id', $ids)
+            ->pluck('code', 'id');
+
+        $dsd3Result = null;
+        $dsd4Index = null;
+        foreach ($results as $index => $result) {
+            $code = $codes->get($result['criteria_id']);
+            if ($code === 'dsd_3') {
+                $dsd3Result = $result['result'] ?? null;
+            }
+            if ($code === 'dsd_4') {
+                $dsd4Index = $index;
+            }
+        }
+
+        if ($dsd3Result === 'na' && $dsd4Index !== null) {
+            $results[$dsd4Index]['result'] = 'na';
+        }
+
+        return $results;
     }
 
     /**

@@ -23,7 +23,7 @@ export default function AiSummarizer() {
         const formData = new FormData();
         formData.append('file', file);
         try {
-            const res = await axios.post(route('admin-docs.summarizeAi'), formData);
+            const res = await axios.post(route('documents.summarizeAi'), formData);
             setSummary(res.data.summary);
         } catch (error: any) {
             alert(error.response?.data?.error || "เกิดข้อผิดพลาดในการสรุปเนื้อหา");
@@ -36,7 +36,7 @@ export default function AiSummarizer() {
         if (!summary) return;
         setIsDownloading(true);
         try {
-            const res = await axios.post(route('admin-docs.exportDocx'), { summary }, {
+            const res = await axios.post(route('documents.exportDocx'), { summary }, {
                 responseType: 'blob'
             });
             const url = window.URL.createObjectURL(new Blob([res.data]));

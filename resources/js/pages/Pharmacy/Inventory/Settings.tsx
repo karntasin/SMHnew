@@ -45,6 +45,7 @@ import {
     Upload,
     X,
 } from 'lucide-react';
+import { warehouseActive, warehouseHome, warehouseSupply, wh } from '@/pages/Pharmacy/inventoryCatalog';
 
 type Location = {
     id: number;
@@ -87,7 +88,7 @@ export default function Settings({
     const [activeTab, setActiveTab] = useState<'alerts' | 'ha' | 'hosxp' | 'labels' | 'locations' | 'packaging' | 'stock_import'>('alerts');
 
     // Excel Stock Import state
-    const [importScope, setImportScope] = useState<'all' | 'drug' | 'nondrug'>('all');
+    const importScope: 'drug' | 'nondrug' = warehouseSupply() ? 'nondrug' : 'drug';
     const [templateLocationId, setTemplateLocationId] = useState<number>(locations[0]?.id ?? 1);
     const [importFile, setImportFile] = useState<File | null>(null);
     const [importLocationId, setImportLocationId] = useState<number>(locations[0]?.id ?? 1);
@@ -162,7 +163,7 @@ export default function Settings({
         if (target === 'egfr') setIsTestingEgfrTelegram(true);
 
         router.post(
-            route('pharmacy.inventory.settings.test-telegram'),
+            wh('settings.test-telegram'),
             {
                 target,
                 telegram_bot_token: settingValues['telegram_bot_token'] || '',
@@ -197,7 +198,7 @@ export default function Settings({
         e.preventDefault();
         setIsSavingSettings(true);
         router.post(
-            route('pharmacy.inventory.settings.values.batch'),
+            wh('settings.values.batch'),
             { settings: settingValues },
             {
                 preserveScroll: true,
@@ -211,7 +212,7 @@ export default function Settings({
         e.preventDefault();
         const formData = new FormData(e.currentTarget);
         router.post(
-            route('pharmacy.inventory.settings.locations.store'),
+            wh('settings.locations.store'),
             Object.fromEntries(formData.entries()),
             {
                 preserveScroll: true,
@@ -225,7 +226,7 @@ export default function Settings({
         if (!editingLocation) return;
         const formData = new FormData(e.currentTarget);
         router.patch(
-            route('pharmacy.inventory.settings.locations.update', editingLocation.id),
+            wh('settings.locations.update', editingLocation.id),
             {
                 code: formData.get('code'),
                 name: formData.get('name'),
@@ -244,7 +245,7 @@ export default function Settings({
     const handleDeleteLocation = () => {
         if (!deletingLocation) return;
         router.delete(
-            route('pharmacy.inventory.settings.locations.destroy', deletingLocation.id),
+            wh('settings.locations.destroy', deletingLocation.id),
             {
                 preserveScroll: true,
                 onSuccess: () => setDeletingLocation(null),
@@ -257,7 +258,7 @@ export default function Settings({
         e.preventDefault();
         const formData = new FormData(e.currentTarget);
         router.post(
-            route('pharmacy.inventory.settings.packaging-types.store'),
+            wh('settings.packaging-types.store'),
             Object.fromEntries(formData.entries()),
             {
                 preserveScroll: true,
@@ -271,7 +272,7 @@ export default function Settings({
         if (!editingPackaging) return;
         const formData = new FormData(e.currentTarget);
         router.patch(
-            route('pharmacy.inventory.settings.packaging-types.update', editingPackaging.id),
+            wh('settings.packaging-types.update', editingPackaging.id),
             {
                 code: formData.get('code'),
                 name: formData.get('name'),
@@ -288,7 +289,7 @@ export default function Settings({
     const handleDeletePackaging = () => {
         if (!deletingPackaging) return;
         router.delete(
-            route('pharmacy.inventory.settings.packaging-types.destroy', deletingPackaging.id),
+            wh('settings.packaging-types.destroy', deletingPackaging.id),
             {
                 preserveScroll: true,
                 onSuccess: () => setDeletingPackaging(null),
@@ -298,7 +299,7 @@ export default function Settings({
 
     // Excel Stock Import Handlers
     const handleDownloadTemplate = () => {
-        const url = route('pharmacy.inventory.settings.stock-template', {
+        const url = wh('settings.stock-template', {
             location_id: templateLocationId,
             scope: importScope,
         });
@@ -320,7 +321,7 @@ export default function Settings({
         }
 
         try {
-            const response = await fetch(route('pharmacy.inventory.settings.stock-import.preview'), {
+            const response = await fetch(wh('settings.stock-import.preview'), {
                 method: 'POST',
                 body: formData,
                 headers: {
@@ -349,7 +350,7 @@ export default function Settings({
         setUploadError(null);
 
         try {
-            const response = await fetch(route('pharmacy.inventory.settings.stock-import.commit'), {
+            const response = await fetch(wh('settings.stock-import.commit'), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -394,14 +395,14 @@ export default function Settings({
     return (
         <AppLayout
             breadcrumbs={pharmacyBreadcrumbs([
-                { title: 'คลังยา / ห้องยา', href: route('pharmacy.inventory.index') },
+                { title: warehouseHome(), href: wh('index') },
                 { title: 'ตั้งค่าระบบคลังยา' },
             ])}
         >
-            <Head title="ตั้งค่าระบบคลังยาและห้องยา" />
+            <Head title={warehouseSupply() ? "ตั้งค่าคลังเวชภัณฑ์มิใช่ยา" : "ตั้งค่าระบบคลังยาและห้องยา"} />
 
             <div className="container mx-auto space-y-6 px-4 py-6">
-                <PharmacySubNav active="pharmacy.inventory.index" />
+                <PharmacySubNav active={warehouseActive()} />
 
                 {/* Header Banner */}
                 <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-violet-100 bg-gradient-to-r from-slate-900 via-indigo-950 to-violet-900 p-6 text-white shadow-xl">
@@ -410,7 +411,7 @@ export default function Settings({
                             <Sliders className="h-4 w-4" />
                             Inventory Configuration Suite
                         </div>
-                        <h1 className="text-2xl font-bold tracking-tight">ตั้งค่าระบบคลังยาและห้องยา</h1>
+                        <h1 className="text-2xl font-bold tracking-tight">{warehouseSupply() ? "ตั้งค่าคลังเวชภัณฑ์มิใช่ยา" : "ตั้งค่าระบบคลังยาและห้องยา"}</h1>
                         <p className="text-sm text-violet-200/80 max-w-2xl">
                             ควบคุมเกณฑ์แจ้งเตือนสต็อก · มาตรฐานยาความเสี่ยงสูง HA · การซิงก์ตัดจ่าย HOSxP · สติ๊กเกอร์ · และโครงสร้างคลัง
                         </p>
@@ -601,7 +602,9 @@ export default function Settings({
                                     การแจ้งเตือนผ่าน Telegram Bot อัตโนมัติ
                                 </h2>
                                 <p className="text-xs text-muted-foreground">
-                                    แจ้งเตือนสต็อกเข้ากลุ่มคลังยา และแจ้งเตือนขนาดยาตาม eGFR เข้ากลุ่ม Drug&egfr คนละกลุ่มกัน
+                                    {warehouseSupply()
+                                        ? 'แจ้งเตือนสต็อกเวชภัณฑ์มิใช่ยาเข้ากลุ่มคลังชุดเดียวกับคลังยา เป็นข้อความคนละชุด'
+                                        : 'แจ้งเตือนสต็อกเข้ากลุ่มคลังยา และแจ้งเตือนขนาดยาตาม eGFR เข้ากลุ่ม Drug&egfr คนละกลุ่มกัน'}
                                 </p>
                             </div>
 
@@ -626,7 +629,7 @@ export default function Settings({
                                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                                         <div className="flex items-center gap-2">
                                             <Package className="h-4 w-4 text-violet-600" />
-                                            <span className="text-sm font-bold text-foreground">1. แจ้งเตือนคลังยา (กลุ่มคลังยา)</span>
+                                            <span className="text-sm font-bold text-foreground">{warehouseSupply() ? 'แจ้งเตือนคลังเวชภัณฑ์มิใช่ยา' : '1. แจ้งเตือนคลังยา (กลุ่มคลังยา)'}</span>
                                             <span className="text-xs text-muted-foreground">(สต็อกต่ำ / สต็อกหมด / ใกล้หมดอายุ 90 วัน)</span>
                                         </div>
                                         <Button
@@ -638,7 +641,7 @@ export default function Settings({
                                             className="text-xs text-violet-700 hover:text-violet-800 border-violet-200 hover:bg-violet-100"
                                         >
                                             <Send className="mr-1 h-3 w-3" />
-                                            {isTestingStockTelegram ? 'กำลังทดสอบ...' : 'ทดสอบส่งเข้ากลุ่มคลังยา'}
+                                            {isTestingStockTelegram ? 'กำลังทดสอบ...' : (warehouseSupply() ? 'ทดสอบส่งแจ้งเตือนเวชภัณฑ์' : 'ทดสอบส่งเข้ากลุ่มคลังยา')}
                                         </Button>
                                     </div>
 
@@ -651,7 +654,7 @@ export default function Settings({
                                             className="h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
                                         />
                                         <Label htmlFor="telegram_stock_alerts_enabled" className="text-sm font-semibold cursor-pointer">
-                                            เปิดใช้งานการแจ้งเตือนสต็อกยาเข้า Telegram กลุ่มคลังยา
+                                            {warehouseSupply() ? 'เปิดใช้งานการแจ้งเตือนสต็อกเวชภัณฑ์มิใช่ยาเข้า Telegram กลุ่มคลัง' : 'เปิดใช้งานการแจ้งเตือนสต็อกยาเข้า Telegram กลุ่มคลังยา'}
                                         </Label>
                                     </div>
 
@@ -667,7 +670,7 @@ export default function Settings({
                                 </div>
 
                                 {/* กลุ่มที่ 2: ระบบแจ้งเตือนการใช้ยา ตรวจขนาดยาตามช่วง eGFR */}
-                                <div className="rounded-xl border border-rose-100 bg-rose-50/40 p-4 space-y-3 dark:border-rose-900/30 dark:bg-rose-950/20">
+                                {!warehouseSupply() && <div className="rounded-xl border border-rose-100 bg-rose-50/40 p-4 space-y-3 dark:border-rose-900/30 dark:bg-rose-950/20">
                                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                                         <div className="flex items-center gap-2">
                                             <ShieldAlert className="h-4 w-4 text-rose-600" />
@@ -709,7 +712,7 @@ export default function Settings({
                                         />
                                         <p className="text-[11px] text-muted-foreground">ID ของกลุ่ม Drug&egfr เท่านั้น (ขึ้นต้นด้วย -100) ไม่ส่งไปกลุ่มคลังยา</p>
                                     </div>
-                                </div>
+                                </div>}
                             </div>
                         </div>
 
@@ -1202,7 +1205,7 @@ export default function Settings({
                                     <div className="flex items-center gap-2">
                                         <Button
                                             type="button"
-                                            onClick={() => router.visit(route('pharmacy.inventory.stock'))}
+                                            onClick={() => router.visit(wh('stock'))}
                                             className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm rounded-xl text-xs gap-1.5"
                                         >
                                             <ExternalLink className="h-3.5 w-3.5" />
@@ -1290,40 +1293,8 @@ export default function Settings({
 
                                         <div className="space-y-1.5">
                                             <Label className="text-xs font-semibold">ขอบเขตหมวดหมู่รายการ</Label>
-                                            <div className="grid grid-cols-3 gap-2">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setImportScope('all')}
-                                                    className={`rounded-xl border p-2.5 text-center text-xs font-medium transition ${
-                                                        importScope === 'all'
-                                                            ? 'border-violet-600 bg-violet-50 text-violet-700 font-bold dark:bg-violet-950/40 dark:text-violet-300'
-                                                            : 'border-border hover:bg-muted/50 text-muted-foreground'
-                                                    }`}
-                                                >
-                                                    ทั้งหมด (ยา + เวชภัณฑ์)
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setImportScope('drug')}
-                                                    className={`rounded-xl border p-2.5 text-center text-xs font-medium transition ${
-                                                        importScope === 'drug'
-                                                            ? 'border-violet-600 bg-violet-50 text-violet-700 font-bold dark:bg-violet-950/40 dark:text-violet-300'
-                                                            : 'border-border hover:bg-muted/50 text-muted-foreground'
-                                                    }`}
-                                                >
-                                                    เฉพาะยา (Drugs)
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setImportScope('nondrug')}
-                                                    className={`rounded-xl border p-2.5 text-center text-xs font-medium transition ${
-                                                        importScope === 'nondrug'
-                                                            ? 'border-violet-600 bg-violet-50 text-violet-700 font-bold dark:bg-violet-950/40 dark:text-violet-300'
-                                                            : 'border-border hover:bg-muted/50 text-muted-foreground'
-                                                    }`}
-                                                >
-                                                    เวชภัณฑ์มิใช่ยา (05)
-                                                </button>
+                                            <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-800">
+                                                {importScope === 'nondrug' ? 'เฉพาะเวชภัณฑ์มิใช่ยา' : 'เฉพาะยา'}
                                             </div>
                                         </div>
                                     </div>
@@ -1665,7 +1636,7 @@ export default function Settings({
                             <div className="space-y-1">
                                 <Label>ประเภท *</Label>
                                 <select name="type" className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
-                                    <option value="warehouse">คลังยาใหญ่ (Warehouse)</option>
+                                    <option value="warehouse">{warehouseSupply() ? 'คลังเวชภัณฑ์ (Warehouse)' : 'คลังยาใหญ่ (Warehouse)'}</option>
                                     <option value="pharmacy">ห้องยา / จุดจ่าย (Pharmacy)</option>
                                 </select>
                             </div>

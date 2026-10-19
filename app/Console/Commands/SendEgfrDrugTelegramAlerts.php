@@ -22,20 +22,32 @@ class SendEgfrDrugTelegramAlerts extends Command
         $this->info('กำลังสแกนและส่งแจ้งเตือน eGFR → Telegram ...');
         $result = $notifier->notify(force: $force, lookbackDays: $days);
 
+        $summary = sprintf(
+            'eGFR Telegram: %s | scanned=%s new=%s sent=%s force=%s',
+            (string) ($result['message'] ?? ''),
+            (string) ($result['scanned'] ?? 0),
+            (string) ($result['new'] ?? 0),
+            (string) ($result['sent'] ?? 0),
+            $force ? '1' : '0',
+        );
+
         if ($result['skipped'] ?? false) {
             $this->warn($result['message']);
+            \Illuminate\Support\Facades\Log::info($summary);
 
             return self::SUCCESS;
         }
 
         if (! ($result['ok'] ?? false)) {
             $this->error($result['message']);
+            \Illuminate\Support\Facades\Log::warning($summary);
 
             return self::FAILURE;
         }
 
         $this->info($result['message']);
         $this->line("สแกนผ่านเกณฑ์: {$result['scanned']} | ใหม่: {$result['new']} | ข้อความที่ส่ง: {$result['sent']}");
+        \Illuminate\Support\Facades\Log::info($summary);
 
         return self::SUCCESS;
     }

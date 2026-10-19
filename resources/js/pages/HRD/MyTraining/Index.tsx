@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Head, useForm } from '@inertiajs/react';
+import { Head, Link, useForm } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -21,8 +21,12 @@ import { toast } from 'sonner';
 
 interface Enrollment {
     id: number;
+    course_id: number;
     status: string;
     completed_at: string | null;
+    pre_test_score: number | null;
+    post_test_score: number | null;
+    satisfaction_score: number | null;
     course: {
         title: string;
         start_date: string;
@@ -46,24 +50,15 @@ interface ExternalRecord {
 interface Props {
     enrollments: Enrollment[];
     externalRecords: ExternalRecord[];
+    satisfactionCourseIds: number[];
 }
 
 const breadcrumbs = [
-    {
-        title: 'KM',
-        href: '/km/dashboard',
-    },
-    {
-        title: 'ระบบการเรียนรู้ (E-Learning)',
-        href: '/km/learn/dashboard',
-    },
-    {
-        title: 'การอบรมของฉัน',
-        href: '/km/learn/my-training',
-    },
+    { title: 'พัฒนาบุคลากร', href: '/km/learn/hub' },
+    { title: 'การอบรมของฉัน', href: '/km/learn/my-training' },
 ];
 
-export default function MyTrainingIndex({ enrollments, externalRecords }: Props) {
+export default function MyTrainingIndex({ enrollments, externalRecords, satisfactionCourseIds }: Props) {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const { data, setData, post, processing, errors, reset } = useForm({
         title: '',
@@ -226,7 +221,9 @@ export default function MyTrainingIndex({ enrollments, externalRecords }: Props)
                                             <TableHead>ชั่วโมง</TableHead>
                                             <TableHead>สถานที่</TableHead>
                                             <TableHead>สถานะ</TableHead>
+                                            <TableHead>คะแนน</TableHead>
                                             <TableHead>วันที่สำเร็จ</TableHead>
+                                            <TableHead></TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -242,16 +239,31 @@ export default function MyTrainingIndex({ enrollments, externalRecords }: Props)
                                                     <TableCell>{enrollment.course.hours}</TableCell>
                                                     <TableCell>{enrollment.course.location}</TableCell>
                                                     <TableCell>{getStatusBadge(enrollment.status)}</TableCell>
+                                                    <TableCell className="text-sm">
+                                                        {enrollment.pre_test_score ?? '-'} / {enrollment.post_test_score ?? '-'}
+                                                    </TableCell>
                                                     <TableCell>
                                                         {enrollment.completed_at 
                                                             ? new Date(enrollment.completed_at).toLocaleDateString('th-TH') 
                                                             : '-'}
                                                     </TableCell>
+                                                    <TableCell className="space-x-2 text-sm">
+                                                        {enrollment.status === 'completed' && (
+                                                            <a className="text-emerald-700 underline" href={route('km.learn.enrollments.certificate', enrollment.id)} target="_blank" rel="noreferrer">
+                                                                เกียรติบัตร
+                                                            </a>
+                                                        )}
+                                                        {enrollment.status === 'completed' && !satisfactionCourseIds.includes(enrollment.course_id) && (
+                                                            <Link className="text-emerald-700 underline" href={route('km.learn.courses.satisfaction', enrollment.course_id)}>
+                                                                ประเมิน
+                                                            </Link>
+                                                        )}
+                                                    </TableCell>
                                                 </TableRow>
                                             ))
                                         ) : (
                                             <TableRow>
-                                                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                                                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                                                     ไม่พบข้อมูลการอบรมภายใน
                                                 </TableCell>
                                             </TableRow>
@@ -279,6 +291,7 @@ export default function MyTrainingIndex({ enrollments, externalRecords }: Props)
                                             <TableHead>วันที่</TableHead>
                                             <TableHead>ชั่วโมง</TableHead>
                                             <TableHead>สถานะ</TableHead>
+                                            <TableHead>หลักฐาน</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -294,11 +307,16 @@ export default function MyTrainingIndex({ enrollments, externalRecords }: Props)
                                                     </TableCell>
                                                     <TableCell>{record.hours}</TableCell>
                                                     <TableCell>{getStatusBadge(record.status)}</TableCell>
+                                                    <TableCell>
+                                                        {record.certificate_path ? (
+                                                            <a className="text-emerald-700 underline" href={`/storage/${record.certificate_path}`} target="_blank" rel="noreferrer">เปิดไฟล์</a>
+                                                        ) : '-'}
+                                                    </TableCell>
                                                 </TableRow>
                                             ))
                                         ) : (
                                             <TableRow>
-                                                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                                                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                                                     ไม่พบข้อมูลการอบรมภายนอก
                                                 </TableCell>
                                             </TableRow>

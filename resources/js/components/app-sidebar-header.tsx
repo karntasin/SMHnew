@@ -8,6 +8,29 @@ import { type BreadcrumbItem as BreadcrumbItemType } from '@/types';
 import AppearanceDropdown from '@/components/appearance-dropdown';
 import NotificationDropdown from '@/Components/NotificationDropdown';
 import { usePage, router } from '@inertiajs/react';
+import { normalizeAppPath, resolveAppUrl } from '@/lib/asset';
+
+function backTarget(breadcrumbs: BreadcrumbItemType[]): string | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const current = normalizeAppPath(window.location.pathname);
+
+  for (let index = breadcrumbs.length - 1; index >= 0; index -= 1) {
+    const href = breadcrumbs[index]?.href;
+    if (!href || href === '#') {
+      continue;
+    }
+
+    const path = normalizeAppPath(resolveAppUrl(href));
+    if (path !== current) {
+      return resolveAppUrl(href);
+    }
+  }
+
+  return null;
+}
 
 export function AppSidebarHeader({ breadcrumbs = [] }: { breadcrumbs?: BreadcrumbItemType[] }) {
   const { locale } = usePage().props as any;
@@ -16,6 +39,27 @@ export function AppSidebarHeader({ breadcrumbs = [] }: { breadcrumbs?: Breadcrum
       router.post(route('locale.update'), { locale: value }, {
           preserveScroll: true,
       });
+  };
+
+  const handleBack = () => {
+    const target = backTarget(breadcrumbs);
+    if (target) {
+      router.visit(target);
+      return;
+    }
+
+    const current = normalizeAppPath(window.location.pathname);
+    if (current.startsWith('/km/learn') && current !== '/km/learn/hub') {
+      router.visit(resolveAppUrl('/km/learn/hub'));
+      return;
+    }
+
+    if (current === '/km/learn/hub') {
+      router.visit(resolveAppUrl('/quality'));
+      return;
+    }
+
+    window.history.back();
   };
 
   return (
@@ -27,7 +71,7 @@ export function AppSidebarHeader({ breadcrumbs = [] }: { breadcrumbs?: Breadcrum
           variant="ghost" 
           size="icon" 
           className="h-7 w-7" 
-          onClick={() => window.history.back()}
+          onClick={handleBack}
           title="ย้อนกลับ"
         >
           <ChevronLeft className="h-4 w-4" />

@@ -29,6 +29,7 @@ import {
     Info,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { IcCharts, IcEditButton, IcPdfButton, dateInput, type IcChart } from '@/pages/IC/ic-ui';
 
 interface DeviceDay {
     id: number;
@@ -40,6 +41,8 @@ interface DeviceDay {
     ventilator_days: number;
     peripheral_iv_days: number;
     ng_tube_days: number;
+    notes?: string | null;
+    can_edit?: boolean;
     reporter?: { name: string };
 }
 
@@ -62,12 +65,14 @@ interface Props {
         month?: string;
         year?: string;
     };
+    charts?: IcChart[];
 }
 
-export default function DeviceDays({ records, monthlySummary, filters }: Props) {
+export default function DeviceDays({ records, monthlySummary, filters, charts }: Props) {
     const [isOpen, setIsOpen] = useState(false);
+    const [editingId, setEditingId] = useState<number | null>(null);
 
-    const { data, setData, post, processing, reset } = useForm({
+    const { data, setData, post, put, processing, reset } = useForm({
         record_date: new Date().toISOString().split('T')[0],
         ward_name: '',
         patient_days: 0,
@@ -81,13 +86,35 @@ export default function DeviceDays({ records, monthlySummary, filters }: Props) 
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        post('/ic/device-days', {
+        const options = {
             onSuccess: () => {
-                toast.success('บันทึกข้อมูล Device Days เรียบร้อยแล้ว');
+                toast.success(editingId ? 'อัปเดตข้อมูล Device Days เรียบร้อยแล้ว' : 'บันทึกข้อมูล Device Days เรียบร้อยแล้ว');
                 reset();
+                setEditingId(null);
                 setIsOpen(false);
             },
+        };
+        if (editingId) {
+            put(`/ic/device-days/${editingId}`, options);
+            return;
+        }
+        post('/ic/device-days', options);
+    };
+
+    const openEdit = (record: DeviceDay) => {
+        setEditingId(record.id);
+        setData({
+            record_date: dateInput(record.record_date),
+            ward_name: record.ward_name || '',
+            patient_days: record.patient_days || 0,
+            urinary_catheter_days: record.urinary_catheter_days || 0,
+            central_line_days: record.central_line_days || 0,
+            ventilator_days: record.ventilator_days || 0,
+            peripheral_iv_days: record.peripheral_iv_days || 0,
+            ng_tube_days: record.ng_tube_days || 0,
+            notes: record.notes || '',
         });
+        setIsOpen(true);
     };
 
     const calculateUtilization = (deviceDays: number, patientDays: number) => {
@@ -96,7 +123,7 @@ export default function DeviceDays({ records, monthlySummary, filters }: Props) 
     };
 
     const recordDialog = (
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <Dialog open={isOpen} onOpenChange={(open) => { setIsOpen(open); if (!open) { setEditingId(null); reset(); } }}>
             <DialogTrigger asChild>
                 <Button className="gap-2 rounded-xl bg-rose-600 hover:bg-rose-700">
                     <Plus className="h-4 w-4" /> บันทึกข้อมูล
@@ -206,7 +233,7 @@ export default function DeviceDays({ records, monthlySummary, filters }: Props) 
                                         </div>
 
                                         <Button type="submit" className="w-full rounded-xl bg-rose-600 hover:bg-rose-700" disabled={processing}>
-                                            บันทึกข้อมูล
+                                            {editingId ? 'บันทึกการแก้ไข' : 'บันทึกข้อมูล'}
                                         </Button>
                                     </form>
                                 </DialogContent>
@@ -227,8 +254,14 @@ export default function DeviceDays({ records, monthlySummary, filters }: Props) 
                 { title: 'Device Days', href: '/ic/device-days' },
             ]}
             subNav={<IcSubNav active="ic.device-days" />}
-            actions={recordDialog}
+            actions={
+                <div className="flex flex-wrap gap-2">
+                    <IcPdfButton module="device-days" />
+                    {recordDialog}
+                </div>
+            }
         >
+            <IcCharts charts={charts} />
                     <Panel title="สรุปรายเดือน" description="ข้อมูลรวมสำหรับคำนวณ HAI Rate">
                             <div className="overflow-hidden rounded-xl border border-slate-200">
                                 <table className="w-full text-sm">
@@ -291,11 +324,12 @@ export default function DeviceDays({ records, monthlySummary, filters }: Props) 
                                             <th className="p-3 text-right">Ventilator</th>
                                             <th className="p-3 text-right">Peripheral IV</th>
                                             <th className="p-3">ผู้บันทึก</th>
+                                            <th className="p-3"></th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {records.data.length === 0 ? (
-                                            <tr><td colSpan={8}><EmptyState text="ยังไม่มีข้อมูล" /></td></tr>
+                                            <tr><td colSpan={9}><EmptyState text="ยังไม่มีข้อมูล" /></td></tr>
                                         ) : (
                                             records.data.map((record) => (
                                                 <tr key={record.id} className="border-t border-slate-100 hover:bg-slate-50/60">
@@ -307,6 +341,7 @@ export default function DeviceDays({ records, monthlySummary, filters }: Props) 
                                                     <td className="p-3 text-right">{record.ventilator_days}</td>
                                                     <td className="p-3 text-right">{record.peripheral_iv_days}</td>
                                                     <td className="p-3">{record.reporter?.name || '-'}</td>
+                                                    <td className="p-3">{record.can_edit && <IcEditButton onClick={() => openEdit(record)} />}</td>
                                                 </tr>
                                             ))
                                         )}

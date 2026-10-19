@@ -12,10 +12,12 @@ import {
     Info,
     Loader2,
     Pill,
+    Send,
     ShieldAlert,
     Users,
     Activity,
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 type AlertRow = {
     hn: string;
@@ -80,17 +82,25 @@ export default function DrugAlerts({
     result,
     catalog = [],
     severityOptions = [],
+    telegramEnabled = false,
 }: {
     result: Result;
     catalog: CatalogItem[];
     severityOptions: { value: string; label: string }[];
+    telegramEnabled?: boolean;
 }) {
-    const { url } = usePage();
+    const { url, props } = usePage<{ flash?: { success?: string; error?: string } }>();
     const [startDate, setStartDate] = useState(result.filters.start_date);
     const [endDate, setEndDate] = useState(result.filters.end_date);
     const [severity, setSeverity] = useState(result.filters.severity || 'all');
     const [showCatalog, setShowCatalog] = useState(false);
     const [applying, setApplying] = useState(false);
+    const [sendingTelegram, setSendingTelegram] = useState(false);
+
+    useEffect(() => {
+        if (props.flash?.success) toast.success(props.flash.success);
+        if (props.flash?.error) toast.error(props.flash.error);
+    }, [props.flash?.success, props.flash?.error]);
 
     useEffect(() => {
         setStartDate(result.filters.start_date);
@@ -256,6 +266,32 @@ export default function DrugAlerts({
                                 >
                                     <Pill className="mr-2 h-4 w-4" />
                                     {showCatalog ? 'ซ่อนแคตตาล็อก' : 'ดูแคตตาล็อกยา'}
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="h-11 rounded-xl border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100"
+                                    disabled={sendingTelegram || !result.connected}
+                                    title={telegramEnabled ? 'ส่งรายการที่พบเข้ากลุ่ม Drug&egfr' : 'ยังไม่ได้เปิด Telegram eGFR ในตั้งค่าคลังยา'}
+                                    onClick={() => {
+                                        setSendingTelegram(true);
+                                        router.post(
+                                            route('pharmacy.drug-alerts.send-telegram'),
+                                            { force: 1, days: 0 },
+                                            {
+                                                preserveScroll: true,
+                                                onFinish: () => setSendingTelegram(false),
+                                                onError: () => toast.error('ส่ง Telegram ไม่สำเร็จ'),
+                                            },
+                                        );
+                                    }}
+                                >
+                                    {sendingTelegram ? (
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <Send className="mr-2 h-4 w-4" />
+                                    )}
+                                    ส่ง Telegram วันนี้
                                 </Button>
                             </form>
 

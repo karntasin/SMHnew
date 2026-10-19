@@ -47,19 +47,40 @@ class PharmacyStockTelegramNotifier
     /**
      * @return array{ok:bool,skipped:bool,message:string,sent:int}
      */
-    public function notify(bool $force = false): array
+    public function notify(bool $force = false, ?string $catalog = null): array
+    {
+        if ($catalog === null) {
+            $drug = $this->notify($force, 'drug');
+            $supply = $this->notify($force, 'nondrug');
+
+            return [
+                'ok' => ($drug['ok'] ?? false) || ($supply['ok'] ?? false),
+                'skipped' => ($drug['skipped'] ?? false) && ($supply['skipped'] ?? false),
+                'message' => trim(($drug['message'] ?? '').' | '.($supply['message'] ?? ''), ' |'),
+                'sent' => (int) ($drug['sent'] ?? 0) + (int) ($supply['sent'] ?? 0),
+            ];
+        }
+
+        return $this->notifyCatalog($force, $this->inventory->normalizeCatalog($catalog));
+    }
+
+    /**
+     * @return array{ok:bool,skipped:bool,message:string,sent:int}
+     */
+    private function notifyCatalog(bool $force, string $catalog): array
     {
         $token = $this->getBotToken();
         $chatId = $this->getChatId();
+        $label = $catalog === 'nondrug' ? 'เวชภัณฑ์มิใช่ยา' : 'ยา';
 
         if (! $this->isEnabled() && ! $force) {
-            return ['ok' => false, 'skipped' => true, 'message' => 'ยังไม่เปิดแจ้งเตือนสต็อกยาผ่าน Telegram', 'sent' => 0];
+            return ['ok' => false, 'skipped' => true, 'message' => "ยังไม่เปิดแจ้งเตือนสต็อก{$label}ผ่าน Telegram", 'sent' => 0];
         }
         if (! filled($token) || ! filled($chatId)) {
             return ['ok' => false, 'skipped' => true, 'message' => 'ยังไม่ตั้งค่า Telegram bot token หรือ Chat ID สำหรับกลุ่มคลังยา', 'sent' => 0];
         }
 
-        $snap = $this->inventory->alertSnapshot();
+        $snap = $this->inventory->alertSnapshot($catalog);
         $hasIssue = ($snap['low'] + $snap['empty'] + $snap['expiring_90d']) > 0;
         if (! $hasIssue) {
             return ['ok' => true, 'skipped' => false, 'message' => 'สต็อกปกติ ไม่มีรายการแจ้ง', 'sent' => 0];
@@ -70,14 +91,14 @@ class PharmacyStockTelegramNotifier
             'empty' => collect($snap['empty_stock'])->pluck('id')->sort()->values(),
             'exp' => collect($snap['expiring'])->pluck('id')->sort()->values(),
         ]));
-        $cacheKey = 'pharmacy:stock:tg:'.$fingerprint;
+        $cacheKey = 'pharmacy:stock:tg:'.$catalog.':'.$fingerprint;
         if (! $force && Cache::has($cacheKey)) {
             return ['ok' => true, 'skipped' => false, 'message' => 'แจ้งชุดนี้ไปแล้ว ข้าม', 'sent' => 0];
         }
 
         $e = [TelegramBotService::class, 'e'];
         $lines = [
-            '📦 <b>แจ้งเตือนสต็อกยา</b>',
+            '📦 <b>'.($catalog === 'nondrug' ? 'แจ้งเตือนสต็อกเวชภัณฑ์มิใช่ยา' : 'แจ้งเตือนสต็อกยา').'</b>',
             '🔴 หมด <b>'.$snap['empty'].'</b> · 🟠 เหลือน้อย <b>'.$snap['low'].'</b> · 🟡 ใกล้หมดอายุ <b>'.$snap['expiring_90d'].'</b>',
             '',
         ];
@@ -110,7 +131,9 @@ class PharmacyStockTelegramNotifier
         $host = trim((string) config('cloudflare.public_hostname', ''));
         if ($host !== '') {
             $lines[] = '';
-            $lines[] = '🔗 <a href="https://'.$e($host).'/pharmacy/inventory">เปิดคลังยา</a>';
+            $path = $catalog === 'nondrug' ? '/pharmacy/supplies' : '/pharmacy/inventory';
+            $linkLabel = $catalog === 'nondrug' ? 'เปิดคลังเวชภัณฑ์' : 'เปิดคลังยา';
+            $lines[] = '🔗 <a href="https://'.$e($host).$path.'">'.$linkLabel.'</a>';
         }
 
         $res = $this->telegram->sendMessage($chatId, implode("\n", $lines), true, 'HTML', $token);
@@ -122,6 +145,6 @@ class PharmacyStockTelegramNotifier
 
         Cache::put($cacheKey, now()->toIso8601String(), now()->addHours(6));
 
-        return ['ok' => true, 'skipped' => false, 'message' => 'ส่งแจ้งเตือนสต็อกแล้ว', 'sent' => 1];
+        return ['ok' => true, 'skipped' => false, 'message' => "ส่งแจ้งเตือนสต็อก{$label}แล้ว", 'sent' => 1];
     }
 }

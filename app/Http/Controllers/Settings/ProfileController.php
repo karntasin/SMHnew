@@ -169,7 +169,7 @@ class ProfileController extends Controller
         try {
             $this->fshhChat->syncUser($user->fresh(['departments', 'haTeams']) ?? $user);
         } catch (\Throwable $e) {
-            Log::warning('FSHH Chat sync after profile update failed: '.$e->getMessage());
+            Log::warning('S-Chat sync after profile update failed: '.$e->getMessage());
         }
     }
 }

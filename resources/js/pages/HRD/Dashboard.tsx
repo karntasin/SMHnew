@@ -20,6 +20,7 @@ interface DashboardProps {
         total_hours: number;
         completed_courses: number;
         pending_courses: number;
+        fiscal_label?: string;
     };
     recent_activity: Array<{
         id: number;
@@ -41,14 +42,8 @@ interface DashboardProps {
 }
 
 const breadcrumbs = [
-    {
-        title: 'KM',
-        href: '/km/dashboard',
-    },
-    {
-        title: 'ระบบการเรียนรู้ (E-Learning)',
-        href: '/km/learn/dashboard',
-    },
+    { title: 'พัฒนาบุคลากร', href: '/km/learn/hub' },
+    { title: 'ภาพรวมการอบรม', href: '/km/learn/dashboard' },
 ];
 
 export default function HrdDashboard({ stats, recent_activity, upcoming_courses, canEdit }: DashboardProps) {
@@ -106,7 +101,7 @@ export default function HrdDashboard({ stats, recent_activity, upcoming_courses,
                         <CardContent className="pt-4">
                             <div className="text-3xl font-bold text-blue-700">{stats.total_hours}</div>
                             <p className="text-xs text-muted-foreground mt-1">
-                                ชั่วโมงสะสมในปีนี้
+                                ชั่วโมงสะสมใน{stats.fiscal_label || 'ปีงบประมาณนี้'}
                             </p>
                         </CardContent>
                     </Card>
