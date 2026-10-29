@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { VoiceTextInput, VoiceTextarea } from '@/components/voice';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Save, Upload, Sparkles, Loader2 } from 'lucide-react';
@@ -116,20 +117,20 @@ export default function Create({ departments }: CreateProps) {
                 ) : (
                     <div className="space-y-2">
                         <Label htmlFor="sender_name">จากหน่วยงานภายนอก *</Label>
-                        <Input id="sender_name" className="rounded-xl" value={data.sender_name}
-                            onChange={(e) => setData('sender_name', e.target.value)} placeholder="ระบุชื่อหน่วยงาน" />
+                        <VoiceTextInput id="sender_name" className="rounded-xl" value={data.sender_name}
+                            onChange={(val) => setData('sender_name', val)} placeholder="ระบุชื่อหน่วยงาน" />
                     </div>
                 )}
 
                 <div className="space-y-2">
                     <Label htmlFor="title">เรื่อง *</Label>
-                    <Input id="title" className="rounded-xl" value={data.title} onChange={(e) => setData('title', e.target.value)} required />
+                    <VoiceTextInput id="title" className="rounded-xl" value={data.title} onChange={(val) => setData('title', val)} required />
                     {errors.title && <p className="text-sm text-red-500">{errors.title}</p>}
                 </div>
 
                 <div className="space-y-2">
                     <Label htmlFor="description">รายละเอียด</Label>
-                    <Textarea id="description" className="rounded-xl" value={data.description} onChange={(e) => setData('description', e.target.value)} rows={3} />
+                    <VoiceTextarea id="description" className="rounded-xl" value={data.description} onChange={(val) => setData('description', val)} rows={3} />
                 </div>
 
                 <div className="space-y-2">
@@ -150,8 +151,8 @@ export default function Create({ departments }: CreateProps) {
                             )}
                         </Button>
                     </div>
-                    <Textarea id="summary_for_director" className="rounded-xl" value={data.summary_for_director}
-                        onChange={(e) => setData('summary_for_director', e.target.value)} rows={3}
+                    <VoiceTextarea id="summary_for_director" className="rounded-xl" value={data.summary_for_director}
+                        onChange={(val) => setData('summary_for_director', val)} rows={3}
                         placeholder="สรุปเนื้อหาและข้อเสนอเพื่อนำเรียนผู้อำนวยการ..." />
                 </div>
 

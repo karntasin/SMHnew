@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 const tabs = [
     { id: 'list', label: 'รายการหนังสือ', icon: Mic },
     { id: 'write', label: 'เขียนหนังสือ', icon: FilePlus2 },
-    { id: 'settings', label: 'ตั้งค่าหัวกระดาษ', icon: Settings2 },
+    { id: 'settings', label: 'ตั้งค่า', icon: Settings2 },
 ] as const;
 
 export default function MemoSubNav() {

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Im\BackupLog;
+use App\Services\Backup\DriveBackupPublisher;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 use Throwable;
@@ -10,7 +11,7 @@ use Throwable;
 class DatabaseDumpBackupService
 {
     /**
-     * @return array{ok:bool,host:string,database:string,message:string}
+     * @return array{ok:bool,host:string,database:string,message:string,privilege_warning:?string}
      */
     public function probe(string $job): array
     {
@@ -22,12 +23,18 @@ class DatabaseDumpBackupService
         try {
             $pdo = DB::connection($connection)->getPdo();
             $version = (string) $pdo->query('SELECT VERSION()')->fetchColumn();
+            $privilegeWarning = $this->privilegeWarning($pdo);
+            $message = 'เชื่อมต่อได้ MySQL '.$version;
+            if ($privilegeWarning !== null) {
+                $message .= ' · '.$privilegeWarning;
+            }
 
             return [
                 'ok' => true,
                 'host' => $host,
                 'database' => $database,
-                'message' => 'เชื่อมต่อได้ MySQL '.$version,
+                'message' => $message,
+                'privilege_warning' => $privilegeWarning,
             ];
         } catch (Throwable $e) {
             return [
@@ -35,6 +42,7 @@ class DatabaseDumpBackupService
                 'host' => $host,
                 'database' => $database,
                 'message' => $e->getMessage(),
+                'privilege_warning' => null,
             ];
         }
     }
@@ -66,7 +74,7 @@ class DatabaseDumpBackupService
     }
 
     /**
-     * @return array{path:string,bytes:int,kept:int,deleted:list<string>}
+     * @return array{path:string,bytes:int,kept:int,deleted:list<string>,drive:?string,drive_ok:?bool}
      */
     public function run(string $job, ?int $keep = null): array
     {
@@ -150,11 +158,21 @@ class DatabaseDumpBackupService
             $notes .= ' · คำเตือน: '.mb_substr($warning, 0, 500);
         }
 
+        $privilege = (string) ($probe['privilege_warning'] ?? '');
+        if ($privilege !== '') {
+            $notes .= ' · '.$privilege;
+        }
+
+        $drive = $this->publishToDrive($path, $prefix.'-'.$database.'-'.$stamp);
+        if ($drive['line'] !== null) {
+            $notes .= ' · '.$drive['line'];
+        }
+
         BackupLog::create([
             'backup_date' => now('Asia/Bangkok')->toDateString(),
             'type' => 'offline',
             'scope' => $config['label'].' '.$database.' @ '.$host,
-            'status' => $warning !== '' || $pruned['failed'] !== [] ? 'partial' : 'success',
+            'status' => $warning !== '' || $pruned['failed'] !== [] || $drive['failed'] ? 'partial' : 'success',
             'size_gb' => round($bytes / 1073741824, 4),
             'notes' => $notes,
             'performed_by' => $config['performed_by'],
@@ -165,7 +183,69 @@ class DatabaseDumpBackupService
             'bytes' => $bytes,
             'kept' => $this->existingDumps($directory, $prefix)->count(),
             'deleted' => $pruned['deleted'],
+            'drive' => $drive['line'],
+            'drive_ok' => $drive['ok'],
         ];
+    }
+
+    /**
+     * @return array{line:?string,ok:?bool,failed:bool}
+     */
+    private function publishToDrive(string $path, string $stem): array
+    {
+        $publisher = app(DriveBackupPublisher::class);
+        if (! $publisher->isEnabled()) {
+            return ['line' => null, 'ok' => null, 'failed' => false];
+        }
+        if (! $publisher->isConfigured()) {
+            return [
+                'line' => 'ยังไม่ส่ง Google Drive เพราะคีย์หรือ token ยังไม่ครบ',
+                'ok' => false,
+                'failed' => false,
+            ];
+        }
+
+        try {
+            $uploaded = $publisher->publish($path, $stem);
+            $line = 'ส่ง Google Drive แล้ว: '.$uploaded['remote'];
+            if ($uploaded['deleted'] !== []) {
+                $line .= ' · ลบของเก่า: '.implode(', ', $uploaded['deleted']);
+            }
+            if ($uploaded['failed'] !== []) {
+                $line .= ' · ลบไม่สำเร็จ: '.implode(', ', $uploaded['failed']);
+            }
+
+            return [
+                'line' => $line,
+                'ok' => $uploaded['failed'] === [],
+                'failed' => $uploaded['failed'] !== [],
+            ];
+        } catch (Throwable $e) {
+            return [
+                'line' => 'ส่ง Google Drive ไม่สำเร็จ: '.mb_substr($e->getMessage(), 0, 300),
+                'ok' => false,
+                'failed' => true,
+            ];
+        }
+    }
+
+    private function privilegeWarning(\PDO $pdo): ?string
+    {
+        try {
+            $statement = $pdo->query('SHOW GRANTS');
+            $grants = $statement ? $statement->fetchAll(\PDO::FETCH_NUM) : [];
+        } catch (Throwable) {
+            return null;
+        }
+
+        foreach ($grants as $row) {
+            $grant = strtoupper((string) ($row[0] ?? ''));
+            if (str_contains($grant, 'ALL PRIVILEGES ON *.*') || preg_match('/\bSUPER\b/', $grant) === 1) {
+                return 'บัญชีสำรองมีสิทธิ์สูง แนะนำให้ใช้ user อ่านอย่างเดียว เช่น smh_backup';
+            }
+        }
+
+        return null;
     }
 
     /**

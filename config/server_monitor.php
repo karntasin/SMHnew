@@ -12,11 +12,22 @@ return [
     */
     'servers' => [
         [
-            'key' => 'hosxp',
-            'host' => env('SERVER_MONITOR_HOST', env('HOSXP_BACKUP_DB_HOST', '192.168.1.191')),
-            'name' => env('SERVER_MONITOR_NAME', 'HOSxP Server'),
+            'key' => 'hosxp_primary',
+            'host' => env('SERVER_MONITOR_PRIMARY_HOST', env('HOSXP_DB_HOST', '192.168.1.202')),
+            'name' => env('SERVER_MONITOR_PRIMARY_NAME', 'HOSxP Primary (202)'),
             'ports' => [
-                ['port' => (int) env('HOSXP_BACKUP_DB_PORT', env('HOSXP_DB_PORT', 3306)), 'label' => 'MySQL'],
+                ['port' => (int) env('HOSXP_DB_PORT', 3306), 'label' => 'MySQL'],
+            ],
+            'check_mysql' => true,
+            'mysql_connection' => 'hosxp',
+            'snmp' => true,
+        ],
+        [
+            'key' => 'hosxp_backup',
+            'host' => env('SERVER_MONITOR_BACKUP_HOST', env('HOSXP_BACKUP_DB_HOST', '192.168.1.191')),
+            'name' => env('SERVER_MONITOR_BACKUP_NAME', 'HOSxP Backup (191)'),
+            'ports' => [
+                ['port' => (int) env('HOSXP_BACKUP_DB_PORT', 3306), 'label' => 'MySQL'],
             ],
             'check_mysql' => true,
             'mysql_connection' => 'hosxp_backup',

@@ -25,16 +25,38 @@ use App\Http\Controllers\Vehicle\VehicleController;
 use App\Http\Controllers\Vehicle\VehicleSettingController;
 use App\Http\Controllers\Ic\IcController;
 
-Route::get('/', function () {
+Route::get('/', function (\Illuminate\Http\Request $request) {
     if (Auth::check()) {
-        return redirect()->away(PostLoginRedirect::toCurrent('dashboard'));
+        $path = PostLoginRedirect::defaultPath(Auth::user());
+        return redirect()->away(PostLoginRedirect::toCurrent($path, $request));
     }
 
     return redirect()->away(url('/login'));
 })->name('home');
 
+// S-Chat public entry (www.fshh-app.online/s-chat) — ลิงก์เก่ายังใช้ได้
+Route::get('/s-chat', [App\Http\Controllers\FshhChatController::class, 'entry'])->name('s-chat');
+Route::redirect('/schat', '/s-chat', 301);
+
+// Calendar app direct entry & shortlinks (เหมือน /s-chat และ /schat)
+Route::redirect('/cal', '/calendar', 301);
+Route::redirect('/app/calendar', '/calendar', 301);
+
+// Public Calendar iCal subscription feed (Secured by HMAC user token)
+Route::get('/calendar/feed/{userId}/{token}.ics', [App\Http\Controllers\CalendarController::class, 'feed'])->name('calendar.feed');
+
 Route::middleware(['auth'])->group(function () {
     Route::get('/fshh-chat/open', [App\Http\Controllers\FshhChatController::class, 'open'])->name('fshh-chat.open');
+
+    // Calendar JSON events & actions
+    Route::get('/calendar/events', [App\Http\Controllers\CalendarController::class, 'events'])->name('calendar.events');
+    Route::post('/calendar/events', [App\Http\Controllers\CalendarController::class, 'store'])->name('calendar.store');
+    Route::put('/calendar/events/{event}', [App\Http\Controllers\CalendarController::class, 'update'])->name('calendar.update');
+    Route::delete('/calendar/events/{event}', [App\Http\Controllers\CalendarController::class, 'destroy'])->name('calendar.destroy');
+    Route::get('/calendar/events/{event}/export-ics', [App\Http\Controllers\CalendarController::class, 'exportEventIcs'])->name('calendar.export-ics');
+    Route::post('/calendar/events/{event}/attachments', [App\Http\Controllers\CalendarController::class, 'uploadAttachment'])->name('calendar.attachments.upload');
+    Route::delete('/calendar/attachments/{attachment}', [App\Http\Controllers\CalendarController::class, 'deleteAttachment'])->name('calendar.attachments.delete');
+    Route::post('/calendar/import-ics', [App\Http\Controllers\CalendarController::class, 'importIcs'])->name('calendar.import-ics');
 
     // Notifications API (ไม่ผูก menu.permission เพื่อไม่ให้ polling พัง)
     Route::get('/notifications/api', [App\Http\Controllers\NotificationController::class, 'index'])->name('notifications.api');
@@ -44,6 +66,7 @@ Route::middleware(['auth'])->group(function () {
 });
 
 Route::middleware(['auth', 'menu.permission'])->group(function () {
+    Route::get('/calendar', [App\Http\Controllers\CalendarController::class, 'index'])->name('calendar.index');
     Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('help', [HelpController::class, 'index'])->name('help.index');
     Route::get('help/download-pdf', [HelpController::class, 'downloadPdf'])->name('help.download-pdf');
@@ -132,6 +155,55 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
 
     // Quality Hub (ศูนย์พัฒนาคุณภาพ)
     Route::get('/quality', [App\Http\Controllers\QualityHubController::class, 'index'])->name('quality.index');
+
+    // HA Hub (งานพัฒนาคุณภาพโรงพยาบาล HA)
+    Route::prefix('ha')->name('ha.')->group(function () {
+        Route::get('/', [App\Http\Controllers\Ha\HaHubController::class, 'index'])->name('index');
+
+        // SAR (Self Assessment Report)
+        Route::prefix('sar')->name('sar.')->group(function () {
+            Route::get('/', [App\Http\Controllers\Ha\SarController::class, 'index'])->name('index');
+            Route::get('/part/{partNumber}', [App\Http\Controllers\Ha\SarController::class, 'showPart'])->name('part');
+            Route::get('/section/{section}', [App\Http\Controllers\Ha\SarController::class, 'editSection'])->name('section.edit');
+            Route::put('/section/{section}', [App\Http\Controllers\Ha\SarController::class, 'updateSection'])->name('section.update');
+            Route::get('/section/{section}/revisions', [App\Http\Controllers\Ha\SarController::class, 'revisions'])->name('section.revisions');
+            Route::post('/section/{section}/revisions/{revision}/restore', [App\Http\Controllers\Ha\SarController::class, 'restoreRevision'])->name('section.revisions.restore');
+            Route::get('/section/{section}/print', [App\Http\Controllers\Ha\SarController::class, 'printSection'])->name('section.print');
+            Route::get('/part/{partNumber}/print', [App\Http\Controllers\Ha\SarController::class, 'printPart'])->name('part.print');
+        });
+
+        // Clinical Tracer (การติดตามทางคลินิก)
+        Route::prefix('clinical-tracer')->name('clinical-tracer.')->group(function () {
+            Route::get('/', [App\Http\Controllers\Ha\ClinicalTracerController::class, 'index'])->name('index');
+            Route::get('/overview/print', [App\Http\Controllers\Ha\ClinicalTracerController::class, 'overviewPrint'])->name('overview.print');
+            Route::get('/{tracer}', [App\Http\Controllers\Ha\ClinicalTracerController::class, 'show'])->name('show');
+            Route::get('/{tracer}/edit', [App\Http\Controllers\Ha\ClinicalTracerController::class, 'edit'])->name('edit');
+            Route::put('/{tracer}', [App\Http\Controllers\Ha\ClinicalTracerController::class, 'update'])->name('update');
+            Route::get('/{tracer}/revisions', [App\Http\Controllers\Ha\ClinicalTracerController::class, 'revisions'])->name('revisions');
+            Route::post('/{tracer}/revisions/{revision}/restore', [App\Http\Controllers\Ha\ClinicalTracerController::class, 'restoreRevision'])->name('revisions.restore');
+            Route::get('/{tracer}/print', [App\Http\Controllers\Ha\ClinicalTracerController::class, 'printView'])->name('print');
+        });
+
+        // Service Profile (ข้อมูลการจัดบริการแต่ละแผนกและทีม)
+        Route::prefix('service-profile')->name('service-profile.')->group(function () {
+            Route::get('/', [App\Http\Controllers\Ha\ServiceProfileController::class, 'index'])->name('index');
+            Route::get('/overview/print', [App\Http\Controllers\Ha\ServiceProfileController::class, 'overviewPrint'])->name('overview.print');
+            Route::get('/{serviceProfile}', [App\Http\Controllers\Ha\ServiceProfileController::class, 'show'])->name('show');
+            Route::get('/{serviceProfile}/edit', [App\Http\Controllers\Ha\ServiceProfileController::class, 'edit'])->name('edit');
+            Route::put('/{serviceProfile}', [App\Http\Controllers\Ha\ServiceProfileController::class, 'update'])->name('update');
+            Route::post('/{serviceProfile}/revisions/{revision}/restore', [App\Http\Controllers\Ha\ServiceProfileController::class, 'restoreRevision'])->name('revisions.restore');
+            Route::get('/{serviceProfile}/print', [App\Http\Controllers\Ha\ServiceProfileController::class, 'print'])->name('print');
+        });
+
+        // Hospital Profile (ข้อมูลภาพรวมและบริบทโรงพยาบาล 7 แท็บ)
+        Route::prefix('hospital-profile')->name('hospital-profile.')->group(function () {
+            Route::get('/', [App\Http\Controllers\Ha\HospitalProfileController::class, 'index'])->name('index');
+            Route::get('/edit', [App\Http\Controllers\Ha\HospitalProfileController::class, 'edit'])->name('edit');
+            Route::put('/', [App\Http\Controllers\Ha\HospitalProfileController::class, 'update'])->name('update');
+            Route::post('/revisions/{revision}/restore', [App\Http\Controllers\Ha\HospitalProfileController::class, 'restoreRevision'])->name('revisions.restore');
+            Route::get('/print', [App\Http\Controllers\Ha\HospitalProfileController::class, 'print'])->name('print');
+        });
+    });
 
     // Quality Document Repository
     Route::prefix('quality-docs')->name('quality-docs.')->group(function () {
@@ -290,6 +362,12 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
             Route::get('/create', [App\Http\Controllers\AdminDocs\OfficialMemoController::class, 'create'])->name('create');
             Route::get('/settings', [App\Http\Controllers\AdminDocs\OfficialMemoController::class, 'settings'])->name('settings');
             Route::put('/settings', [App\Http\Controllers\AdminDocs\OfficialMemoController::class, 'updateSettings'])->name('settings.update');
+            Route::post('/forms', [App\Http\Controllers\AdminDocs\OfficialMemoController::class, 'storeForm'])->name('forms.store');
+            Route::put('/forms/{form}', [App\Http\Controllers\AdminDocs\OfficialMemoController::class, 'updateForm'])->name('forms.update');
+            Route::delete('/forms/{form}', [App\Http\Controllers\AdminDocs\OfficialMemoController::class, 'destroyForm'])->name('forms.destroy');
+            Route::get('/dict', [App\Http\Controllers\AdminDocs\OfficialMemoController::class, 'dict'])->name('dict');
+            Route::get('/users', [App\Http\Controllers\AdminDocs\OfficialMemoController::class, 'searchUsers'])->name('users');
+            Route::post('/transcribe', [App\Http\Controllers\AdminDocs\OfficialMemoController::class, 'transcribe'])->name('transcribe');
             Route::post('/', [App\Http\Controllers\AdminDocs\OfficialMemoController::class, 'store'])->name('store');
             Route::post('/export', [App\Http\Controllers\AdminDocs\OfficialMemoController::class, 'export'])->name('export');
             Route::get('/font/{weight}', [App\Http\Controllers\AdminDocs\OfficialMemoController::class, 'font'])->name('font');
@@ -527,11 +605,12 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::post('/counts/{count}/complete', [App\Http\Controllers\Pharmacy\PharmacyStockCountController::class, 'complete'])->name('counts.complete');
 
         Route::get('/drug-out/stock-info', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'drugOutStockInfo'])->name('drug-out.stock-info');
+        Route::get('/drug-out', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'drugOut'])->name('drug-out');
+        Route::get('/supply-out', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'drugOut'])->name('supply-out');
+        Route::post('/drug-out/issue', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'drugOutIssue'])->name('drug-out.issue');
+        Route::post('/drug-out/return', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'drugOutReturn'])->name('drug-out.return');
 
         if ($drugOnly) {
-            Route::get('/drug-out', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'drugOut'])->name('drug-out');
-            Route::post('/drug-out/issue', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'drugOutIssue'])->name('drug-out.issue');
-            Route::post('/drug-out/return', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'drugOutReturn'])->name('drug-out.return');
             Route::get('/analytics', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'analytics'])->name('analytics');
         }
     };
@@ -647,6 +726,7 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::post('/resource/changes', [App\Http\Controllers\Im\ResourceController::class, 'storeChange'])->name('resource.changes.store');
         Route::put('/resource/changes/{change}/status', [App\Http\Controllers\Im\ResourceController::class, 'updateChangeStatus'])->name('resource.changes.status');
         Route::delete('/resource/changes/{change}', [App\Http\Controllers\Im\ResourceController::class, 'destroyChange'])->name('resource.changes.destroy');
+        Route::get('/resource/assets/{asset}/live', [App\Http\Controllers\Im\ResourceController::class, 'liveStatus'])->name('resource.assets.live');
     });
 
     // Quality Assurance System (ระบบติดตามการทบทวน)
@@ -1132,6 +1212,66 @@ Route::get('/dev/config-cache', function () {
     \Illuminate\Support\Facades\Artisan::call('config:cache');
     return response('Config cache cleared & cached successfully.');
 });
+
+Route::get('/dev/run-calendar-migrations', function () {
+    \Illuminate\Support\Facades\Artisan::call('migrate', [
+        '--path' => 'database/migrations/2026_10_27_083000_create_app_calendar_events_table.php',
+        '--force' => true,
+    ]);
+    \Illuminate\Support\Facades\Artisan::call('migrate', [
+        '--path' => 'database/migrations/2026_10_27_083100_create_app_calendar_reminders_table.php',
+        '--force' => true,
+    ]);
+    \Illuminate\Support\Facades\Artisan::call('migrate', [
+        '--path' => 'database/migrations/2026_10_27_100000_create_app_calendar_event_attachments_table.php',
+        '--force' => true,
+    ]);
+
+    // Ensure storage folder for calendar attachments exists
+    if (!\Illuminate\Support\Facades\Storage::disk('public')->exists('calendar_attachments')) {
+        \Illuminate\Support\Facades\Storage::disk('public')->makeDirectory('calendar_attachments');
+    }
+
+    // Seed tomorrow's events
+    $user = \App\Models\User::first() ?? \Illuminate\Support\Facades\Auth::user();
+    $seededCount = 0;
+    if ($user) {
+        $calendarService = app(\App\Services\Calendar\CalendarService::class);
+        $seededCount = $calendarService->seedTomorrowEvents($user);
+    }
+
+    // Ensure Menu item exists
+    $menu = \App\Models\Menu::firstOrCreate(
+        ['route' => '/calendar'],
+        [
+            'title' => 'ปฏิทินงานและกิจกรรม',
+            'icon' => 'Calendar',
+            'order' => 2,
+            'permission_name' => null, // Visible to all logged-in staff
+        ]
+    );
+
+    return response()->json([
+        'success' => true,
+        'migrate_events' => \Illuminate\Support\Facades\Schema::connection('mysql')->hasTable('app_calendar_events'),
+        'migrate_reminders' => \Illuminate\Support\Facades\Schema::connection('mysql')->hasTable('app_calendar_reminders'),
+        'migrate_attachments' => \Illuminate\Support\Facades\Schema::connection('mysql')->hasTable('app_calendar_event_attachments'),
+        'seeded_tomorrow_events' => $seededCount,
+        'menu' => $menu,
+    ]);
+});
+
+// Windows Agent Endpoints (Public/Agent access, CSRF exempt)
+Route::get('/im/agent/install.ps1', [App\Http\Controllers\Im\AgentController::class, 'installScript'])->name('im.agent.install');
+Route::get('/im/agent/download-bat', [App\Http\Controllers\Im\AgentController::class, 'downloadBat'])->name('im.agent.download-bat');
+Route::get('/im/agent/rustdesk.exe', [App\Http\Controllers\Im\AgentController::class, 'rustDeskBinary'])->name('im.agent.rustdesk');
+Route::get('/im/agent/meshagent.exe', [App\Http\Controllers\Im\AgentController::class, 'meshAgentBinary'])->name('im.agent.meshagent');
+Route::get('/im/agent/meshagent.msh', [App\Http\Controllers\Im\AgentController::class, 'meshAgentSettings'])->name('im.agent.meshsettings');
+Route::get('/im/remote/{asset}/connect', [App\Http\Controllers\Im\AgentController::class, 'remoteConnect'])->name('im.remote.connect');
+Route::post('/api/im/agent/report', [App\Http\Controllers\Im\AgentController::class, 'report'])->name('im.agent.report');
+
+
+
 
 
 

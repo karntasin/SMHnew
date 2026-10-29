@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { VoiceTextInput, VoiceTextarea } from '@/components/voice';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertCircle, Users } from 'lucide-react';
 import { ThaiDatePicker } from '@/components/ui/thai-date-picker';
@@ -149,11 +150,11 @@ export default function EditModal({ open, onOpenChange, rooms, booking }: Props)
                         <Label htmlFor="edit-title">
                             หัวข้อการประชุม <span className="text-red-500">*</span>
                         </Label>
-                        <Input
+                        <VoiceTextInput
                             id="edit-title"
                             placeholder="เช่น ประชุมประจำเดือน, สัมภาษณ์งาน"
                             value={data.title}
-                            onChange={(e) => setData('title', e.target.value)}
+                            onChange={(val) => setData('title', val)}
                             required
                         />
                         {errors.title && <p className="text-sm text-red-500">{errors.title}</p>}
@@ -226,12 +227,12 @@ export default function EditModal({ open, onOpenChange, rooms, booking }: Props)
 
                     <div className="space-y-2">
                         <Label htmlFor="edit-description">รายละเอียดเพิ่มเติม</Label>
-                        <Textarea
+                        <VoiceTextarea
                             id="edit-description"
                             placeholder="รายละเอียดอื่นๆ หรืออุปกรณ์ที่ต้องการเพิ่มเติม"
-                            className="h-24"
+                            className="min-h-[96px]"
                             value={data.description}
-                            onChange={(e) => setData('description', e.target.value)}
+                            onChange={(val) => setData('description', val)}
                         />
                         {errors.description && <p className="text-sm text-red-500">{errors.description}</p>}
                     </div>

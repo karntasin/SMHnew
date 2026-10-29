@@ -21,10 +21,18 @@ export interface NavItem {
     isActive?: boolean;
 }
 
+export interface AccountSetup {
+    ready: boolean;
+    needsPassword: boolean;
+    needsLoginId: boolean;
+    hasPasswordSet?: boolean;
+}
+
 export interface SharedData {
     name: string;
     quote: { message: string; author: string };
     auth: Auth;
+    accountSetup?: AccountSetup | null;
     errors: Record<string, string>;
     lineLoginEnabled?: boolean;
     fshhChat?: {

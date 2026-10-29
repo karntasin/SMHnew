@@ -7,8 +7,11 @@ import { cn } from '@/lib/utils';
 import { imInput, imSelect, fmtDate, STATUS_STYLE, STATUS_LABEL } from '@/pages/Im/shared';
 import {
     Server, Plus, Trash2, Pencil, Cpu, HardDrive, Network, GitPullRequest, GraduationCap,
-    Check, X, Wrench, PackageX, History, RotateCcw,
+    Check, X, Wrench, PackageX, History, RotateCcw, Activity, Terminal, Tv,
 } from 'lucide-react';
+import AssetAgentInstallModal from '@/pages/Im/AssetAgentInstallModal';
+import AssetSystemInspectorModal from '@/pages/Im/AssetSystemInspectorModal';
+import AssetRemoteModal from '@/pages/Im/AssetRemoteModal';
 
 interface AssetRepair {
     id: number;
@@ -59,6 +62,7 @@ interface Asset {
     repairs?: AssetRepair[];
     open_repair?: AssetRepair | null;
     disposals?: AssetDisposal[];
+    system_spec?: any | null;
 }
 
 interface Competency {
@@ -95,6 +99,7 @@ interface Props {
     changes: ChangeReq[];
     staff: { id: number; name: string }[];
     deviceTypes: Record<string, string>;
+    serverLanIp?: string;
     summary: {
         hardware: number;
         software: number;
@@ -154,7 +159,7 @@ const emptyAssetForm = () => ({
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-export default function ResourcePage({ assets, competencies, changes, staff, deviceTypes, summary }: Props) {
+export default function ResourcePage({ assets, competencies, changes, staff, deviceTypes, summary, serverLanIp }: Props) {
     const [tab, setTab] = useState<Tab>('assets');
     const [assetModal, setAssetModal] = useState<{ open: boolean; edit?: Asset }>({ open: false });
     const [compModal, setCompModal] = useState<{ open: boolean; edit?: Competency }>({ open: false });
@@ -163,6 +168,9 @@ export default function ResourcePage({ assets, competencies, changes, staff, dev
     const [returnModal, setReturnModal] = useState<{ open: boolean; asset?: Asset; repair?: AssetRepair }>({ open: false });
     const [disposeModal, setDisposeModal] = useState<{ open: boolean; asset?: Asset }>({ open: false });
     const [historyAsset, setHistoryAsset] = useState<Asset | null>(null);
+    const [installModalOpen, setInstallModalOpen] = useState(false);
+    const [inspectorAsset, setInspectorAsset] = useState<Asset | null>(null);
+    const [remoteAsset, setRemoteAsset] = useState<Asset | null>(null);
 
     useEffect(() => {
         const hash = window.location.hash;
@@ -425,12 +433,23 @@ export default function ResourcePage({ assets, competencies, changes, staff, dev
                         </button>
                     ))}
                 </div>
-                <Button
-                    className="rounded-xl bg-sky-600 hover:bg-sky-700"
-                    onClick={() => (tab === 'assets' ? openCreateAsset() : tab === 'competencies' ? openCreateComp() : setChangeModal(true))}
-                >
-                    <Plus className="mr-1 h-4 w-4" /> เพิ่ม
-                </Button>
+                <div className="flex items-center gap-2">
+                    {tab === 'assets' && (
+                        <Button
+                            variant="outline"
+                            className="rounded-xl border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100 hover:text-sky-800 shadow-xs"
+                            onClick={() => setInstallModalOpen(true)}
+                        >
+                            <Terminal className="mr-1.5 h-4 w-4 text-sky-600" /> ติดตั้ง Agent (Windows)
+                        </Button>
+                    )}
+                    <Button
+                        className="rounded-xl bg-sky-600 hover:bg-sky-700"
+                        onClick={() => (tab === 'assets' ? openCreateAsset() : tab === 'competencies' ? openCreateComp() : setChangeModal(true))}
+                    >
+                        <Plus className="mr-1 h-4 w-4" /> เพิ่ม
+                    </Button>
+                </div>
             </div>
 
             {tab === 'assets' && (
@@ -462,7 +481,23 @@ export default function ResourcePage({ assets, competencies, changes, staff, dev
                                             <tr key={a.id} id={`asset-${a.id}`} className="border-b border-slate-50 align-top">
                                                 <td className="py-2.5 pr-3 font-mono text-xs text-slate-500">{a.asset_code || '-'}</td>
                                                 <td className="py-2.5 pr-3">
-                                                    <div className="font-medium text-slate-700">{a.name}</div>
+                                                    <div className="font-medium text-slate-700 flex items-center gap-1.5 flex-wrap">
+                                                        <span>{a.name}</span>
+                                                        {a.system_spec && (
+                                                            <span
+                                                                className="inline-block h-2 w-2 rounded-full bg-emerald-500 shrink-0"
+                                                                title={`เชื่อมโยง FSHH Agent (IP: ${a.system_spec.ip_address || '-'})`}
+                                                            />
+                                                        )}
+                                                        {(a.remote_id || a.system_spec?.remote_id) && (
+                                                            <span
+                                                                className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono font-semibold rounded bg-violet-100 text-violet-700 border border-violet-200"
+                                                                title={`RustDesk Remote ID: ${a.remote_id || a.system_spec?.remote_id}`}
+                                                            >
+                                                                ID: {a.remote_id || a.system_spec?.remote_id}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                     <div className="text-[11px] text-slate-400">
                                                         {TYPE_LABEL[a.type]}
                                                         {a.location ? ` · ${a.location}` : ''}
@@ -478,6 +513,26 @@ export default function ResourcePage({ assets, competencies, changes, staff, dev
                                                 <td className="py-2.5 pr-3">{assetStatusPill(a.status)}</td>
                                                 <td className="py-2.5 text-right">
                                                     <div className="flex flex-wrap justify-end gap-1">
+                                                        {(a.system_spec || ['computer', 'notebook', 'server'].includes(a.device_type ?? '')) && (
+                                                            <>
+                                                                <button
+                                                                    title="สเปก CPU-Z & Real-Time"
+                                                                    onClick={() => setInspectorAsset(a)}
+                                                                    className="rounded-lg border border-sky-300 bg-sky-50 px-2 py-1 text-[11px] font-semibold text-sky-700 hover:bg-sky-100 transition flex items-center gap-1 shadow-xs"
+                                                                >
+                                                                    <Activity className="h-3 w-3 text-sky-600" />
+                                                                    CPU-Z
+                                                                </button>
+                                                                <button
+                                                                    title="รีโมทช่วยเหลือ (Web Remote Desktop)"
+                                                                    onClick={() => setRemoteAsset(a)}
+                                                                    className="rounded-lg border border-violet-300 bg-violet-50 px-2 py-1 text-[11px] font-semibold text-violet-700 hover:bg-violet-100 transition flex items-center gap-1 shadow-xs"
+                                                                >
+                                                                    <Tv className="h-3 w-3 text-violet-600" />
+                                                                    รีโมท
+                                                                </button>
+                                                            </>
+                                                        )}
                                                         {a.status === 'active' && (
                                                             <button
                                                                 title="ส่งซ่อม"
@@ -1115,6 +1170,20 @@ export default function ResourcePage({ assets, competencies, changes, staff, dev
                     </Field>
                 </div>
             </Modal>
+
+            {/* Install Agent Modal */}
+            <AssetAgentInstallModal open={installModalOpen} onClose={() => setInstallModalOpen(false)} serverLanIp={serverLanIp} />
+
+            {/* System Inspector (CPU-Z & Real-Time) Modal */}
+            <AssetSystemInspectorModal open={!!inspectorAsset} onClose={() => setInspectorAsset(null)} asset={inspectorAsset} />
+
+            {/* Web Remote Desktop Modal */}
+            <AssetRemoteModal
+                open={!!remoteAsset}
+                onClose={() => setRemoteAsset(null)}
+                asset={remoteAsset}
+                onOpenInstall={() => setInstallModalOpen(true)}
+            />
         </ImPage>
     );
 }

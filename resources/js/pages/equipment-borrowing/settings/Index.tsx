@@ -30,6 +30,7 @@ export default function SettingsIndex({ categories }: Props) {
 
     return (
         <AppLayout breadcrumbs={[
+            { title: 'งานธุรการ', href: '/admin-hub' },
             { title: 'ยืมอุปกรณ์แพทย์', href: route('equipment-borrowing.dashboard') },
             { title: 'ตั้งค่า', href: '#' },
         ]}>

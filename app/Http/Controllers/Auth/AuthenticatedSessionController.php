@@ -15,18 +15,27 @@ use Inertia\Response;
 
 class AuthenticatedSessionController extends Controller
 {
+    /** @var list<string> */
+    private const ALLOWED_POST_LOGIN_REDIRECTS = [
+        '/settings/password',
+        '/settings/profile',
+    ];
+
     /**
      * Show the login page.
      */
     public function create(Request $request): Response
     {
         $lineEnabled = (bool) config('services.line.enabled');
+        // createDesktopTicket clears stale url.intended — capture ?redirect= after that
+        $lineQr = $lineEnabled ? LineAuthController::createDesktopTicket('login') : null;
+        $this->captureSafeRedirect($request);
 
         return Inertia::render('auth/login', [
             'canResetPassword' => Route::has('password.request'),
             'status' => $request->session()->get('status'),
             'lineLoginEnabled' => $lineEnabled,
-            'lineQr' => $lineEnabled ? LineAuthController::createDesktopTicket('login') : null,
+            'lineQr' => $lineQr,
         ]);
     }
 
@@ -38,9 +47,39 @@ class AuthenticatedSessionController extends Controller
         $request->authenticate();
 
         $request->session()->regenerate();
-        session()->forget('url.intended');
 
-        return redirect()->away(PostLoginRedirect::toCurrent('dashboard', $request));
+        $user = $request->user();
+
+        if ($user && ! $user->hasPasswordSet()) {
+            return redirect()->away(PostLoginRedirect::toCurrent('settings/password', $request))
+                ->with('status', 'กรุณากำหนดรหัสผ่านสำหรับการเข้าสู่ระบบ');
+        }
+
+        $intended = $request->session()->pull('url.intended');
+
+        return redirect()->away(PostLoginRedirect::sanitizeIntendedOnCurrentHost(
+            is_string($intended) ? $intended : null,
+            'menus-hub',
+            $request,
+        ));
+    }
+
+    /**
+     * รับ ?redirect= จาก S-Chat (อนุญาตเฉพาะ path ใน whitelist)
+     */
+    private function captureSafeRedirect(Request $request): void
+    {
+        $redirect = $request->query('redirect');
+        if (! is_string($redirect) || $redirect === '') {
+            return;
+        }
+
+        $path = '/'.ltrim(parse_url($redirect, PHP_URL_PATH) ?: $redirect, '/');
+        if (! in_array($path, self::ALLOWED_POST_LOGIN_REDIRECTS, true)) {
+            return;
+        }
+
+        $request->session()->put('url.intended', $path);
     }
 
     /**

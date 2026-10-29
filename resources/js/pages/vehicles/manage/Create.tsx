@@ -36,6 +36,8 @@ export default function Create({ categories }: Props) {
 
     return (
         <AppLayout breadcrumbs={[
+            { title: 'งานธุรการ', href: '/admin-hub' },
+            { title: 'ระบบจองรถ', href: route('vehicles.index') },
             { title: 'จัดการรถ', href: route('vehicles.manage.index') },
             { title: 'เพิ่มรถใหม่', href: '#' }
         ]}>

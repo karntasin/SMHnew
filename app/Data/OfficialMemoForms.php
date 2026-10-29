@@ -2,33 +2,45 @@
 
 namespace App\Data;
 
+use App\Models\OfficialMemoForm;
 use App\Models\OfficialMemoSetting;
 use App\Models\User;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 class OfficialMemoForms
 {
     /**
-     * @return array<string, array{label: string}>
+     * @return array<string, array{label: string, base_layout: string}>
      */
     public static function kinds(): array
     {
-        return [
-            'internal' => ['label' => 'บันทึกข้อความภายใน'],
-            'external' => ['label' => 'หนังสือภายนอก'],
-            'order' => ['label' => 'คำสั่ง'],
-        ];
+        self::ensureSystemForms();
+        $kinds = [];
+        foreach (self::formRows() as $form) {
+            $kinds[$form->key] = [
+                'label' => $form->label,
+                'base_layout' => $form->base_layout,
+            ];
+        }
+
+        return $kinds;
     }
 
     /**
-     * @return array<string, array{label: string, fields: list<array<string, mixed>>}>
+     * @return array<string, array{label: string, base_layout: string, fields: list<array<string, mixed>>, layout: array<string, mixed>, is_system: bool}>
      */
     public static function catalog(): array
     {
+        self::ensureSystemForms();
         $catalog = [];
-        foreach (self::kinds() as $kind => $meta) {
-            $catalog[$kind] = [
-                'label' => $meta['label'],
-                'fields' => self::fields($kind),
+        foreach (self::formRows() as $form) {
+            $catalog[$form->key] = [
+                'label' => $form->label,
+                'base_layout' => $form->base_layout,
+                'fields' => is_array($form->fields) ? $form->fields : [],
+                'layout' => self::layoutOf($form->key),
+                'is_system' => (bool) $form->is_system,
             ];
         }
 
@@ -36,15 +48,34 @@ class OfficialMemoForms
     }
 
     /**
+     * @return array{page: array{width_cm: float, height_cm: float}, blocks: list<array<string, mixed>>}
+     */
+    public static function layoutOf(string $kind): array
+    {
+        self::ensureSystemForms();
+        $form = OfficialMemoForm::query()->where('key', $kind)->first();
+        $base = $form?->base_layout ?? self::baseLayoutOf($kind);
+        $layout = OfficialMemoLayouts::normalize(
+            is_array($form?->layout) ? $form->layout : null,
+            $base
+        );
+        $fields = is_array($form?->fields) ? $form->fields : self::defaultFields($base);
+
+        return OfficialMemoLayouts::mergeMissingFields($layout, $fields);
+    }
+
+    /**
      * @return list<array<string, mixed>>
      */
     public static function fields(string $kind): array
     {
-        return match ($kind) {
-            'external' => self::externalFields(),
-            'order' => self::orderFields(),
-            default => self::internalFields(),
-        };
+        self::ensureSystemForms();
+        $form = OfficialMemoForm::query()->where('key', $kind)->first();
+        if ($form && is_array($form->fields)) {
+            return $form->fields;
+        }
+
+        return self::defaultFields(self::baseLayoutOf($kind));
     }
 
     /**
@@ -53,7 +84,7 @@ class OfficialMemoForms
     public static function field(string $kind, string $key): array
     {
         foreach (self::fields($kind) as $field) {
-            if ($field['key'] === $key) {
+            if (($field['key'] ?? '') === $key) {
                 return $field;
             }
         }
@@ -67,6 +98,17 @@ class OfficialMemoForms
         ];
     }
 
+    public static function baseLayoutOf(string $kind): string
+    {
+        self::ensureSystemForms();
+        $form = OfficialMemoForm::query()->where('key', $kind)->first();
+        if ($form && in_array($form->base_layout, ['internal', 'external', 'order'], true)) {
+            return $form->base_layout;
+        }
+
+        return in_array($kind, ['internal', 'external', 'order'], true) ? $kind : 'internal';
+    }
+
     /**
      * @return array<string, array{enabled: bool, value: string}>
      */
@@ -75,7 +117,7 @@ class OfficialMemoForms
         $sections = [];
         foreach (self::fields($kind) as $field) {
             $sections[$field['key']] = [
-                'enabled' => (bool) $field['enabled'],
+                'enabled' => (bool) ($field['enabled'] ?? false),
                 'value' => self::prefill($field, $setting, $user),
             ];
         }
@@ -104,6 +146,90 @@ class OfficialMemoForms
         return $sections;
     }
 
+    public static function ensureSystemForms(): void
+    {
+        if (! Schema::hasTable('official_memo_forms')) {
+            return;
+        }
+
+        $defaults = [
+            ['key' => 'internal', 'label' => 'บันทึกข้อความภายใน', 'base_layout' => 'internal', 'sort_order' => 1],
+            ['key' => 'external', 'label' => 'หนังสือภายนอก', 'base_layout' => 'external', 'sort_order' => 2],
+            ['key' => 'order', 'label' => 'คำสั่ง', 'base_layout' => 'order', 'sort_order' => 3],
+        ];
+
+        foreach ($defaults as $row) {
+            $form = OfficialMemoForm::query()->firstOrCreate(
+                ['key' => $row['key']],
+                [
+                    'label' => $row['label'],
+                    'base_layout' => $row['base_layout'],
+                    'fields' => self::defaultFields($row['base_layout']),
+                    'layout' => OfficialMemoLayouts::defaultLayout($row['base_layout']),
+                    'is_system' => true,
+                    'sort_order' => $row['sort_order'],
+                ]
+            );
+
+            if ($form->layout === null || $form->layout === []) {
+                $form->update([
+                    'layout' => OfficialMemoLayouts::defaultLayout($row['base_layout']),
+                ]);
+            }
+        }
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public static function defaultFields(string $baseLayout): array
+    {
+        return match ($baseLayout) {
+            'external' => self::externalFields(),
+            'order' => self::orderFields(),
+            default => self::internalFields(),
+        };
+    }
+
+    /**
+     * @return array{page: array{width_cm: float, height_cm: float}, blocks: list<array<string, mixed>>}
+     */
+    public static function defaultLayout(string $baseLayout): array
+    {
+        return OfficialMemoLayouts::defaultLayout($baseLayout);
+    }
+
+    public static function uniqueKeyFromLabel(string $label, ?string $preferred = null): string
+    {
+        $base = $preferred !== null && $preferred !== ''
+            ? Str::slug($preferred, '_')
+            : Str::slug($label, '_');
+        if ($base === '') {
+            $base = 'form';
+        }
+        $base = Str::limit($base, 50, '');
+        $key = $base;
+        $n = 2;
+        while (OfficialMemoForm::query()->where('key', $key)->exists()) {
+            $key = $base.'_'.$n;
+            $n++;
+        }
+
+        return $key;
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, OfficialMemoForm>
+     */
+    private static function formRows()
+    {
+        if (! Schema::hasTable('official_memo_forms')) {
+            return collect();
+        }
+
+        return OfficialMemoForm::query()->orderBy('sort_order')->orderBy('id')->get();
+    }
+
     /**
      * @param  array<string, mixed>  $field
      */
@@ -120,11 +246,11 @@ class OfficialMemoForms
             }
         }
 
-        if ($field['key'] === 'signer_name' && $user && trim((string) $user->name) !== '') {
+        if (($field['key'] ?? '') === 'signer_name' && $user && trim((string) $user->name) !== '') {
             return trim((string) $user->name);
         }
 
-        if ($field['key'] === 'signer_position' && $user && trim((string) ($user->position ?? '')) !== '') {
+        if (($field['key'] ?? '') === 'signer_position' && $user && trim((string) ($user->position ?? '')) !== '') {
             return trim((string) $user->position);
         }
 

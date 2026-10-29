@@ -70,6 +70,7 @@ interface UserData {
     name: string;
     prefix?: string | null;
     email: string;
+    username?: string | null;
     cid?: string | null;
     phone?: string | null;
     position?: string | null;
@@ -107,11 +108,13 @@ export default function CompleteProfile({ user, rosterMatch, departments, haTeam
         first_name: rosterMatch?.first_name || split.first,
         last_name: rosterMatch?.last_name || split.last,
         email: user.email || '',
+        username: user.username || '',
         cid: user.cid || rosterMatch?.cid || '',
         phone: user.phone || rosterMatch?.phone || '',
         position: resolvePositionValue(rosterMatch?.position ?? user.position, positionOptions),
         avatar: null as File | null,
     });
+    const requiresUsername = form.email.trim() === '';
 
     const dropdownPositions = useMemo(() => {
         const options = [...positionOptions];
@@ -223,6 +226,9 @@ export default function CompleteProfile({ user, rosterMatch, departments, haTeam
         formData.append('position', form.position);
         if (form.email.trim() !== '') {
             formData.append('email', form.email.trim());
+        }
+        if (form.username.trim() !== '') {
+            formData.append('username', form.username.trim());
         }
         formData.append('cid', form.cid.replace(/\D/g, '').slice(0, 13));
 
@@ -401,6 +407,29 @@ export default function CompleteProfile({ user, rosterMatch, departments, haTeam
                                 />
                                 <p className="text-xs text-gray-500">แยกจากบัญชี LINE — กรอกเฉพาะเมื่อต้องการใช้งานอีเมลจริง</p>
                                 <InputError message={errors.email} />
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="username" className="flex items-center gap-2">
+                                    <User className="w-4 h-4 text-gray-500" />
+                                    ชื่อผู้ใช้ {requiresUsername ? <span className="text-red-500">*</span> : '(ไม่บังคับ)'}
+                                </Label>
+                                <Input
+                                    id="username"
+                                    type="text"
+                                    value={form.username}
+                                    onChange={(e) => setForm((p) => ({ ...p, username: e.target.value }))}
+                                    placeholder="เช่น somchai.w หรือ nurse01"
+                                    className="h-12"
+                                    required={requiresUsername}
+                                    autoComplete="username"
+                                />
+                                <p className="text-xs text-gray-500">
+                                    {requiresUsername
+                                        ? 'ยังไม่มีอีเมล — ต้องตั้งชื่อผู้ใช้เพื่อเข้าสู่ระบบด้วยรหัสผ่าน'
+                                        : 'ใช้ตัวอักษร ตัวเลข และ . _ - — เข้าสู่ระบบด้วยชื่อผู้ใช้แทนอีเมลได้'}
+                                </p>
+                                <InputError message={errors.username} />
                             </div>
 
                             <div className="space-y-2">

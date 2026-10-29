@@ -53,6 +53,7 @@ class CompleteProfileController extends Controller
                 'name' => $user->name,
                 'prefix' => $user->prefix ?? $rosterMatch['prefix'] ?? null,
                 'email' => $email,
+                'username' => $user->username,
                 'cid' => $user->cid ?? $rosterMatch['cid'] ?? null,
                 'phone' => $user->phone ?? $rosterMatch['phone'] ?? null,
                 'position' => $user->position ?? $rosterMatch['position'] ?? null,
@@ -105,7 +106,10 @@ class CompleteProfileController extends Controller
             'position' => $request->input('position') === '__none__' ? null : $request->input('position'),
         ]);
 
-        $validated = $request->validate([
+        $emailInput = strtolower(trim((string) $request->input('email', '')));
+        $needsUsername = $emailInput === '';
+
+        $rules = [
             'prefix' => 'required|string|max:50',
             'first_name' => 'required|string|max:255',
             'last_name' => 'required|string|max:255',
@@ -119,12 +123,23 @@ class CompleteProfileController extends Controller
             'ha_team_ids' => 'nullable|array',
             'ha_team_ids.*' => 'exists:teamha,id',
             'avatar' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
-        ], [
+        ];
+        if ($needsUsername) {
+            $rules['username'] = User::usernameRules($user->id);
+        } else {
+            $rules['username'] = ['nullable', 'string', 'min:3', 'max:50', 'regex:/^[A-Za-z0-9._-]+$/', \Illuminate\Validation\Rule::unique('users', 'username')->ignore($user->id)];
+        }
+
+        $validated = $request->validate($rules, [
             'prefix.required' => 'กรุณากรอกคำนำหน้า',
             'first_name.required' => 'กรุณากรอกชื่อ',
             'last_name.required' => 'กรุณากรอกนามสกุล',
             'email.email' => 'รูปแบบอีเมลไม่ถูกต้อง',
             'email.unique' => 'อีเมลนี้ถูกใช้แล้ว',
+            'username.required' => 'กรุณาตั้งชื่อผู้ใช้เมื่อไม่ได้กรอกอีเมล',
+            'username.regex' => 'ชื่อผู้ใช้ใช้ได้เฉพาะตัวอักษร ตัวเลข และ . _ -',
+            'username.unique' => 'ชื่อผู้ใช้นี้ถูกใช้แล้ว',
+            'username.min' => 'ชื่อผู้ใช้ต้องมีอย่างน้อย 3 ตัวอักษ',
             'cid.required' => 'กรุณากรอกเลขบัตรประชาชน 13 หลัก',
             'cid.size' => 'เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก',
             'cid.unique' => 'เลขบัตรประชาชนนี้ถูกใช้สมัครแล้ว กรุณาเข้าสู่ระบบด้วยบัญชีเดิมแล้วผูก LINE ที่โปรไฟล์',
@@ -171,10 +186,16 @@ class CompleteProfileController extends Controller
             $email = $user->email;
         }
 
+        $username = isset($validated['username']) ? strtolower(trim((string) $validated['username'])) : null;
+        if ($username === '') {
+            $username = null;
+        }
+
         $user->update([
             'prefix' => $prefix,
             'name' => $fullName,
             'email' => $email,
+            'username' => $username ?? $user->username,
             'cid' => $cid,
             'phone' => $validated['phone'] ?? $roster->phone,
             'position' => $position,
@@ -216,6 +237,9 @@ class CompleteProfileController extends Controller
 
         session()->flash('success', $flash);
 
-        return Inertia::location(PostLoginRedirect::destinationAfterRegistration($user, $request));
+        $user->refresh();
+        $next = $user->isLoginReady() ? 'menus-hub' : 'settings/password';
+
+        return Inertia::location(PostLoginRedirect::toCurrent($next, $request));
     }
 }

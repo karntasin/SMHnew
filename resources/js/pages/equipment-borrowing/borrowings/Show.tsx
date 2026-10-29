@@ -3,6 +3,7 @@ import AppLayout from '@/layouts/app-layout';
 import { Head, router, useForm } from '@inertiajs/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { BackButton } from '@/components/ui/back-button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -44,6 +45,7 @@ export default function Show({ borrowing, canManage }: Props) {
 
     return (
         <AppLayout breadcrumbs={[
+            { title: 'งานธุรการ', href: '/admin-hub' },
             { title: 'ยืมอุปกรณ์แพทย์', href: route('equipment-borrowing.dashboard') },
             { title: borrowing.borrowing_number, href: '#' },
         ]}>
@@ -51,9 +53,12 @@ export default function Show({ borrowing, canManage }: Props) {
 
             <div className="p-6 max-w-4xl mx-auto space-y-6">
                 <div className="flex flex-wrap justify-between items-start gap-4">
-                    <div>
-                        <h1 className="text-2xl font-bold">{borrowing.borrowing_number}</h1>
-                        <Badge className={`mt-2 ${STATUS_COLORS[borrowing.status] || ''}`}>{STATUS_LABELS[borrowing.status]}</Badge>
+                    <div className="flex items-start gap-3">
+                        <BackButton fallbackUrl={route('equipment-borrowing.dashboard')} iconOnly />
+                        <div>
+                            <h1 className="text-2xl font-bold">{borrowing.borrowing_number}</h1>
+                            <Badge className={`mt-2 ${STATUS_COLORS[borrowing.status] || ''}`}>{STATUS_LABELS[borrowing.status]}</Badge>
+                        </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
                         {canManage && borrowing.status === 'pending' && (

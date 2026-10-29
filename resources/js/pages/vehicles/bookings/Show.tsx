@@ -3,6 +3,7 @@ import AppLayout from '@/layouts/app-layout';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { BackButton } from '@/components/ui/back-button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -137,6 +138,8 @@ export default function Show({ booking, availableVehicles, drivers = [], canAppr
 
     return (
         <AppLayout breadcrumbs={[
+            { title: 'งานธุรการ', href: '/admin-hub' },
+            { title: 'ระบบจองรถ', href: route('vehicles.index') },
             { title: 'รายการขอใช้รถ', href: route('vehicles.bookings.index') },
             { title: booking.booking_number, href: '#' }
         ]}>
@@ -144,9 +147,7 @@ export default function Show({ booking, availableVehicles, drivers = [], canAppr
             <div className="max-w-4xl mx-auto p-6 space-y-6">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                        <Link href={route('vehicles.bookings.index')}>
-                            <Button variant="ghost" size="icon"><ArrowLeft className="h-4 w-4" /></Button>
-                        </Link>
+                        <BackButton fallbackUrl={route('vehicles.bookings.index')} iconOnly />
                         <h1 className="text-2xl font-bold">รายละเอียดคำขอ {booking.booking_number}</h1>
                     </div>
                     <div>{getStatusBadge(booking.status)}</div>

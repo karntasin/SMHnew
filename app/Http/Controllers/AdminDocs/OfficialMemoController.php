@@ -3,11 +3,17 @@
 namespace App\Http\Controllers\AdminDocs;
 
 use App\Data\OfficialMemoForms;
+use App\Data\OfficialMemoLayouts;
 use App\Http\Controllers\Controller;
 use App\Models\OfficialMemo;
+use App\Models\OfficialMemoForm;
 use App\Models\OfficialMemoSetting;
+use App\Models\User;
 use App\Services\AdminDocs\OfficialMemoDocxService;
+use App\Services\FshhChat\FshhChatClient;
+use App\Support\ThaiNameSearch;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
@@ -126,8 +132,16 @@ class OfficialMemoController extends Controller
 
     public function settings()
     {
+        OfficialMemoForms::ensureSystemForms();
+
         return Inertia::render('AdminDocs/Memos/Settings', [
             'settings' => $this->settingPayload(OfficialMemoSetting::current()),
+            'forms' => $this->formsPayload(),
+            'defaultLayouts' => [
+                'internal' => OfficialMemoForms::defaultLayout('internal'),
+                'external' => OfficialMemoForms::defaultLayout('external'),
+                'order' => OfficialMemoForms::defaultLayout('order'),
+            ],
         ]);
     }
 
@@ -152,6 +166,166 @@ class OfficialMemoController extends Controller
             ->with('success', 'บันทึกหัวกระดาษแล้ว');
     }
 
+    public function storeForm(Request $request)
+    {
+        OfficialMemoForms::ensureSystemForms();
+
+        if ($request->input('key') === '') {
+            $request->merge(['key' => null]);
+        }
+
+        $data = $request->validate([
+            'label' => ['required', 'string', 'max:255'],
+            'key' => ['nullable', 'string', 'max:60', 'regex:/^[a-z][a-z0-9_]*$/'],
+            'clone_from' => ['required', 'string', Rule::in(array_keys(OfficialMemoForms::kinds()))],
+            'base_layout' => ['nullable', 'in:internal,external,order'],
+        ]);
+
+        $source = OfficialMemoForm::query()->where('key', $data['clone_from'])->firstOrFail();
+        $baseLayout = $data['base_layout'] ?? $source->base_layout;
+        if (! in_array($baseLayout, ['internal', 'external', 'order'], true)) {
+            $baseLayout = $source->base_layout;
+        }
+
+        $key = OfficialMemoForms::uniqueKeyFromLabel($data['label'], $data['key'] ?? null);
+        $maxOrder = (int) OfficialMemoForm::query()->max('sort_order');
+
+        $sourceLayout = is_array($source->layout) && $source->layout !== []
+            ? OfficialMemoLayouts::normalize($source->layout, $baseLayout)
+            : OfficialMemoForms::defaultLayout($baseLayout);
+
+        OfficialMemoForm::query()->create([
+            'key' => $key,
+            'label' => $data['label'],
+            'base_layout' => $baseLayout,
+            'fields' => is_array($source->fields) ? $source->fields : OfficialMemoForms::defaultFields($baseLayout),
+            'layout' => $sourceLayout,
+            'is_system' => false,
+            'sort_order' => $maxOrder + 1,
+        ]);
+
+        return redirect()
+            ->route('admin-docs.memos.settings', ['tab' => 'forms'])
+            ->with('success', 'สร้างแบบฟอร์มแล้ว');
+    }
+
+    public function updateForm(Request $request, OfficialMemoForm $form)
+    {
+        $data = $request->validate([
+            'label' => ['required', 'string', 'max:255'],
+            'base_layout' => ['nullable', 'in:internal,external,order'],
+            'fields' => ['required', 'array', 'min:1'],
+            'fields.*.key' => ['required', 'string', 'max:60'],
+            'fields.*.label' => ['required', 'string', 'max:255'],
+            'fields.*.type' => ['required', 'in:text,textarea,date,rank'],
+            'fields.*.enabled' => ['nullable', 'boolean'],
+            'fields.*.optional' => ['nullable', 'boolean'],
+            'fields.*.placeholder' => ['nullable', 'string', 'max:500'],
+            'fields.*.rows' => ['nullable', 'integer', 'min:1', 'max:30'],
+            'fields.*.default' => ['nullable', 'string', 'max:2000'],
+            'fields.*.options' => ['nullable', 'array'],
+            'fields.*.options.*' => ['string', 'max:100'],
+            'fields.*.setting' => ['nullable', 'string', 'max:60'],
+            'fields.*.fallback_setting' => ['nullable', 'string', 'max:60'],
+            'layout' => ['nullable', 'array'],
+            'layout.page' => ['nullable', 'array'],
+            'layout.page.width_cm' => ['nullable', 'numeric', 'min:10', 'max:30'],
+            'layout.page.height_cm' => ['nullable', 'numeric', 'min:15', 'max:42'],
+            'layout.page.margin_top_cm' => ['nullable', 'numeric', 'min:0.5', 'max:10'],
+            'layout.page.margin_bottom_cm' => ['nullable', 'numeric', 'min:0.5', 'max:10'],
+            'layout.page.margin_left_cm' => ['nullable', 'numeric', 'min:0.5', 'max:10'],
+            'layout.page.margin_right_cm' => ['nullable', 'numeric', 'min:0.5', 'max:10'],
+            'layout.page.orientation' => ['nullable', 'in:portrait,landscape'],
+            'layout.page.font_family' => ['nullable', 'string', 'max:100'],
+            'layout.page.font_size_pt' => ['nullable', 'integer', 'min:10', 'max:36'],
+            'layout.page.line_spacing' => ['nullable', 'numeric', 'min:0.8', 'max:3.0'],
+            'layout.blocks' => ['nullable', 'array'],
+            'layout.blocks.*.id' => ['required_with:layout.blocks', 'string', 'max:80'],
+            'layout.blocks.*.role' => ['required_with:layout.blocks', 'in:garuda,static,field,signature,copies,contact,rule'],
+            'layout.blocks.*.x_cm' => ['required_with:layout.blocks', 'numeric', 'min:0', 'max:30'],
+            'layout.blocks.*.y_cm' => ['required_with:layout.blocks', 'numeric', 'min:0', 'max:42'],
+            'layout.blocks.*.w_cm' => ['required_with:layout.blocks', 'numeric', 'min:0.5', 'max:30'],
+            'layout.blocks.*.h_cm' => ['nullable', 'numeric', 'min:0.4', 'max:30'],
+            'layout.blocks.*.align' => ['nullable', 'in:left,center,right,justify'],
+            'layout.blocks.*.font_pt' => ['nullable', 'integer', 'min:10', 'max:36'],
+            'layout.blocks.*.font_family' => ['nullable', 'string', 'max:100'],
+            'layout.blocks.*.bold' => ['nullable', 'boolean'],
+            'layout.blocks.*.italic' => ['nullable', 'boolean'],
+            'layout.blocks.*.underline' => ['nullable', 'boolean'],
+            'layout.blocks.*.text_transform' => ['nullable', 'in:none,uppercase,lowercase,capitalize'],
+            'layout.blocks.*.line_height' => ['nullable', 'numeric', 'min:0.8', 'max:3.0'],
+            'layout.blocks.*.space_before_pt' => ['nullable', 'integer', 'min:0', 'max:72'],
+            'layout.blocks.*.space_after_pt' => ['nullable', 'integer', 'min:0', 'max:72'],
+            'layout.blocks.*.indent_cm' => ['nullable', 'numeric', 'min:0', 'max:10'],
+            'layout.blocks.*.text' => ['nullable', 'string', 'max:500'],
+            'layout.blocks.*.field' => ['nullable', 'string', 'max:60'],
+            'layout.blocks.*.label' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $fields = [];
+        foreach ($data['fields'] as $field) {
+            $row = [
+                'key' => $field['key'],
+                'label' => $field['label'],
+                'type' => $field['type'],
+                'enabled' => (bool) ($field['enabled'] ?? false),
+                'optional' => (bool) ($field['optional'] ?? false),
+                'placeholder' => (string) ($field['placeholder'] ?? ''),
+            ];
+            if (($field['type'] ?? '') === 'textarea') {
+                $row['rows'] = (int) ($field['rows'] ?? 3);
+            }
+            if (! empty($field['default'])) {
+                $row['default'] = $field['default'];
+            }
+            if (! empty($field['options']) && is_array($field['options'])) {
+                $row['options'] = array_values($field['options']);
+            }
+            if (! empty($field['setting'])) {
+                $row['setting'] = $field['setting'];
+            }
+            if (! empty($field['fallback_setting'])) {
+                $row['fallback_setting'] = $field['fallback_setting'];
+            }
+            $fields[] = $row;
+        }
+
+        $payload = [
+            'label' => $data['label'],
+            'fields' => $fields,
+        ];
+
+        if (! $form->is_system && ! empty($data['base_layout'])) {
+            $payload['base_layout'] = $data['base_layout'];
+        }
+
+        $base = $payload['base_layout'] ?? $form->base_layout;
+        if (isset($data['layout']) && is_array($data['layout'])) {
+            $payload['layout'] = OfficialMemoLayouts::normalize($data['layout'], $base);
+        }
+
+        $form->update($payload);
+
+        return redirect()
+            ->route('admin-docs.memos.settings', ['tab' => 'forms'])
+            ->with('success', 'บันทึกแบบฟอร์มแล้ว');
+    }
+
+    public function destroyForm(OfficialMemoForm $form)
+    {
+        if ($form->is_system) {
+            return redirect()
+                ->route('admin-docs.memos.settings', ['tab' => 'forms'])
+                ->with('error', 'ไม่สามารถลบแบบฟอร์มระบบได้');
+        }
+
+        $form->delete();
+
+        return redirect()
+            ->route('admin-docs.memos.settings', ['tab' => 'forms'])
+            ->with('success', 'ลบแบบฟอร์มแล้ว');
+    }
+
     public function font(string $weight)
     {
         $file = match ($weight) {
@@ -167,6 +341,98 @@ class OfficialMemoController extends Controller
         return response()->file($file, [
             'Content-Type' => 'font/ttf',
             'Cache-Control' => 'public, max-age=604800',
+        ]);
+    }
+
+    public function dict()
+    {
+        $file = resource_path('dicts/thai-words.txt');
+        if (! is_file($file)) {
+            abort(404);
+        }
+
+        return response()->file($file, [
+            'Content-Type' => 'text/plain; charset=UTF-8',
+            'Cache-Control' => 'public, max-age=604800',
+        ]);
+    }
+
+    public function transcribe(Request $request, FshhChatClient $chat)
+    {
+        $request->validate([
+            'audio' => ['required', 'file', 'max:3072'],
+        ]);
+
+        $file = $request->file('audio');
+        if (! $file) {
+            return response()->json(['success' => false, 'error' => 'ไม่พบไฟล์เสียง', 'code' => 'NO_FILE'], 422);
+        }
+
+        $binary = file_get_contents($file->getRealPath());
+        if ($binary === false || $binary === '') {
+            return response()->json(['success' => false, 'error' => 'อ่านไฟล์เสียงไม่สำเร็จ', 'code' => 'READ'], 422);
+        }
+
+        $result = $chat->transcribe(
+            $binary,
+            $file->getClientOriginalName() ?: 'audio.webm',
+            $file->getMimeType() ?: 'audio/webm'
+        );
+
+        $status = ($result['success'] ?? false) ? 200 : (
+            ($result['code'] ?? '') === 'QUOTA' ? 429 : (
+                ($result['code'] ?? '') === 'NOT_CONFIGURED' ? 503 : 502
+            )
+        );
+
+        return response()->json($result, $status);
+    }
+
+    public function searchUsers(Request $request)
+    {
+        $q = trim($request->string('q')->toString());
+        if (mb_strlen($q) < 1) {
+            return response()->json(['users' => []]);
+        }
+
+        $variants = ThaiNameSearch::variants($q);
+        if ($variants === []) {
+            $variants = [$q];
+        }
+
+        $users = User::query()
+            ->where(function ($query) use ($variants) {
+                foreach ($variants as $variant) {
+                    $like = '%'.$variant.'%';
+                    $query->orWhere(function ($inner) use ($like) {
+                        $inner->where('name', 'like', $like)
+                            ->orWhere('prefix', 'like', $like)
+                            ->orWhereRaw("CONCAT(COALESCE(prefix, ''), ' ', name) like ?", [$like]);
+                    });
+                }
+            })
+            ->orderBy('name')
+            ->limit(40)
+            ->get(['id', 'prefix', 'name', 'position']);
+
+        return response()->json([
+            'users' => $users->map(function (User $user) {
+                $prefix = trim((string) $user->prefix);
+                if ($prefix !== '' && preg_match('/^\+?\d+$/', $prefix)) {
+                    $prefix = '';
+                }
+                $name = trim((string) $user->name);
+                $display = $name;
+                if ($prefix !== '' && $name !== '' && ! str_starts_with($name, $prefix)) {
+                    $display = $prefix.' '.$name;
+                }
+
+                return [
+                    'id' => $user->id,
+                    'name' => $display !== '' ? $display : 'ไม่ระบุชื่อ',
+                    'position' => filled($user->position) ? trim((string) $user->position) : null,
+                ];
+            })->values(),
         ]);
     }
 
@@ -199,8 +465,11 @@ class OfficialMemoController extends Controller
      */
     private function validatedPayload(Request $request): array
     {
+        OfficialMemoForms::ensureSystemForms();
+        $kindKeys = array_keys(OfficialMemoForms::kinds());
+
         $data = $request->validate([
-            'kind' => ['required', 'in:internal,external,order'],
+            'kind' => ['required', 'string', Rule::in($kindKeys)],
             'thai_digits' => ['nullable', 'boolean'],
             'sections' => ['required', 'array'],
             'sections.*.enabled' => ['nullable', 'boolean'],
@@ -288,5 +557,28 @@ class OfficialMemoController extends Controller
             'signer_position' => $setting->signer_position,
             'owner_unit' => $setting->owner_unit,
         ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function formsPayload(): array
+    {
+        $forms = [];
+        foreach (OfficialMemoForms::catalog() as $key => $entry) {
+            $row = OfficialMemoForm::query()->where('key', $key)->first();
+            $forms[] = [
+                'id' => $row?->id,
+                'key' => $key,
+                'label' => $entry['label'],
+                'base_layout' => $entry['base_layout'],
+                'fields' => $entry['fields'],
+                'layout' => $entry['layout'],
+                'is_system' => $entry['is_system'],
+                'sort_order' => $row?->sort_order ?? 0,
+            ];
+        }
+
+        return $forms;
     }
 }

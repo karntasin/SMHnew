@@ -103,6 +103,7 @@ export default function List({ bookings, stats, filters }: Props) {
 
     return (
         <AppLayout breadcrumbs={[
+            { title: 'งานธุรการ', href: '/admin-hub' },
             { title: 'ระบบจองรถ', href: route('vehicles.index') },
             { title: 'รายการจอง', href: route('vehicles.bookings.index') },
         ]}>

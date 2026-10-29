@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import { Button } from '@/components/ui/button';
+import { BackButton } from '@/components/ui/back-button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -136,10 +137,7 @@ export default function LeaveShow({
         <div className="max-w-4xl mx-auto space-y-6">
           {/* Header */}
           <div>
-            <Link href={route('leave.index')}
-              className="inline-flex items-center text-sm text-muted-foreground hover:text-primary mb-2">
-              <ArrowLeft className="mr-2 h-4 w-4" /> กลับไปยังรายการ
-            </Link>
+            <BackButton fallbackUrl={route('leave.index')} label="กลับไปยังรายการ" className="mb-2" />
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div>
                 <h1 className="text-2xl font-bold">ใบลาเลขที่ {leave.request_number}</h1>

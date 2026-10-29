@@ -172,11 +172,9 @@ class UserController extends Controller
 
     public function resetPassword(User $user)
     {
-        $user->update([
-            'password' => Hash::make('ResetPasswordNya'),
-        ]);
+        $user->assignInitialPassword();
 
-        return redirect()->back()->with('success', 'รีเซ็ตรหัสผ่านเป็นค่าเริ่มต้นสำเร็จ');
+        return redirect()->back()->with('success', 'รีเซ็ตรหัสผ่านเป็น '.User::INITIAL_PASSWORD.' แล้ว — ผู้ใช้ต้องเปลี่ยนรหัสผ่านเมื่อเข้าสู่ระบบครั้งถัดไป');
     }
 
     public function updateRoles(Request $request, User $user)

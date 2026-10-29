@@ -63,16 +63,27 @@ class HandleInertiaRequests extends Middleware
     public function share(Request $request): array
     {
         [$message, $author] = str(Inspiring::quotes()->random())->explode('-');
+        $user = $request->user();
+        $needsPassword = $user ? $user->needsPasswordChange() : false;
+        $needsLoginId = $user
+            ? (! $user->hasRealEmail() && trim((string) ($user->username ?? '')) === '')
+            : false;
 
         return array_merge(parent::share($request), [
             'name' => config('app.name'),
             'quote' => ['message' => trim($message), 'author' => trim($author)],
             'auth' => [
-                'user' => $request->user() ? array_merge($request->user()->toArray(), [
-                    'avatar' => $request->user()->avatar_url,
-                    'roles' => $request->user()->getRoleNames(),
+                'user' => $user ? array_merge($user->toArray(), [
+                    'avatar' => $user->avatar_url,
+                    'roles' => $user->getRoleNames(),
                 ]) : null,
             ],
+            'accountSetup' => $user ? [
+                'ready' => ! $needsPassword && ! $needsLoginId,
+                'needsPassword' => $needsPassword,
+                'needsLoginId' => $needsLoginId,
+                'hasPasswordSet' => $user->hasPasswordSet(),
+            ] : null,
             'flash' => [
                 'success' => session('success'),
                 'error' => session('error'),

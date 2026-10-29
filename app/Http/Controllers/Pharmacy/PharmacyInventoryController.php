@@ -1301,6 +1301,7 @@ class PharmacyInventoryController extends Controller
 
     public function drugOut(Request $request): Response
     {
+        $this->inventory->ensureDefaultLocations();
         $locations = $this->catalogLocations()->get();
 
         $selectedLocationId = (int) ($request->query('location_id') ?: $locations->firstWhere('type', 'pharmacy')?->id ?: $locations->first()?->id);
@@ -1402,7 +1403,8 @@ class PharmacyInventoryController extends Controller
             );
 
             $itemName = $movement->item?->name ?? $data['icode'];
-            return back()->with('success', "ตัดยาออกหน่วยสำเร็จ: {$itemName} จำนวน {$movement->qty} {$movement->item?->baseUnitName()}");
+            $noun = $this->catalog() === 'nondrug' ? 'เวชภัณฑ์' : 'ยา';
+            return back()->with('success', "ตัด{$noun}ออกหน่วยสำเร็จ: {$itemName} จำนวน {$movement->qty} {$movement->item?->baseUnitName()}");
         } catch (\Throwable $e) {
             return back()->withErrors(['error' => $e->getMessage()]);
         }
@@ -1438,7 +1440,9 @@ class PharmacyInventoryController extends Controller
             );
 
             $itemName = $movement->item?->name ?? $data['icode'];
-            return back()->with('success', "รับคืนยาเข้าห้องยาสำเร็จ: {$itemName} จำนวน {$movement->qty} {$movement->item?->baseUnitName()}");
+            $noun = $this->catalog() === 'nondrug' ? 'เวชภัณฑ์' : 'ยา';
+            $locNoun = $this->catalog() === 'nondrug' ? 'จุดจ่าย/คลังเวชภัณฑ์' : 'ห้องยา';
+            return back()->with('success', "รับคืน{$noun}เข้า{$locNoun}สำเร็จ: {$itemName} จำนวน {$movement->qty} {$movement->item?->baseUnitName()}");
         } catch (\Throwable $e) {
             return back()->withErrors(['error' => $e->getMessage()]);
         }

@@ -96,7 +96,7 @@ export default function Dashboard({ stats, categories, recentRequests, pendingRe
 
     return (
 
-        <AppLayout breadcrumbs={[{ title: 'ระบบแจ้งซ่อม', href: route('maintenance.dashboard') }]}>
+        <AppLayout breadcrumbs={[{ title: 'งานธุรการ', href: '/admin-hub' }, { title: 'ระบบแจ้งซ่อม', href: route('maintenance.dashboard') }]}>
 
             <Head title="ระบบแจ้งซ่อม" />
 

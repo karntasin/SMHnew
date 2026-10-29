@@ -7,6 +7,7 @@ use App\Http\Requests\Settings\ProfileUpdateRequest;
 use App\Models\Department;
 use App\Models\TeamHa;
 use App\Services\FshhChat\FshhChatSyncService;
+use App\Support\PostLoginRedirect;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -80,7 +81,9 @@ class ProfileController extends Controller
             'chat_display_name' => $validated['chat_display_name'] ?? null,
         ]);
 
-        if ($user->isDirty('email')) {
+        $emailChanged = $user->isDirty('email');
+
+        if ($emailChanged) {
             $user->email_verified_at = null;
         }
 
@@ -103,6 +106,12 @@ class ProfileController extends Controller
         }
 
         $this->syncChat($user);
+
+        $user->refresh();
+
+        if ($emailChanged && $user->isLoginReady()) {
+            return redirect()->away(PostLoginRedirect::toCurrent('dashboard', $request));
+        }
 
         return to_route('profile.edit')->with('status', 'profile-updated');
     }

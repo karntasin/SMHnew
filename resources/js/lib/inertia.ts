@@ -1,5 +1,6 @@
 import { router } from '@inertiajs/react';
 import { resolveAppUrl } from '@/lib/asset';
+import { syncCsrfMeta } from '@/lib/csrf';
 
 function patchRouterMethod(method: 'visit' | 'get' | 'post' | 'put' | 'patch' | 'delete') {
     const original = router[method].bind(router);
@@ -37,5 +38,13 @@ export function configureInertiaBasePath(): void {
     patchRouterMethod('delete');
 
     router.on('finish', unlockPageAfterOverlay);
-    router.on('navigate', unlockPageAfterOverlay);
+    router.on('navigate', (event) => {
+        unlockPageAfterOverlay();
+        const token = (event.detail?.page?.props as { csrf_token?: string } | undefined)?.csrf_token;
+        syncCsrfMeta(token);
+    });
+    router.on('success', (event) => {
+        const token = (event.detail?.page?.props as { csrf_token?: string } | undefined)?.csrf_token;
+        syncCsrfMeta(token);
+    });
 }

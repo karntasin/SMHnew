@@ -171,7 +171,8 @@ class LineAuthController extends Controller
                 'name' => '',
                 'line_display_name' => $displayName,
                 'email' => $email,
-                'password' => bcrypt(Str::random(32)),
+                'password' => User::INITIAL_PASSWORD,
+                'must_change_password' => true,
                 'line_id' => $lineUserId,
                 'avatar' => $pictureUrl,
                 'line_picture_url' => $pictureUrl,
@@ -376,7 +377,8 @@ class LineAuthController extends Controller
                     return redirect()->away(PostLoginRedirect::toCurrent('profile/complete', $request));
                 }
 
-                return redirect()->away(PostLoginRedirect::toCurrent('dashboard', $request));
+                $path = PostLoginRedirect::defaultPath($authed);
+                return redirect()->away(PostLoginRedirect::toCurrent($path, $request));
             }
 
             return redirect()->away(PostLoginRedirect::toCurrent('login', $request))
@@ -392,7 +394,8 @@ class LineAuthController extends Controller
     {
         Auth::login($user);
         $request->session()->regenerate();
-        session()->forget('url.intended');
+        $intended = $request->session()->pull('url.intended');
+        $base = PostLoginRedirect::currentBase($request);
 
         if ($this->needsProfileCompletion($user)) {
             if ($intent === 'register') {
@@ -407,9 +410,13 @@ class LineAuthController extends Controller
 
         $this->syncFshhChat($user);
 
+        if (! $user->hasPasswordSet()) {
+            return redirect()->away(PostLoginRedirect::join($base, 'settings/password', $request));
+        }
+
         return redirect()->away(PostLoginRedirect::sanitizeIntendedOnCurrentHost(
-            null,
-            'dashboard',
+            is_string($intended) ? $intended : null,
+            'menus-hub',
             $request
         ));
     }
@@ -424,7 +431,8 @@ class LineAuthController extends Controller
 
         Auth::login($user);
         $request->session()->regenerate();
-        session()->forget('url.intended');
+        $intended = $request->session()->pull('url.intended');
+        $base = PostLoginRedirect::currentBase($request);
 
         $onPublicHost = PostLoginRedirect::isPublicTunnelHost($request->getHost());
         $base = $onPublicHost
@@ -440,7 +448,19 @@ class LineAuthController extends Controller
 
         $this->syncFshhChat($user);
 
-        return redirect()->away(PostLoginRedirect::join($base, 'dashboard', $request));
+        if (! $user->hasPasswordSet()) {
+            return redirect()->away(PostLoginRedirect::join($base, 'settings/password', $request));
+        }
+
+        if (is_string($intended) && $intended !== '') {
+            return redirect()->away(PostLoginRedirect::sanitizeIntendedOnCurrentHost(
+                $intended,
+                'menus-hub',
+                $request
+            ));
+        }
+
+        return redirect()->away(PostLoginRedirect::join($base, 'menus-hub', $request));
     }
 
     /**

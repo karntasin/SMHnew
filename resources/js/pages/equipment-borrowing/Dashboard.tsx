@@ -47,7 +47,7 @@ export default function Dashboard({ stats, recentBorrowings, pendingBorrowings, 
     };
 
     return (
-        <AppLayout breadcrumbs={[{ title: 'ยืมอุปกรณ์แพทย์', href: route('equipment-borrowing.dashboard') }]}>
+        <AppLayout breadcrumbs={[{ title: 'งานธุรการ', href: '/admin-hub' }, { title: 'ยืมอุปกรณ์แพทย์', href: route('equipment-borrowing.dashboard') }]}>
             <Head title="ยืมอุปกรณ์แพทย์" />
 
             <div className="relative min-h-screen overflow-hidden">

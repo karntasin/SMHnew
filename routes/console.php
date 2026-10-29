@@ -9,6 +9,7 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 // Schedule document reminders every 15 minutes
+Schedule::command('calendar:send-reminders')->everyFiveMinutes();
 Schedule::command('documents:send-reminders')->everyFifteenMinutes();
 Schedule::command('documents:check-deadlines')->dailyAt('08:00')->timezone('Asia/Bangkok');
 Schedule::command('pm:generate-work-orders')->dailyAt('07:30')->timezone('Asia/Bangkok');
@@ -45,15 +46,18 @@ Schedule::command('pharmacy:send-stock-telegram-alerts')
     ->withoutOverlapping(30)
     ->runInBackground();
 
-// backup ต้องรันพื้นหลัง + กันซ้อน — ถ้าค้างจะไม่บล็อก schedule:run / แจ้งเตือน eGFR ทั้งวัน
-Schedule::command('hosxp:backup')
-    ->dailyAt('00:10')
-    ->timezone('Asia/Bangkok')
-    ->withoutOverlapping(180)
-    ->runInBackground();
+// เปิดคนละโปรเซสผ่าน wscript เพื่อไม่ให้ dump ที่ใช้เวลาหลายชั่วโมงถือ handle ของ scheduler log
+// กันงานซ้อนด้วยไฟล์ล็อกในคำสั่งสำรองเอง ไม่ใช้ mutex 180 นาทีที่หมดอายุทั้งที่ mysqldump ยังไม่จบ
+$detachedBackup = 'wscript.exe //B //Nologo "'.str_replace('/', '\\', base_path('scripts/run-backup-detached.vbs')).'"';
 
-Schedule::command('appdb:backup')
+Schedule::exec($detachedBackup.' hosxp')
+    ->dailyAt('00:10')
+    ->timezone('Asia/Bangkok');
+
+Schedule::exec($detachedBackup.' appdb')
     ->dailyAt('05:00')
-    ->timezone('Asia/Bangkok')
-    ->withoutOverlapping(180)
-    ->runInBackground();
+    ->timezone('Asia/Bangkok');
+
+Schedule::exec($detachedBackup.' dotenv')
+    ->dailyAt('05:30')
+    ->timezone('Asia/Bangkok');

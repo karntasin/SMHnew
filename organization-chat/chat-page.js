@@ -9,6 +9,14 @@ export function buildChatPage(origin, config) {
   const WORKER_ORIGIN = JSON.stringify(origin);
   const STICKERS_JSON = JSON.stringify(STICKER_PACK);
   const VAPID_PUBLIC_KEY = JSON.stringify(config.VAPID_PUBLIC_KEY || '');
+  let webAppOrigin = 'https://fshh-app.online';
+  try {
+    if (config.WEB_APP_ORIGIN) webAppOrigin = String(config.WEB_APP_ORIGIN);
+    else if (config.LARAVEL_API_URL) webAppOrigin = new URL(String(config.LARAVEL_API_URL)).origin;
+  } catch (_) {
+    /* keep default */
+  }
+  const WEB_APP_ORIGIN = JSON.stringify(webAppOrigin);
 
   return `<!DOCTYPE html>
 <html lang="th">
@@ -135,6 +143,38 @@ export function buildChatPage(origin, config) {
       background: linear-gradient(135deg, #06c755, #05a847);
       color: #fff; width: 100%; font-size: 1rem;
       box-shadow: 0 8px 28px rgba(6, 199, 85, 0.35);
+    }
+    .btn-password {
+      background: linear-gradient(135deg, #22d3ee, #0891b2);
+      color: #042f2e; width: 100%; font-size: 1rem;
+      box-shadow: 0 8px 28px rgba(34, 211, 238, 0.28);
+      margin-top: 4px;
+    }
+    .btn-password:disabled { opacity: 0.55; cursor: wait; }
+    .login-divider {
+      display: flex; align-items: center; gap: 10px;
+      margin: 18px 0 14px; color: var(--muted); font-size: 0.78rem;
+    }
+    .login-divider::before, .login-divider::after {
+      content: ''; flex: 1; height: 1px;
+      background: rgba(34, 211, 238, 0.18);
+    }
+    .login-form {
+      display: flex; flex-direction: column; gap: 10px; text-align: left;
+    }
+    .login-form label {
+      display: block; font-size: 0.78rem; color: var(--muted);
+      margin-bottom: 4px; font-weight: 600;
+    }
+    .login-form input {
+      width: 100%; box-sizing: border-box;
+      border-radius: 12px; border: 1px solid var(--border);
+      background: rgba(4, 10, 18, 0.55); color: var(--text);
+      padding: 12px 14px; outline: none;
+    }
+    .login-form input:focus {
+      border-color: rgba(34, 211, 238, 0.55);
+      box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.12);
     }
     .btn-logout {
       display: inline-flex; align-items: center; justify-content: center; gap: 6px;
@@ -536,9 +576,27 @@ export function buildChatPage(origin, config) {
     .ios-install ol { margin: 0; padding-left: 1.2rem; color: var(--muted); font-size: 0.86rem; }
     .ios-install li { margin: 4px 0; }
     .ios-install p { margin: 0 0 10px; color: var(--muted); font-size: 0.86rem; line-height: 1.45; }
-    .ios-install button.copy-link {
+    .ios-install button.copy-link,
+    .ios-install button.guide-link,
+    .ios-install a.guide-link,
+    .login-card > button.guide-link {
+      display: inline-flex; align-items: center; justify-content: center;
       border: 0; border-radius: 999px; background: var(--cyan); color: #041018;
       font-weight: 800; padding: 8px 12px; cursor: pointer;
+      text-decoration: none; font-size: 0.82rem; margin: 4px 6px 4px 0;
+    }
+    .login-card > button.guide-link {
+      width: 100%; margin: 10px 0 0; border-radius: 14px; padding: 12px 14px;
+    }
+    .ios-install .guide-section {
+      margin-top: 14px; padding-top: 12px;
+      border-top: 1px solid rgba(34, 211, 238, 0.15);
+    }
+    .ios-install .guide-section:first-of-type {
+      margin-top: 0; padding-top: 0; border-top: 0;
+    }
+    .ios-install .guide-section h3 {
+      margin: 0 0 8px; font-size: 0.9rem; color: var(--cyan); font-weight: 800;
     }
     .msg-row.pending .msg-bubble { opacity: .65; }
     .msg-row.failed .msg-bubble {
@@ -615,6 +673,20 @@ export function buildChatPage(origin, config) {
       gap: 2px 8px; font-size: 0.86rem; line-height: 1.45;
     }
     .msg-card-label { color: #8aa0b8; }
+    .msg-card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .msg-card-action {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 8px 12px; border-radius: 10px; font-size: 0.86rem; font-weight: 800;
+      text-decoration: none; color: #04111f;
+      background: color-mix(in srgb, var(--card-color, #0ea5e9) 86%, #fff);
+      border: 1px solid color-mix(in srgb, var(--card-color, #0ea5e9) 55%, #fff);
+    }
+    .msg-card-action:hover { filter: brightness(1.06); }
+    .bot-badge {
+      display: inline-block; margin-left: 6px; padding: 1px 7px;
+      border-radius: 999px; font-size: 0.68rem; font-weight: 800;
+      vertical-align: middle; color: #e0f2fe; background: #0369a1;
+    }
     .msg-time { font-size: 0.66rem; color: #6b8299; margin-top: 4px; padding: 0 4px; }
     .msg-row.mine .msg-time { text-align: right; color: #7dd3fc; }
     .msg-tools { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
@@ -891,7 +963,17 @@ export function buildChatPage(origin, config) {
       }
       #view-app.show-chat #panel-chat { transform: translateX(0); }
       #view-app.show-chat #panel-list { display: none; }
-      .chat-head .back { display: block; }
+      .chat-head {
+        padding-top: max(12px, env(safe-area-inset-top));
+        min-height: calc(48px + env(safe-area-inset-top));
+      }
+      .chat-head .back {
+        display: block;
+        min-width: 44px; min-height: 44px;
+        padding: 8px 12px;
+        font-size: 1.2rem;
+        flex-shrink: 0;
+      }
       .btn-logout { padding: 8px 12px; font-size: 0.78rem; }
       .app-header h1 { font-size: 0.85rem; }
       #view-app.show-chat .ai-fab { bottom: calc(96px + env(safe-area-inset-bottom)); }
@@ -951,26 +1033,53 @@ export function buildChatPage(origin, config) {
     <img class="brand-mark" src="/icons/mark.svg" alt="S-Chat">
     <div class="tag">SECURE CHANNEL</div>
     <h1>S-Chat</h1>
-    <p>ระบบแชทภายในองค์กร<br>ยืนยันตัวตนด้วย LINE เพื่อเข้าใช้งาน</p>
+    <p id="loginSubtitle">ระบบแชทภายในองค์กร<br>เข้าด้วย LINE หรือบัญชีเว็บแอป</p>
     <button class="btn btn-line" id="btnLogin" onclick="loginLINE()">เข้าสู่ระบบด้วย LINE</button>
     <button type="button" class="btn btn-install hidden" id="btnLoginWeb" onclick="loginLINEWeb()">กรอกบัญชีในหน้านี้</button>
+    <div class="login-divider" id="loginDivider">หรือใช้บัญชีเว็บแอป</div>
+    <form class="login-form" id="passwordLoginForm" onsubmit="return loginWithPassword(event)">
+      <div>
+        <label for="loginEmail">อีเมลหรือชื่อผู้ใช้</label>
+        <input type="text" id="loginEmail" name="email" autocomplete="username" required placeholder="อีเมลหรือชื่อผู้ใช้">
+      </div>
+      <div>
+        <label for="loginPassword">รหัสผ่าน</label>
+        <input type="password" id="loginPassword" name="password" autocomplete="current-password" required placeholder="รหัสผ่านเว็บแอป">
+      </div>
+      <button type="submit" class="btn btn-password" id="btnPasswordLogin">เข้าสู่ระบบด้วยบัญชี</button>
+    </form>
+    <button type="button" class="guide-link" id="smhLoginLink" onclick="openSmhLogin()">เปิดหน้าเข้าสู่ระบบ / ตั้งรหัสผ่าน SMH</button>
     <button type="button" class="btn btn-install hidden" id="btnInstall" onclick="installApp()">ติดตั้งแอป</button>
     <div id="loginStatus" class="status-msg hidden"></div>
     <div id="iosInstallGuide" class="ios-install hidden">
       <div class="ios-install-head">
-        <div class="ios-install-title">ติดตั้งบน iPhone</div>
+        <div class="ios-install-title">คู่มือสำหรับ iPhone</div>
         <button type="button" class="ios-install-close" onclick="dismissIosInstallGuide()">ปิด</button>
       </div>
-      <div id="iosInstallChrome" class="hidden">
-        <p>Chrome บน iPhone ติดตั้งและแจ้งเตือนไม่ได้ ให้คัดลอกลิงก์ไปเปิดใน Safari แล้วเพิ่มไปที่หน้าจอโฮม</p>
-        <button type="button" class="copy-link" onclick="copyIosLink()">คัดลอกลิงก์</button>
+      <div class="guide-section" id="iosInstallSection">
+        <h3>1. ติดตั้งบน iPhone</h3>
+        <div id="iosInstallChrome" class="hidden">
+          <p>Chrome บน iPhone ติดตั้งและแจ้งเตือนไม่ได้ ให้คัดลอกลิงก์ไปเปิดใน Safari แล้วเพิ่มไปที่หน้าจอโฮม</p>
+          <button type="button" class="copy-link" onclick="copyIosLink()">คัดลอกลิงก์ S-Chat</button>
+        </div>
+        <ol id="iosInstallSteps">
+          <li>ลบไอคอน S-Chat เดิมออกจากหน้าจอโฮม ถ้ามีอยู่แล้ว</li>
+          <li>ใน Safari แตะปุ่มแชร์ แล้วเลือก เพิ่มไปยังหน้าจอโฮม</li>
+          <li>เปิดสวิตช์ เปิดเป็นเว็บแอป แล้วแตะเพิ่ม</li>
+          <li>เปิดจากไอคอนที่ไม่มีแถบที่อยู่ของ Safari แล้วกดอนุญาตการแจ้งเตือน</li>
+        </ol>
       </div>
-      <ol id="iosInstallSteps">
-        <li>ลบไอคอน S-Chat เดิมออกจากหน้าจอโฮม ถ้ามีอยู่แล้ว</li>
-        <li>ใน Safari แตะปุ่มแชร์ แล้วเลือก เพิ่มไปยังหน้าจอโฮม</li>
-        <li>เปิดสวิตช์ เปิดเป็นเว็บแอป แล้วแตะเพิ่ม</li>
-        <li>เปิดจากไอคอนที่ไม่มีแถบที่อยู่ของ Safari แล้วกดอนุญาตการแจ้งเตือน</li>
-      </ol>
+      <div class="guide-section" id="iosPasswordGuide">
+        <h3>2. ตั้งชื่อผู้ใช้/รหัสผ่านในเว็บแอป SMH</h3>
+        <p>บน iPhone ใช้ล็อกอินด้วยอีเมลหรือชื่อผู้ใช้ + รหัสผ่าน ถ้ายังไม่มีรหัสผ่าน ให้ตั้งที่เว็บแอปก่อน:</p>
+        <ol>
+          <li>กดปุ่ม <strong>เปิดหน้าเข้าสู่ระบบ / ตั้งรหัสผ่าน SMH</strong> ใต้ฟอร์มด้านบน</li>
+          <li>เข้าสู่ระบบเว็บแอป (ใช้ LINE บนเว็บได้)</li>
+          <li>ไปที่ <strong>ตั้งค่า → รหัสผ่าน</strong></li>
+          <li>ตั้งชื่อผู้ใช้ (ถ้ายังไม่มีอีเมล) และรหัสผ่านใหม่ แล้วบันทึก</li>
+          <li>กลับมาที่ S-Chat แล้วล็อกอินด้วยอีเมลหรือชื่อผู้ใช้ + รหัสผ่านนั้น</li>
+        </ol>
+      </div>
     </div>
   </div>
 </div>
@@ -1117,7 +1226,10 @@ const LIFF_ID = ${LIFF_ID};
 const WORKER_ORIGIN = ${WORKER_ORIGIN};
 const STICKERS = ${STICKERS_JSON};
 const VAPID_PUBLIC_KEY = ${VAPID_PUBLIC_KEY};
+const WEB_APP_ORIGIN = ${WEB_APP_ORIGIN};
 const API_BASE = WORKER_ORIGIN + '/api/gas';
+const PASSWORD_SETTINGS_URL = WEB_APP_ORIGIN + '/settings/password';
+const WEB_APP_LOGIN_URL = WEB_APP_ORIGIN + '/login?redirect=' + encodeURIComponent('/settings/password');
 const STORAGE_SESSION = 'organization_chat_session';
 const STORAGE_USER = 'organization_chat_user';
 const POLL_ACTIVE_MS = 4000;
@@ -1200,11 +1312,23 @@ function renderAlertCard(m) {
   var badge = card.priority
     ? '<span class="msg-card-priority">' + esc(card.priority) + '</span>'
     : '';
+  var actions = (card.actions || []).filter(function(a) {
+    return a && a.label && a.url && /^https?:\/\//i.test(String(a.url));
+  }).map(function(a) {
+    return '<a class="msg-card-action" href="' + esc(a.url) + '" target="_blank" rel="noopener noreferrer">' +
+      esc(a.label) + '</a>';
+  }).join('');
+  var actionsHtml = actions ? '<div class="msg-card-actions">' + actions + '</div>' : '';
+  var bodyHtml = card.body && !(card.fields || []).length
+    ? '<div class="msg-card-row" style="display:block;margin-bottom:4px">' + esc(card.body) + '</div>'
+    : '';
   return '<div class="msg-card">' +
     '<div class="msg-card-bar"></div>' +
     '<div class="msg-card-body">' +
     '<div class="msg-card-head"><div class="msg-card-title">' + esc(card.title || 'แจ้งเตือน') + '</div>' + badge + '</div>' +
+    bodyHtml +
     rows +
+    actionsHtml +
     '</div></div>';
 }
 
@@ -1463,41 +1587,51 @@ function playNotifySound() {
       ? state._audioCtx
       : new Ctx();
     state._audioCtx = ctx;
+
+    const runChime = function() {
+      try {
+        const now = ctx.currentTime;
+        // Tone 1: A5 -> E6 chime
+        const osc1 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(880, now);
+        osc1.frequency.exponentialRampToValueAtTime(1318.5, now + 0.08);
+        gain1.gain.setValueAtTime(0.001, now);
+        gain1.gain.linearRampToValueAtTime(0.35, now + 0.02);
+        gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+        osc1.connect(gain1);
+        gain1.connect(ctx.destination);
+        osc1.start(now);
+        osc1.stop(now + 0.36);
+
+        // Tone 2: A6 bell harmonic slightly offset
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(1760, now + 0.11);
+        gain2.gain.setValueAtTime(0.001, now + 0.11);
+        gain2.gain.linearRampToValueAtTime(0.3, now + 0.13);
+        gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.52);
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
+        osc2.start(now + 0.11);
+        osc2.stop(now + 0.53);
+
+        if (navigator.vibrate) {
+          try { navigator.vibrate([100, 50, 100]); } catch (e) {}
+        }
+      } catch (e) {
+        console.warn('playNotifySound error:', e);
+      }
+    };
+
+    // ต้องรอ resume ก่อนเล่น — ไม่งั้น iOS/Chrome จะเงียบ (state ยัง suspended)
     if (ctx.state === 'suspended') {
-      ctx.resume().catch(function() {});
+      ctx.resume().then(runChime).catch(function() {});
+      return;
     }
-
-    const now = ctx.currentTime;
-    // Tone 1: A5 -> E6 chime
-    const osc1 = ctx.createOscillator();
-    const gain1 = ctx.createGain();
-    osc1.type = 'sine';
-    osc1.frequency.setValueAtTime(880, now);
-    osc1.frequency.exponentialRampToValueAtTime(1318.5, now + 0.08);
-    gain1.gain.setValueAtTime(0.001, now);
-    gain1.gain.linearRampToValueAtTime(0.35, now + 0.02);
-    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-    osc1.connect(gain1);
-    gain1.connect(ctx.destination);
-    osc1.start(now);
-    osc1.stop(now + 0.36);
-
-    // Tone 2: A6 bell harmonic slightly offset
-    const osc2 = ctx.createOscillator();
-    const gain2 = ctx.createGain();
-    osc2.type = 'sine';
-    osc2.frequency.setValueAtTime(1760, now + 0.11);
-    gain2.gain.setValueAtTime(0.001, now + 0.11);
-    gain2.gain.linearRampToValueAtTime(0.3, now + 0.13);
-    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.52);
-    osc2.connect(gain2);
-    gain2.connect(ctx.destination);
-    osc2.start(now + 0.11);
-    osc2.stop(now + 0.53);
-
-    if (navigator.vibrate) {
-      try { navigator.vibrate([100, 50, 100]); } catch (e) {}
-    }
+    runChime();
   } catch (e) {
     console.warn('playNotifySound error:', e);
   }
@@ -1595,6 +1729,12 @@ function updateTitleBadge(count, alertText) {
 }
 
 function alertNewMessage(senderLabel, preview, conversationId, senderUser) {
+  var now = Date.now();
+  var key = String(conversationId || '') + '|' + String(preview || '');
+  if (state._lastAlert && state._lastAlert.key === key && now - state._lastAlert.at < 2800) {
+    return;
+  }
+  state._lastAlert = { key: key, at: now };
   playNotifySound();
   showToast(senderLabel, preview, function() {
     if (conversationId) {
@@ -1613,7 +1753,12 @@ function isStandaloneApp() {
 }
 
 function iosCanRequestNotification() {
-  return ('Notification' in window) && typeof Notification.requestPermission === 'function';
+  if (!('Notification' in window)) return false;
+  if (typeof Notification.requestPermission !== 'function') return false;
+  // iOS Safari รองรับ Notification API เฉพาะเมื่อติดตั้งเป็น PWA (standalone) เท่านั้น
+  // ถ้าเปิดใน Safari ปกติหรือ LINE in-app browser จะ throw หรือ return 'denied' ทันที
+  if (isIosDevice() && !isStandaloneApp()) return false;
+  return true;
 }
 
 function isIosDevice() {
@@ -1637,7 +1782,69 @@ function shouldForceIosSafari() {
 }
 
 function explainIosHomeScreenApp() {
-  alert('ลบไอคอน S-Chat เดิมออกก่อน แล้วเปิด Safari แตะแชร์ เลือกเพิ่มไปยังหน้าจอโฮม เปิดสวิตช์ เปิดเป็นเว็บแอป แล้วเปิดจากไอคอนที่ไม่มีแถบที่อยู่ของ Safari จากนั้นกดอนุญาตการแจ้งเตือน');
+  // แสดง modal แทน alert() เพื่อให้อ่านง่ายและไม่ตัดคำ
+  showIosInstallModal();
+}
+
+function showIosInstallModal() {
+  // ลบ modal เดิมถ้ามี
+  var old = document.getElementById('iosNotifyModal');
+  if (old) old.remove();
+
+  var modal = document.createElement('div');
+  modal.id = 'iosNotifyModal';
+  modal.style.cssText = [
+    'position:fixed;inset:0;z-index:9999',
+    'background:rgba(4,10,18,0.88)',
+    'display:flex;align-items:center;justify-content:center',
+    'padding:20px',
+    'backdrop-filter:blur(6px)',
+  ].join(';');
+
+  modal.innerHTML = [
+    '<div style="width:min(380px,100%);background:linear-gradient(180deg,#0f1e30,#07101c);',
+    'border:1px solid rgba(34,211,238,0.35);border-radius:22px;padding:28px 22px 22px;',
+    'box-shadow:0 24px 60px rgba(0,0,0,.6);">',
+
+    '<div style="font-size:2rem;text-align:center;margin-bottom:12px;">📱</div>',
+    '<h2 style="margin:0 0 8px;font-size:1.1rem;color:#e8f1ff;text-align:center;">',
+    'เปิดการแจ้งเตือนบน iPhone</h2>',
+    '<p style="margin:0 0 18px;color:#8aa0b8;font-size:0.86rem;line-height:1.6;text-align:center;">',
+    'iPhone รองรับการแจ้งเตือนเฉพาะเมื่อเปิดแอปจากไอคอนบนหน้าจอโฮมเท่านั้น</p>',
+
+    '<div style="background:rgba(34,211,238,0.08);border:1px solid rgba(34,211,238,0.2);',
+    'border-radius:14px;padding:14px 16px;margin-bottom:16px;">',
+    '<div style="font-size:0.82rem;color:#a5f3fc;font-weight:700;margin-bottom:10px;">',
+    '📋 ขั้นตอนการติดตั้ง</div>',
+    '<ol style="margin:0;padding-left:1.3rem;color:#cbd5e1;font-size:0.84rem;line-height:1.8;">',
+    '<li>ลบไอคอน S-Chat เดิมออกจากหน้าจอโฮม (ถ้ามี)</li>',
+    '<li>เปิด <strong style="color:#e8f1ff;">Safari</strong> แล้วไปที่ URL ของ S-Chat</li>',
+    '<li>แตะปุ่ม <strong style="color:#e8f1ff;">แชร์ ⎙</strong> ด้านล่าง</li>',
+    '<li>เลือก <strong style="color:#e8f1ff;">"เพิ่มไปยังหน้าจอโฮม"</strong></li>',
+    '<li>เปิดสวิตช์ <strong style="color:#e8f1ff;">"เปิดเป็นเว็บแอป"</strong> แล้วแตะ <strong style="color:#e8f1ff;">"เพิ่ม"</strong></li>',
+    '<li>เปิดแอปจาก <strong style="color:#22d3ee;">ไอคอนบนหน้าจอโฮม</strong> (ไม่มีแถบ URL)</li>',
+    '<li>กดปุ่ม <strong style="color:#22d3ee;">"🔔 เปิดแจ้งเตือน"</strong> แล้วกด <strong style="color:#22d3ee;">"Allow"</strong></li>',
+    '</ol></div>',
+
+    '<div style="display:flex;gap:10px;">',
+    '<button onclick="document.getElementById(\\'iosNotifyModal\\').remove()" ',
+    'style="flex:1;min-height:44px;border-radius:12px;border:1px solid rgba(148,163,184,0.35);',
+    'background:transparent;color:#94a3b8;font-weight:700;cursor:pointer;font-size:0.9rem;">',
+    'ปิด</button>',
+    '<button onclick="copyIosLink();document.getElementById(\\'iosNotifyModal\\').remove()" ',
+    'style="flex:1;min-height:44px;border-radius:12px;border:0;',
+    'background:linear-gradient(135deg,#22d3ee,#0891b2);color:#042f2e;',
+    'font-weight:800;cursor:pointer;font-size:0.9rem;">',
+    '📋 คัดลอกลิงก์</button>',
+    '</div>',
+    '</div>',
+  ].join('');
+
+  document.body.appendChild(modal);
+  // กดนอก modal เพื่อปิด
+  modal.addEventListener('click', function(e) {
+    if (e.target === modal) modal.remove();
+  });
 }
 
 function openChatInSafari(sessionToken) {
@@ -1667,6 +1874,68 @@ function dismissIosInstallGuide() {
   if (box) box.classList.add('hidden');
 }
 
+function passwordSettingsUrl() {
+  return PASSWORD_SETTINGS_URL || (String(WEB_APP_ORIGIN || 'https://fshh-app.online') + '/settings/password');
+}
+
+function smhLoginUrl() {
+  var base = String(WEB_APP_ORIGIN || 'https://fshh-app.online');
+  return WEB_APP_LOGIN_URL || (base + '/login?redirect=' + encodeURIComponent('/settings/password'));
+}
+
+function webAppHostLabel() {
+  var o = String(WEB_APP_ORIGIN || 'https://fshh-app.online');
+  if (o.indexOf('https://') === 0) return o.slice(8);
+  if (o.indexOf('http://') === 0) return o.slice(7);
+  return o || 'fshh-app.online';
+}
+
+/** เปิดหน้าเข้าสู่ระบบเว็บแอป SMH */
+function openSmhLogin(overrideUrl) {
+  var url = overrideUrl || smhLoginUrl();
+  // iOS PWA: <a target=_blank> มักไม่เปิดลิงก์นอกโดเมน — ใช้ location / window.open
+  try {
+    if (isStandaloneApp() && isIosDevice()) {
+      location.assign(url);
+      return false;
+    }
+    var win = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!win) location.assign(url);
+  } catch (e) {
+    location.assign(url);
+  }
+  return false;
+}
+
+/** API บังคับเปลี่ยนรหัสผ่าน — แจ้งแล้วพาไป SMH */
+function handleMustChangePassword(data) {
+  if (!data || !data.mustChangePassword) return false;
+  var url = data.passwordSettingsUrl || smhLoginUrl();
+  setLoginStatus((data.error || 'กรุณาตั้งรหัสผ่านใหม่ก่อนใช้งาน') + ' — กำลังเปิดหน้าตั้งรหัสผ่าน...', 'error');
+  setTimeout(function () { openSmhLogin(url); }, 600);
+  return true;
+}
+
+function applyLoginModeForDevice() {
+  var ios = isIosDevice();
+  var btnLogin = document.getElementById('btnLogin');
+  var btnWeb = document.getElementById('btnLoginWeb');
+  var divider = document.getElementById('loginDivider');
+  var subtitle = document.getElementById('loginSubtitle');
+  if (btnLogin) btnLogin.classList.toggle('hidden', ios);
+  if (btnWeb) btnWeb.classList.add('hidden');
+  if (divider) divider.classList.toggle('hidden', ios);
+  if (subtitle) {
+    subtitle.innerHTML = ios
+      ? 'ระบบแชทภายในองค์กร<br>เข้าด้วยอีเมลและรหัสผ่านบัญชีเว็บแอป SMH'
+      : 'ระบบแชทภายในองค์กร<br>เข้าด้วย LINE หรืออีเมลบัญชีเว็บแอป';
+  }
+  var host = document.getElementById('iosWebAppHost');
+  if (host) host.textContent = webAppHostLabel();
+  // บน iOS แสดงคู่มือตั้งรหัสผ่านแม้ติดตั้ง PWA แล้ว (ถ้าอยู่หน้า login)
+  updateIosInstallGuide();
+}
+
 function updateIosInstallGuide() {
   var box = document.getElementById('iosInstallGuide');
   if (!box) return;
@@ -1674,13 +1943,20 @@ function updateIosInstallGuide() {
   try { dismissed = localStorage.getItem('fshh_hide_ios_install') === '1'; } catch (ignore) {}
   var login = document.getElementById('view-login');
   var onLogin = login && !login.classList.contains('hidden');
-  var show = isIosDevice() && !isStandaloneApp() && !dismissed && onLogin;
+  // iOS + อยู่หน้า login + ยังไม่ dismiss
+  // ถ้ายังไม่ใช่ PWA → แสดงทั้งติดตั้ง + ตั้งรหัสผ่าน
+  // ถ้าเป็น PWA แล้ว → ยังแสดงบล็อกตั้งรหัสผ่าน (ซ่อนขั้นตอนติดตั้ง)
+  var show = isIosDevice() && !dismissed && onLogin;
   box.classList.toggle('hidden', !show);
+  var installSection = document.getElementById('iosInstallSection');
+  if (installSection) installSection.classList.toggle('hidden', isStandaloneApp());
   var chromeNote = document.getElementById('iosInstallChrome');
   var steps = document.getElementById('iosInstallSteps');
   var inChrome = isIosChrome();
-  if (chromeNote) chromeNote.classList.toggle('hidden', !inChrome);
+  if (chromeNote) chromeNote.classList.toggle('hidden', !inChrome || isStandaloneApp());
   if (steps) steps.classList.toggle('hidden', inChrome);
+  var host = document.getElementById('iosWebAppHost');
+  if (host) host.textContent = webAppHostLabel();
 }
 
 function copyIosLink() {
@@ -1729,7 +2005,12 @@ function subscribePush() {
       p256dh: keys.p256dh,
       auth: keys.auth,
     }, 'POST');
-  }).catch(function() {});
+  }).then(function() {
+    state.notifyReady = true;
+    updateNotifyUi();
+  }).catch(function(err) {
+    console.warn('subscribePush failed', err && err.message ? err.message : err);
+  });
 }
 
 function updateNotifyUi() {
@@ -1754,15 +2035,29 @@ function finishNotifyGrant() {
 function enableNotifications() {
   unlockAudio();
   registerChatServiceWorker();
-  if (!iosCanRequestNotification()) {
-    if (isIosDevice()) {
+
+  // --- iOS: ต้องเป็น standalone PWA เท่านั้นถึงจะขอ permission ได้ ---
+  if (isIosDevice()) {
+    if (!isStandaloneApp()) {
+      // ยังไม่ได้ติดตั้งเป็น PWA → แสดงคำแนะนำวิธีติดตั้ง
       updateIosInstallGuide();
       explainIosHomeScreenApp();
       return;
     }
+    // เป็น PWA แล้ว แต่ iOS เวอร์ชันเก่า (< 16.4) ไม่รองรับ Notification API
+    if (!('Notification' in window)) {
+      alert('iPhone ของคุณต้องอัปเดต iOS เป็นเวอร์ชัน 16.4 ขึ้นไปเพื่อรับการแจ้งเตือน\\n\\nไปที่ การตั้งค่า > ทั่วไป > อัปเดตซอฟต์แวร์');
+      return;
+    }
+  }
+
+  // --- ตรวจสอบว่าเบราว์เซอร์รองรับ Notification API หรือไม่ ---
+  if (!iosCanRequestNotification()) {
     alert('เบราว์เซอร์นี้ไม่รองรับการแจ้งเตือน');
     return;
   }
+
+  // --- ขอ permission ---
   Notification.requestPermission().then(function(p) {
     if (p === 'granted') {
       finishNotifyGrant();
@@ -1773,8 +2068,8 @@ function enableNotifications() {
     if (p === 'denied') {
       showNotifyGate(false);
       alert(isIosDevice()
-        ? 'ถูกปฏิเสธการแจ้งเตือน — เปิดได้ที่ การตั้งค่า > การแจ้งเตือน > S-Chat'
-        : 'ถูกปฏิเสธการแจ้งเตือน — เปิดได้ในการตั้งค่า Chrome ของเว็บไซต์นี้');
+        ? 'ถูกปฏิเสธการแจ้งเตือน\\n\\nเปิดได้ที่: การตั้งค่า iPhone > การแจ้งเตือน > S-Chat > เปิดอนุญาตการแจ้งเตือน'
+        : 'ถูกปฏิเสธการแจ้งเตือน — เปิดได้ในการตั้งค่าเบราว์เซอร์ของเว็บไซต์นี้');
       return;
     }
     showNotifyGate(true);
@@ -1786,6 +2081,11 @@ function enableNotifications() {
 function requestNotifyOnInstall(allowGate) {
   unlockAudio();
   registerChatServiceWorker();
+
+  // iOS: ต้องเป็น standalone PWA เท่านั้นถึงจะขอ permission ได้
+  // ถ้าไม่ใช่ standalone ให้ออกเงียบๆ ไม่แสดง gate (เพราะยังไม่ได้ติดตั้ง)
+  if (isIosDevice() && !isStandaloneApp()) return Promise.resolve();
+
   if (!('Notification' in window)) return Promise.resolve();
   if (Notification.permission === 'granted') {
     state.notifyReady = true;
@@ -1802,6 +2102,7 @@ function requestNotifyOnInstall(allowGate) {
   try {
     asked = Notification.requestPermission();
   } catch (e) {
+    // iOS standalone PWA บางเวอร์ชันอาจ throw — แสดง gate ให้ผู้ใช้กดเองแทน
     if (allowGate !== false) showNotifyGate(true);
     return Promise.resolve();
   }
@@ -1881,14 +2182,24 @@ function browserNotify(title, body, conversationId, force) {
     icon: '/icons/s-chat-192.png',
     badge: '/icons/badge-96.png?v=3',
     tag: conversationId ? ('chat-' + conversationId) : 'org-chat',
-    renotify: true,
-    vibrate: [120, 60, 120],
     data: { url: conversationId ? ('/chat?open=' + encodeURIComponent(conversationId)) : '/chat' },
   };
+  // iOS ไม่รองรับ renotify/vibrate — ใส่แล้ว showNotification() จะ throw เงียบๆ
+  if (!isIosDevice()) {
+    payload.renotify = true;
+    payload.vibrate = [120, 60, 120];
+  }
 
   registerChatServiceWorker().then(function(reg) {
     if (reg && reg.showNotification) {
-      return reg.showNotification(title || 'S-Chat', payload);
+      return reg.showNotification(title || 'S-Chat', payload).catch(function() {
+        return reg.showNotification(title || 'S-Chat', {
+          body: payload.body,
+          icon: payload.icon,
+          tag: payload.tag,
+          data: payload.data,
+        });
+      });
     }
     try {
       var n = new Notification(title || 'S-Chat', payload);
@@ -1917,7 +2228,7 @@ function notifyNewMessages(items) {
     String(state.active.conversationId) === String(first.conversationId);
 
   // กำลังดูห้องนี้อยู่และแอปเปิดอยู่ → แค่แสดงข้อความ ไม่ toast
-  if (isActiveRoom && document.visibilityState === 'visible') {
+  if (isActiveRoom && document.visibilityState === 'visible' && document.hasFocus()) {
     return;
   }
 
@@ -1935,11 +2246,14 @@ function processConversationAlerts(conversations, skipAlert) {
   state._prevConvUnread = state._prevConvUnread || {};
   (conversations || []).forEach(function(c) {
     var cid = String(c.conversationId);
-    var count = c.unreadCount || 0;
+    var count = Number(c.unreadCount) || 0;
     var prev = state._prevConvUnread[cid] || 0;
-    var isActive = state.active && String(state.active.conversationId) === cid;
+    // ถือว่ากำลังดูห้องเฉพาะเมื่อหน้าจอเปิดอยู่จริง — ถ้าแอปอยู่พื้นหลังต้องแจ้งเตือน
+    var viewingRoom = state.active
+      && String(state.active.conversationId) === cid
+      && document.visibilityState === 'visible';
 
-    if (!skipAlert && count > prev && !isActive) {
+    if (!skipAlert && count > prev && !viewingRoom) {
       var o = c.otherUser || {};
       var label = isGroupConv(c) ? (c.name || o.displayName || 'กลุ่ม') : userLabel(o);
       var preview = messagePreviewLabel({
@@ -1997,6 +2311,12 @@ async function init() {
   var params = new URLSearchParams(location.search);
   var appToken = params.get('sessionToken') || params.get('appSession') || '';
   var lineError = params.get('error') || params.get('error_description') || '';
+
+  // ล้าง URL parameter ทันทีเพื่อป้องกัน reload loop
+  if (appToken || lineError || params.has('open')) {
+    try { history.replaceState({}, '', location.pathname + (params.has('open') ? '?open=' + encodeURIComponent(params.get('open')) : '')); } catch (ignore) {}
+  }
+
   if (appToken) {
     try {
       await bootFromAppSession(appToken);
@@ -2005,7 +2325,8 @@ async function init() {
       localStorage.removeItem(STORAGE_SESSION);
       localStorage.removeItem(STORAGE_USER);
       state.sessionToken = '';
-      setLoginStatus('เซสชันจากเว็บหมดอายุ กรุณาเข้าด้วย LINE หรือเปิดจากเว็บอีกครั้ง', 'error');
+      setLoginStatus('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่ด้วย LINE หรืออีเมล', 'error');
+      // fall through ไป liff.init() เพื่อให้ปุ่มทำงานได้
     }
   }
   if (!appToken && state.sessionToken) {
@@ -2016,58 +2337,55 @@ async function init() {
       localStorage.removeItem(STORAGE_SESSION);
       localStorage.removeItem(STORAGE_USER);
       state.sessionToken = '';
+      // fall through ไป liff.init()
     }
   }
   try {
     if (typeof liff === 'undefined') throw new Error('ไม่พบ LIFF SDK');
+    // ไม่ auto-login — ให้ผู้ใช้กดปุ่ม LINE หรือใช้อีเมล/รหัสผ่านเอง
     await liff.init({
       liffId: LIFF_ID,
-      withLoginOnExternalBrowser: !isIosDevice(),
+      withLoginOnExternalBrowser: false,
     });
-    if (shouldForceIosSafari()) {
-      if (!liff.isLoggedIn()) {
-        setLoginStatus('กำลังเข้าสู่ระบบด้วย LINE...', '');
-        liff.login({ redirectUri: lineLoginRedirectUri() });
-        return;
-      }
-      await bootApp();
-      if (state.sessionToken) openChatInSafari(state.sessionToken);
-      return;
-    }
-    if (liff.isLoggedIn()) {
-      await bootApp();
-      return;
-    }
+    applyLoginModeForDevice();
     if (lineError) {
       try { sessionStorage.removeItem('fshh_line_auto_login'); } catch (ignore) {}
-      setLoginStatus('เข้าสู่ระบบ LINE ไม่สำเร็จ กรุณาลองอีกครั้ง', 'error');
-      if (isIosDevice() && !liffInClient()) showIosLineChoice();
-      return;
+      setLoginStatus(
+        isIosDevice()
+          ? 'เข้าสู่ระบบไม่สำเร็จ กรุณาใช้อีเมลและรหัสผ่านเว็บแอป'
+          : 'เข้าสู่ระบบ LINE ไม่สำเร็จ กรุณาลองอีกครั้ง หรือใช้อีเมลเว็บแอป',
+        'error'
+      );
+    } else if (isIosDevice()) {
+      setLoginStatus('กรอกอีเมลและรหัสผ่านเว็บแอป SMH', '');
+    } else {
+      setLoginStatus('เลือกเข้าด้วย LINE หรืออีเมลเว็บแอป', '');
     }
-    if (liffInClient()) {
-      setLoginStatus('กำลังเข้าสู่ระบบด้วย LINE บนเครื่อง...', '');
-      liff.login({ redirectUri: lineLoginRedirectUri() });
-      return;
-    }
-    if (isIosDevice()) {
-      showIosLineChoice();
-      setLoginStatus('เลือกใช้ LINE บนเครื่องนี้ หรือกรอกบัญชีในหน้านี้', '');
-      return;
-    }
-    if (isMobileDevice() && sessionStorage.getItem('fshh_skip_auto_login') !== '1') {
-      if (sessionStorage.getItem('fshh_line_auto_login') === '1') {
-        sessionStorage.removeItem('fshh_line_auto_login');
-        setLoginStatus('กรุณาเข้าสู่ระบบด้วย LINE', '');
-        return;
+    // iOS: ไม่แสดงปุ่ม LINE และไม่เรียก showIosLineChoice
+    if (!isIosDevice()) {
+      var loginBtn = document.getElementById('btnLogin');
+      if (loginBtn) {
+        loginBtn.disabled = false;
+        loginBtn.onclick = function() { loginLINE(); };
       }
-      sessionStorage.setItem('fshh_line_auto_login', '1');
-      setLoginStatus('กำลังเปิด LINE เพื่อเข้าสู่ระบบ...', '');
-      liff.login({ redirectUri: lineLoginRedirectUri() });
-      return;
     }
-    setLoginStatus('กรุณาเข้าสู่ระบบด้วย LINE', '');
   } catch (e) {
-    setLoginStatus('เริ่มระบบไม่สำเร็จ: ' + (e.message || e), 'error');
+    applyLoginModeForDevice();
+    setLoginStatus(
+      isIosDevice()
+        ? 'กรอกอีเมลและรหัสผ่านเว็บแอป SMH'
+        : ('เริ่มระบบไม่สำเร็จ: ' + (e.message || e)),
+      isIosDevice() ? '' : 'error'
+    );
+    if (!isIosDevice()) {
+      var fallbackBtn = document.getElementById('btnLogin');
+      if (fallbackBtn) {
+        fallbackBtn.disabled = false;
+        fallbackBtn.onclick = function() {
+          location.assign('https://liff.line.me/' + LIFF_ID);
+        };
+      }
+    }
   }
 }
 
@@ -2127,13 +2445,67 @@ function loginLINEWeb() {
   bootApp();
 }
 
+async function loginWithPassword(event) {
+  if (event) event.preventDefault();
+  var emailEl = document.getElementById('loginEmail');
+  var passEl = document.getElementById('loginPassword');
+  var btn = document.getElementById('btnPasswordLogin');
+  var email = emailEl ? String(emailEl.value || '').trim() : '';
+  var password = passEl ? String(passEl.value || '') : '';
+  if (!email || !password) {
+    setLoginStatus('กรุณากรอกอีเมลหรือชื่อผู้ใช้ และรหัสผ่าน', 'error');
+    return false;
+  }
+  if (btn) btn.disabled = true;
+  setLoginStatus('กำลังเข้าสู่ระบบ...', '');
+  try {
+    var data = await apiCall('passwordLogin', { email: email, password: password }, 'POST');
+    if (handleMustChangePassword(data)) {
+      return false;
+    }
+    if (!data || data.success === false || !data.sessionToken) {
+      throw new Error((data && data.error) || 'อีเมล/ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง');
+    }
+    if (passEl) passEl.value = '';
+    await bootFromAppSession(String(data.sessionToken));
+  } catch (e) {
+    setLoginStatus(e.message || String(e), 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+  return false;
+}
+
 function loginLINE() {
   try { sessionStorage.removeItem('fshh_skip_auto_login'); } catch (ignore) {}
-  if (!liff.isLoggedIn()) {
-    liff.login({ redirectUri: lineLoginRedirectUri() });
+  try { sessionStorage.removeItem('fshh_line_auto_login'); } catch (ignore) {}
+
+  // LIFF ยังไม่ init → ใช้ LIFF URL โดยตรงแทน (ทำงานได้ทุก browser)
+  if (typeof liff === 'undefined' || typeof liff.isLoggedIn !== 'function') {
+    setLoginStatus('กำลังเปิด LINE...', '');
+    location.assign('https://liff.line.me/' + LIFF_ID);
     return;
   }
-  bootApp();
+
+  try {
+    if (liff.isLoggedIn()) {
+      bootApp();
+      return;
+    }
+    // liff.login() อาจไม่ทำงานบน Android Chrome บางเวอร์ชัน
+    // ใช้ redirect โดยตรงเป็น fallback ที่เชื่อถือได้กว่า
+    var redirectUri = lineLoginRedirectUri();
+    try {
+      liff.login({ redirectUri: redirectUri });
+    } catch (liffErr) {
+      // fallback: ใช้ LIFF URL โดยตรง
+      location.assign('https://liff.line.me/' + LIFF_ID + '?redirectUri=' + encodeURIComponent(redirectUri));
+    }
+  } catch (e) {
+    // fallback สุดท้าย
+    setLoginStatus('กำลังเปิด LINE...', '');
+    location.assign('https://liff.line.me/' + LIFF_ID);
+  }
 }
 
 /** ตรวจ JWT idToken ว่าหมดอายุหรือยัง (buffer 60 วินาที) */
@@ -2213,6 +2585,9 @@ async function bootApp() {
     const profile = await liff.getProfile();
     const idToken = getUsableIdToken();
     const gas = await serverLogin(profile, idToken);
+    if (handleMustChangePassword(gas)) {
+      return;
+    }
     if (!gas.success) throw new Error(gas.error || 'Login ไม่สำเร็จ');
     state.sessionToken = gas.sessionToken;
     state.me = gas.user || {
@@ -2268,7 +2643,7 @@ async function logoutLINE() {
         (notes || []).forEach(function(note) { note.close(); });
       }
     }
-    if (navigator.clearAppBadge) navigator.clearAppBadge().catch(function() {});
+    setAppBadgeCount(0);
   } catch (ignore) {}
   localStorage.removeItem(STORAGE_SESSION);
   localStorage.removeItem(STORAGE_USER);
@@ -2442,7 +2817,8 @@ function applyPollResult(res, forceFull) {
 
   var watermark = '';
   (state.conversations || []).forEach(function(c) {
-    var t = c.lastMessageAt || c.updatedAt || '';
+    // ต้องใช้ updatedAt ให้ตรงกับฟิลเตอร์ poll ของเซิร์ฟเวอร์ (c.updated_at > ?)
+    var t = c.updatedAt || c.lastMessageAt || '';
     if (t && t > watermark) watermark = t;
   });
   // Do not use serverTime as watermark — it would make the next partial poll
@@ -2567,10 +2943,16 @@ function renderList() {
     box.innerHTML = users.map(function(u) {
       const parts = displayParts(u, state.users);
       const online = isUserOnline(u);
+      const botBadge = u.isBot || u.lineUserId === '__smh_systems_bot__'
+        ? '<span class="bot-badge">บอท</span>'
+        : '';
+      const sub = (u.isBot || u.lineUserId === '__smh_systems_bot__')
+        ? '<div class="list-sub">พิมพ์ชื่อระบบเพื่อเปิดลิงก์</div>'
+        : presenceLineHtml({ online: online });
       return '<div class="list-item" onclick="openChatWithUser(\\'' + esc(u.userId) + '\\')">' +
         avatarWrapHtml(u, false) +
-        '<div class="list-meta"><div class="list-name">' + esc(parts.title) + '</div>' +
-        presenceLineHtml({ online: online }) +
+        '<div class="list-meta"><div class="list-name">' + esc(parts.title) + botBadge + '</div>' +
+        sub +
         '</div></div>';
     }).join('');
     return;
@@ -2733,6 +3115,59 @@ function closeChat() {
   renderList();
   restartPolling();
   syncActiveChat();
+}
+
+/** ปัดขวาจากขอบซ้าย / แถบหัวแชทบนมือถือ (Android+iOS) → กลับรายการแชท */
+function setupChatEdgeSwipeBack() {
+  var panel = document.getElementById('panel-chat');
+  if (!panel || panel._swipeBackBound) return;
+  panel._swipeBackBound = true;
+
+  var startX = 0;
+  var startY = 0;
+  var tracking = false;
+  var EDGE_PX = 48;
+
+  function touchOnChatHead(target) {
+    if (!target || !target.closest) return false;
+    return Boolean(target.closest('.chat-head'));
+  }
+
+  panel.addEventListener('touchstart', function(e) {
+    if (window.matchMedia('(min-width: 769px)').matches) return;
+    if (!document.getElementById('view-app').classList.contains('show-chat')) return;
+    if (!e.touches || !e.touches[0]) return;
+    var t = e.touches[0];
+    var fromEdge = t.clientX <= EDGE_PX;
+    var fromHead = touchOnChatHead(e.target);
+    if (!fromEdge && !fromHead) return;
+    tracking = true;
+    startX = t.clientX;
+    startY = t.clientY;
+  }, { passive: true });
+
+  panel.addEventListener('touchmove', function(e) {
+    if (!tracking || !e.touches || !e.touches[0]) return;
+    var t = e.touches[0];
+    var dx = t.clientX - startX;
+    var dy = Math.abs(t.clientY - startY);
+    if (dy > 40 && dy > dx) {
+      tracking = false;
+      return;
+    }
+  }, { passive: true });
+
+  panel.addEventListener('touchend', function(e) {
+    if (!tracking) return;
+    tracking = false;
+    var t = (e.changedTouches && e.changedTouches[0]) || null;
+    if (!t) return;
+    var dx = t.clientX - startX;
+    var dy = Math.abs(t.clientY - startY);
+    if (dx >= 80 && dy < 60) {
+      closeChat();
+    }
+  }, { passive: true });
 }
 
 async function loadMessages(conversationId, seq) {
@@ -3269,6 +3704,12 @@ async function loadUsers() {
     state.users = dedupeClientUsers(res.users || []).filter(function(u) {
       return String(u.userId) !== String(meId);
     });
+    state.users.sort(function(a, b) {
+      var aBot = a.isBot || a.lineUserId === '__smh_systems_bot__' ? 0 : 1;
+      var bBot = b.isBot || b.lineUserId === '__smh_systems_bot__' ? 0 : 1;
+      if (aBot !== bBot) return aBot - bBot;
+      return String(a.displayName || '').localeCompare(String(b.displayName || ''), 'th');
+    });
     renderList();
     refreshChatHeadStatus();
   } catch (e) { console.warn('loadUsers', e); }
@@ -3298,6 +3739,7 @@ function renderGroupPicker() {
   var q = (document.getElementById('groupMemberSearch').value || '').trim().toLowerCase();
   var box = document.getElementById('groupMemberList');
   var list = state.users.filter(function(u) {
+    if (u.isBot || u.lineUserId === '__smh_systems_bot__') return false;
     if (!q) return true;
     return (u.displayName || '').toLowerCase().indexOf(q) >= 0 ||
       (u.department || '').toLowerCase().indexOf(q) >= 0;
@@ -3509,20 +3951,9 @@ function setUnreadBadge(n) {
   // Document Title Badge
   updateTitleBadge(n);
 
-  // App icon badge (Chrome PWA on Windows Taskbar / Android)
-  try {
-    if (n > 0 && navigator.setAppBadge) {
-      navigator.setAppBadge(n).catch(function() {});
-    } else if (navigator.clearAppBadge) {
-      navigator.clearAppBadge().catch(function() {});
-    }
-  } catch (e) { /* ignore */ }
+  // จุดแดงบนไอคอน Home Screen (iOS 16.4+ PWA / Android / Desktop)
+  setAppBadgeCount(n);
 
-  if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-    try {
-      navigator.serviceWorker.controller.postMessage({ type: 'SET_BADGE', count: n || 0 });
-    } catch (e) { /* ignore */ }
-  }
   if (!n && navigator.serviceWorker && navigator.serviceWorker.getRegistration) {
     navigator.serviceWorker.getRegistration().then(function(reg) {
       if (!reg || !reg.getNotifications) return;
@@ -3530,6 +3961,33 @@ function setUnreadBadge(n) {
         (list || []).forEach(function(note) { note.close(); });
       });
     }).catch(function() {});
+  }
+}
+
+/** อัปเดต App Badge ทั้งจากหน้าและ Service Worker (iOS พึ่ง SW เป็นหลัก) */
+function setAppBadgeCount(n) {
+  n = Math.max(0, Number(n) || 0);
+  try {
+    if (n > 0) {
+      if (navigator.setAppBadge) navigator.setAppBadge(n).catch(function() {});
+    } else if (navigator.clearAppBadge) {
+      navigator.clearAppBadge().catch(function() {});
+    }
+  } catch (e) { /* ignore */ }
+
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.ready.then(function(reg) {
+    if (!reg) return;
+    try {
+      if (n > 0 && reg.setAppBadge) return reg.setAppBadge(n);
+      if (n <= 0 && reg.clearAppBadge) return reg.clearAppBadge();
+    } catch (e) { /* ignore */ }
+  }).catch(function() {});
+
+  if (navigator.serviceWorker.controller) {
+    try {
+      navigator.serviceWorker.controller.postMessage({ type: 'SET_BADGE', count: n });
+    } catch (e) { /* ignore */ }
   }
 }
 
@@ -3628,7 +4086,16 @@ function syncActiveChat() {
 }
 
 document.addEventListener('visibilitychange', function() {
-  syncActiveChat();
+  // พื้นหลัง: เคลียร์ ACTIVE_CHAT ใน SW เพื่อไม่ให้ push ถูกระงับ (โดยเฉพาะ iOS PWA)
+  if (document.visibilityState === 'hidden') {
+    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+      try {
+        navigator.serviceWorker.controller.postMessage({ type: 'ACTIVE_CHAT', conversationId: '' });
+      } catch (e) {}
+    }
+  } else {
+    syncActiveChat();
+  }
   if (document.visibilityState === 'visible' && state.sessionToken) {
     unlockAudio();
     pollInbox(false);
@@ -3648,10 +4115,11 @@ window.addEventListener('focus', function() {
   }
 });
 document.addEventListener('DOMContentLoaded', function() {
+  applyLoginModeForDevice();
   initUnsendGestures();
+  setupChatEdgeSwipeBack();
   registerChatServiceWorker();
   updateNotifyUi();
-  updateIosInstallGuide();
   var permissionReady = (isStandaloneApp() || (isIosDevice() && iosCanRequestNotification()))
     ? requestNotifyOnInstall(false)
     : Promise.resolve();
@@ -3684,11 +4152,24 @@ if ('serviceWorker' in navigator) {
       return;
     }
     if (data.type === 'PUSH_MESSAGE' && state.sessionToken) {
-      pollInbox(false);
       var viewing = state.active && data.conversationId
         && String(state.active.conversationId) === String(data.conversationId)
         && document.visibilityState === 'visible'
         && document.hasFocus();
+      if (typeof data.unread === 'number' && data.unread >= 0) {
+        state.lastUnread = data.unread;
+        setUnreadBadge(data.unread);
+      }
+      // แจ้งทันทีจาก push — ไม่รอ poll (เสียง + จุดแดง + toast)
+      if (!viewing && data.kind !== 'unsent') {
+        alertNewMessage(
+          data.title || 'S-Chat',
+          data.body || 'ข้อความใหม่',
+          data.conversationId || null,
+          null
+        );
+      }
+      pollInbox(false);
       if (viewing && navigator.serviceWorker.controller) {
         navigator.serviceWorker.controller.postMessage({
           type: 'CLOSE_NOTIFY',

@@ -129,7 +129,7 @@ export default function RoomIndex({
     const scheduleItems = scheduleTab === 'today' ? todayBookings : upcoming;
 
     return (
-        <AppLayout breadcrumbs={[{ title: 'ระบบจองห้องประชุม', href: '/administration/rooms' }]}>
+        <AppLayout breadcrumbs={[{ title: 'งานธุรการ', href: '/admin-hub' }, { title: 'ระบบจองห้องประชุม', href: '/administration/rooms' }]}>
             <Head title="จองห้องประชุม" />
 
             <div className="relative min-h-screen overflow-hidden">

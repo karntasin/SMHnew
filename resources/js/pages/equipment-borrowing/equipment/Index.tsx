@@ -127,6 +127,7 @@ export default function EquipmentIndex({ equipment, categories, departments, fil
 
     return (
         <AppLayout breadcrumbs={[
+            { title: 'งานธุรการ', href: '/admin-hub' },
             { title: 'ยืมอุปกรณ์แพทย์', href: route('equipment-borrowing.dashboard') },
             { title: 'จัดการอุปกรณ์', href: '#' },
         ]}>

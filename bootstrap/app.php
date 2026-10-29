@@ -9,6 +9,7 @@ use App\Http\Middleware\ShareMenus;
 use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\CheckMenuPermission;
 use App\Http\Middleware\TrustProxies;
+use App\Http\Middleware\EnsurePasswordChanged;
 use App\Http\Middleware\EnsureProfileIsCompleted;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -24,10 +25,12 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->trustProxies(at: '*');
         $middleware->redirectGuestsTo(fn () => url('/login'));
-        $middleware->redirectUsersTo(fn () => url('/dashboard'));
+        $middleware->redirectUsersTo(fn () => url('/settings/profile'));
         $middleware->validateCsrfTokens(except: [
             'line/webhook',
             'organization-chat/api',
+            'api/im/agent/*',
+            'im/agent/*',
         ]);
         
         $middleware->prepend(\App\Http\Middleware\RedirectSubdirectoryOnDocumentRoot::class);
@@ -46,11 +49,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // Append EnsureProfileIsCompleted after auth middleware
         $middleware->appendToGroup('auth', [
             EnsureProfileIsCompleted::class,
+            EnsurePasswordChanged::class,
         ]);
 
         $middleware->alias([
             'menu.permission' => CheckMenuPermission::class,
             'profile.completed' => EnsureProfileIsCompleted::class,
+            'password.changed' => EnsurePasswordChanged::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

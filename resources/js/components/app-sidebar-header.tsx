@@ -42,21 +42,43 @@ export function AppSidebarHeader({ breadcrumbs = [] }: { breadcrumbs?: Breadcrum
   };
 
   const handleBack = () => {
+    // 1. If user has in-app browsing history, going back natively is the cleanest way
+    // and prevents creating duplicate history entries that loop ("วนไปวนมา").
+    if (typeof window !== 'undefined' && window.history.length > 1 && document.referrer && document.referrer.includes(window.location.host)) {
+      window.history.back();
+      return;
+    }
+
+    // 2. If no prior history (e.g. direct entry or reload), check breadcrumbs parent
     const target = backTarget(breadcrumbs);
     if (target) {
-      router.visit(target);
+      router.visit(target, { replace: true });
       return;
     }
 
     const current = normalizeAppPath(window.location.pathname);
     if (current.startsWith('/km/learn') && current !== '/km/learn/hub') {
-      router.visit(resolveAppUrl('/km/learn/hub'));
+      router.visit(resolveAppUrl('/km/learn/hub'), { replace: true });
       return;
     }
 
     if (current === '/km/learn/hub') {
-      router.visit(resolveAppUrl('/quality'));
+      router.visit(resolveAppUrl('/quality'), { replace: true });
       return;
+    }
+
+    // 3. Fallback to admin-hub if inside administrative modules
+    if (
+      current.startsWith('/administration') ||
+      current.startsWith('/maintenance') ||
+      current.startsWith('/vehicles') ||
+      current.startsWith('/equipment-borrowing') ||
+      current.startsWith('/documents')
+    ) {
+      if (current !== '/admin-hub') {
+        router.visit(resolveAppUrl('/admin-hub'), { replace: true });
+        return;
+      }
     }
 
     window.history.back();

@@ -1,0 +1,53 @@
+{
+  "id": "smh-calendar-app",
+  "name": "SMH Calendar - ปฏิทินงาน รพ.ค่ายสุรสิงหนาท",
+  "short_name": "ปฏิทิน SMH",
+  "description": "ระบบปฏิทินงาน นัดหมาย แจ้งเตือน และตารางปฏิบัติงาน โรงพยาบาลค่ายสุรสิงหนาท",
+  "start_url": "/calendar",
+  "scope": "/calendar",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#0284c7",
+  "icons": [
+    {
+      "src": "/icons/calendar-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/calendar-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "hospital", "schedule"],
+  "shortcuts": [
+    {
+      "name": "สร้างกิจกรรมใหม่",
+      "short_name": "เพิ่มงาน",
+      "url": "/calendar?action=create",
+      "icons": [
+        {
+          "src": "/icons/calendar-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "วาระภาพรวม รพ.",
+      "short_name": "ภาพรวม",
+      "url": "/calendar?scope=hospital",
+      "icons": [
+        {
+          "src": "/icons/calendar-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ]
+}

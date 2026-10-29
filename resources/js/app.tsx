@@ -1,5 +1,6 @@
 import '../css/app.css';
 import { configureClientBasePath } from './lib/asset';
+import { syncCsrfMeta } from './lib/csrf';
 import { configureInertiaBasePath } from './lib/inertia';
 import { configureRouteHelper } from './lib/route';
 import './lib/axios';
@@ -26,6 +27,7 @@ if (appElement) {
         title: (title) => `${title} - ${appName}`,
         resolve: (name) => resolvePageComponent(`./pages/${name}.tsx`, import.meta.glob('./pages/**/*.tsx')),
         setup({ el, App, props }) {
+            syncCsrfMeta((props.initialPage.props as { csrf_token?: string }).csrf_token);
             const root = createRoot(el);
             root.render(<App {...props} />);
         },

@@ -16,6 +16,7 @@ interface Props {
 export default function MyBorrowings({ borrowings, filters, statusOptions }: Props) {
     return (
         <AppLayout breadcrumbs={[
+            { title: 'งานธุรการ', href: '/admin-hub' },
             { title: 'ยืมอุปกรณ์แพทย์', href: route('equipment-borrowing.dashboard') },
             { title: 'การยืมของฉัน', href: '#' },
         ]}>

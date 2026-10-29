@@ -79,11 +79,9 @@ export default function Index({ requests }: IndexProps) {
         <AppLayout
 
             breadcrumbs={[
-
+                { title: 'งานธุรการ', href: '/admin-hub' },
                 { title: 'ระบบแจ้งซ่อม', href: route('maintenance.dashboard') },
-
                 { title: 'รายการทั้งหมด', href: '#' },
-
             ]}
 
         >

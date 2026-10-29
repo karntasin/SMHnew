@@ -1,0 +1,22 @@
+S-Chat / memo mic — Whisper transcribe
+======================================
+
+Endpoint (หลัง deploy Worker):
+  POST https://<worker>/api/transcribe
+  Header: X-Chat-Secret: <CHAT_SYNC_SECRET เดียวกับ FSHH_CHAT_SYNC_SECRET>
+  Body: multipart field "audio" (webm/ogg/wav, สูงสุด 3MB)
+
+ใช้ผ่าน Laravel เท่านั้น:
+  POST /admin-docs/memos/transcribe  (ต้องล็อกอิน)
+  → proxy ไป Worker ด้วย secret
+
+Deploy:
+  cd organization-chat
+  npx wrangler deploy
+
+ตรวจ:
+  - ต้องมี [ai] binding = "AI" ใน wrangler.toml (มีแล้ว)
+  - ต้องมี secret CHAT_SYNC_SECRET บน Worker (= FSHH_CHAT_SYNC_SECRET ใน .env Laravel)
+
+โควต้าฟรี Workers AI ~10,000 neurons/วัน (แชร์กับ S-Chat AI)
+Whisper ~41 neurons/นาทีเสียง — เกินแล้ว Laravel จะได้ error QUOTA แล้วหน้า Editor fallback ไป Web Speech

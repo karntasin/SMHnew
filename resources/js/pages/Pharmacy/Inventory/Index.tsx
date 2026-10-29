@@ -63,7 +63,7 @@ export default function InventoryIndex({ summary }: { summary: Summary }) {
                             <h1 className="text-3xl font-bold tracking-tight">{supply ? 'คลังเวชภัณฑ์มิใช่ยา' : 'คลังยา และห้องยา'}</h1>
                             <p className="max-w-2xl text-sm text-violet-100/85">
                                 {supply
-                                    ? 'รับเข้าเวชภัณฑ์จากหมวดค่าเวชภัณฑ์ที่มิใช่ยา · เบิกเข้าจุดจ่าย · ตัดยอดตามรายการ HOSxP · แจ้งเตือนเมื่อเหลือน้อยหรือใกล้หมดอายุ'
+                                    ? 'รับเข้าเวชภัณฑ์จากหมวดค่าเวชภัณฑ์ที่มิใช่ยา · เบิกเข้าจุดจ่าย · จ่ายเวชภัณฑ์ออกหน่วย / คืนเวชภัณฑ์ · ตัดยอดตามรายการ HOSxP · แจ้งเตือนเมื่อเหลือน้อยหรือใกล้หมดอายุ'
                                     : 'รับเข้าพร้อม lot / วันหมดอายุ / QR · เบิกจากคลังสู่ห้องยา · จ่ายยาออกหน่วย / คืนยา · ตัดจ่ายตามใบสั่ง HOSxP · แจ้งเตือนเมื่อเหลือน้อยหรือใกล้หมดอายุ'}
                             </p>
                         </div>
@@ -86,11 +86,9 @@ export default function InventoryIndex({ summary }: { summary: Summary }) {
                         <Button asChild variant="secondary" className="rounded-xl font-semibold">
                             <Link href={wh('transfer')}><ArrowRightLeft className="mr-2 h-4 w-4" />{supply ? 'เบิกเข้าจุดจ่าย' : 'เบิกเข้าห้องยา'}</Link>
                         </Button>
-                        {!supply && (
                         <Button asChild className="rounded-xl bg-rose-500 text-white hover:bg-rose-600 font-semibold shadow-sm">
-                            <Link href={wh('drug-out')}><PackageMinus className="mr-2 h-4 w-4" />ยาออกหน่วย</Link>
+                            <Link href={wh('drug-out')}><PackageMinus className="mr-2 h-4 w-4" />{supply ? 'เวชภัณฑ์ออกหน่วย' : 'ยาออกหน่วย'}</Link>
                         </Button>
-                        )}
                         <Button asChild variant="secondary" className="rounded-xl">
                             <Link href={wh('lots')}><QrCode className="mr-2 h-4 w-4" />Lot / QR</Link>
                         </Button>

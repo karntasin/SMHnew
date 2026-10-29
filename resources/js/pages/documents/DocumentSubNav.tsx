@@ -59,7 +59,7 @@ export const DOCUMENT_STATUS_BADGE: Record<string, string> = {
 
 export function documentBreadcrumbs(extra?: { title: string; href: string }[]) {
     return [
-        { title: 'งานธุรการ', href: '/administration' },
+        { title: 'งานธุรการ', href: '/admin-hub' },
         { title: 'ระบบรับส่งหนังสือ', href: route('documents.dashboard') },
         ...(extra ?? []),
     ];

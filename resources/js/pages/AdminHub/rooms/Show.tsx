@@ -3,6 +3,7 @@ import AppLayout from '@/layouts/app-layout';
 import { Head, Link, router } from '@inertiajs/react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { BackButton } from '@/components/ui/back-button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Calendar, Clock, Users, MapPin, CheckCircle, XCircle, ArrowLeft, User, FileText, Edit } from 'lucide-react';
@@ -76,6 +77,7 @@ export default function Show({ booking, rooms = [] }: Props) {
     return (
         <AppLayout
             breadcrumbs={[
+                { title: 'งานธุรการ', href: '/admin-hub' },
                 { title: 'ระบบจองห้องประชุม', href: '/administration/rooms' },
                 { title: booking.title, href: '#' },
             ]}
@@ -84,12 +86,7 @@ export default function Show({ booking, rooms = [] }: Props) {
 
             <div className="container mx-auto py-6 max-w-5xl">
                 <div className="mb-6">
-                    <Link href={route('rooms.index')}>
-                        <Button variant="ghost" className="pl-0 hover:pl-0 hover:bg-transparent">
-                            <ArrowLeft className="mr-2 h-4 w-4" />
-                            กลับไปหน้ารายการ
-                        </Button>
-                    </Link>
+                    <BackButton fallbackUrl="/administration/rooms" label="กลับไปหน้ารายการ" />
                 </div>
 
                 <div className="grid gap-6 lg:grid-cols-3">
