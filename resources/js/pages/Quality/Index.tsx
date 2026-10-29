@@ -15,7 +15,8 @@ import {
   ChevronRight,
   Sparkles,
   Pill,
-  MonitorCog
+  MonitorCog,
+  Award
 } from 'lucide-react';
 import { useTranslation } from '@/hooks/use-translation';
 import { cn } from '@/lib/utils';
@@ -24,6 +25,21 @@ export default function QualityHub() {
   const { t } = useTranslation();
 
   const systems = [
+    {
+      title: 'งานพัฒนาคุณภาพ (HA)',
+      description: 'ศูนย์รวมรายงานมาตรฐาน HA: SAR แยกตาม Part I-IV, Clinical Tracer, Service Profile แต่ละหน่วยงาน',
+      icon: Award,
+      color: 'text-indigo-600',
+      bg: 'bg-indigo-100',
+      gradient: 'from-indigo-600 to-purple-600',
+      href: '/ha',
+      links: [
+        { label: 'ภาพรวมงาน HA', href: '/ha' },
+        { label: 'รายงานประเมินตนเอง SAR (Part I-IV)', href: '/ha/sar' },
+        { label: 'Clinical Tracer', href: '/ha/clinical-tracer' },
+        { label: 'Service Profile แต่ละแผนก', href: '/ha/service-profile' },
+      ]
+    },
     {
       title: t('Quality Document Repository'),
       description: t('Manage WI, Procedure, Policy and regulations'),

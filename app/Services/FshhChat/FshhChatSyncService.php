@@ -15,23 +15,20 @@ class FshhChatSyncService
 
     public function syncUser(User $user): void
     {
-        $lineId = trim((string) $user->line_id);
-        if ($lineId === '') {
-            return;
-        }
         if (! $this->client->isConfigured()) {
             return;
         }
 
+        // ผู้ใช้ไม่มี LINE ก็ sync ได้ (Worker จะใช้ web:{laravelUserId})
         $this->client->call('syncUser', $this->userPayload($user));
     }
 
     /**
-     * สร้างเซสชันแชทให้ผู้ใช้ที่ล็อกอินเว็บอยู่ แล้วคืน URL เปิด S-Chat
+     * สร้างเซสชันแชทแล้วคืน sessionToken (ใช้กับ password / web login)
      *
-     * @return array{success: bool, url?: string, error?: string}
+     * @return array{success: bool, sessionToken?: string, error?: string}
      */
-    public function openWebSession(User $user): array
+    public function createChatSession(User $user): array
     {
         if (! $this->client->isConfigured()) {
             return ['success' => false, 'error' => 'ยังไม่ได้ตั้งค่า S-Chat'];
@@ -46,11 +43,32 @@ class FshhChatSyncService
             ];
         }
 
+        return [
+            'success' => true,
+            'sessionToken' => $token,
+        ];
+    }
+
+    /**
+     * สร้างเซสชันแชทให้ผู้ใช้ที่ล็อกอินเว็บอยู่ แล้วคืน URL เปิด S-Chat
+     *
+     * @return array{success: bool, url?: string, error?: string}
+     */
+    public function openWebSession(User $user): array
+    {
+        $session = $this->createChatSession($user);
+        if (($session['success'] ?? false) !== true) {
+            return [
+                'success' => false,
+                'error' => (string) ($session['error'] ?? 'เปิด S-Chat ไม่สำเร็จ'),
+            ];
+        }
+
         $base = rtrim((string) config('services.fshh_chat.url'), '/');
 
         return [
             'success' => true,
-            'url' => $base.'/chat?sessionToken='.rawurlencode($token),
+            'url' => $base.'/chat?sessionToken='.rawurlencode((string) $session['sessionToken']),
         ];
     }
 

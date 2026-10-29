@@ -2,9 +2,11 @@ import React, { useMemo } from 'react';
 import { Head, Link, useForm } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import { Button } from '@/components/ui/button';
+import { BackButton } from '@/components/ui/back-button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { VoiceTextInput, VoiceTextarea } from '@/components/voice';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -112,10 +114,7 @@ export default function LeaveCreate({ leaveTypes, users, balances, user, default
       <div className="flex-1 p-4 md:p-6">
         <div className="max-w-3xl mx-auto">
           <div className="mb-6">
-            <Link href={route('leave.index')}
-              className="inline-flex items-center text-sm text-muted-foreground hover:text-primary mb-2">
-              <ArrowLeft className="mr-2 h-4 w-4" /> กลับไปยังรายการใบลา
-            </Link>
+            <BackButton fallbackUrl={route('leave.index')} label="กลับไปยังรายการใบลา" className="mb-2" />
             <h1 className="text-2xl font-bold tracking-tight">ยื่นใบลา</h1>
             <p className="text-muted-foreground">กรอกตามแบบพิมพ์ท้ายระเบียบกองทัพบก ว่าด้วยการลา พ.ศ. ๒๕๕๖</p>
           </div>
@@ -239,8 +238,8 @@ export default function LeaveCreate({ leaveTypes, users, balances, user, default
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>{selectedType?.code === 'VACATION' ? 'จังหวัดที่จะไป' : 'สถานที่ระหว่างลา'}</Label>
-                      <Input value={data.destination} placeholder="ระบุสถานที่/จังหวัด"
-                        onChange={(e) => setData('destination', e.target.value)} />
+                      <VoiceTextInput value={data.destination} placeholder="ระบุสถานที่/จังหวัด" onChange={(val) => setData('destination', val)} />
+
                     </div>
                     <div className="space-y-2">
                       <Label>วันที่กลับ</Label>
@@ -275,17 +274,17 @@ export default function LeaveCreate({ leaveTypes, users, balances, user, default
               <CardContent className="pt-5 space-y-4">
                 <div className="space-y-2">
                   <Label>{reasonLabel(selectedType?.code)} <span className="text-red-500">*</span></Label>
-                  <Textarea rows={3} value={data.reason} placeholder={reasonHint(selectedType?.code)}
-                    onChange={(e) => setData('reason', e.target.value)}
-                    className={errors.reason ? 'border-red-500' : ''} />
+                  <VoiceTextarea rows={3} value={data.reason} placeholder={reasonHint(selectedType?.code)} onChange={(val) => setData('reason', val)} className={errors.reason ? 'border-red-500' : ''} />
+
+
                   <p className="text-xs text-muted-foreground">{reasonHint(selectedType?.code)}</p>
                   {errors.reason && <p className="text-sm text-red-500">{errors.reason}</p>}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>{selectedType?.code === 'SICK' || selectedType?.code === 'MATERNITY' ? 'ที่อยู่ที่พักรักษาตัว' : 'สถานที่ที่ทางราชการติดต่อได้'}</Label>
-                    <Input value={data.contact_address} placeholder="บ้านเลขที่ / ถนน / ตำบล / อำเภอ / จังหวัด"
-                      onChange={(e) => setData('contact_address', e.target.value)} />
+                    <VoiceTextInput value={data.contact_address} placeholder="บ้านเลขที่ / ถนน / ตำบล / อำเภอ / จังหวัด" onChange={(val) => setData('contact_address', val)} />
+
                   </div>
                   <div className="space-y-2">
                     <Label>เบอร์โทรติดต่อ</Label>
@@ -295,8 +294,8 @@ export default function LeaveCreate({ leaveTypes, users, balances, user, default
                 </div>
                 <div className="space-y-2">
                   <Label>ผู้ปฏิบัติราชการแทน</Label>
-                  <Input value={data.delegate_name} placeholder="ชื่อผู้ปฏิบัติราชการแทนระหว่างลา (ถ้ามี)"
-                    onChange={(e) => setData('delegate_name', e.target.value)} />
+                  <VoiceTextInput value={data.delegate_name} placeholder="ชื่อผู้ปฏิบัติราชการแทนระหว่างลา (ถ้ามี)" onChange={(val) => setData('delegate_name', val)} />
+
                 </div>
                 {selectedType?.requires_document && (
                   <div className="space-y-2">
@@ -350,9 +349,7 @@ export default function LeaveCreate({ leaveTypes, users, balances, user, default
             </Card>
 
             <div className="flex flex-col-reverse sm:flex-row justify-end gap-3">
-              <Link href={route('leave.index')} className="w-full sm:w-auto">
-                <Button type="button" variant="outline" className="w-full">ยกเลิก</Button>
-              </Link>
+              <BackButton fallbackUrl={route('leave.index')} label="ยกเลิก" variant="outline" className="w-full sm:w-auto" />
               <Button type="submit" disabled={processing} className="w-full sm:w-auto bg-rose-600 hover:bg-rose-700">
                 {processing ? 'กำลังส่ง...' : (
                   <><Save className="mr-2 h-4 w-4" /> ส่งใบลา</>

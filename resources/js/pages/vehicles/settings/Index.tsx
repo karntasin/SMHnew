@@ -184,6 +184,7 @@ export default function VehicleSettings({ vehicles = [], categories = [] }: Prop
     return (
         <AppLayout
             breadcrumbs={[
+                { title: 'งานธุรการ', href: '/admin-hub' },
                 { title: 'ระบบจองรถ', href: route('vehicles.index') },
                 { title: 'ตั้งค่ารถ', href: route('vehicles.settings.index') },
             ]}

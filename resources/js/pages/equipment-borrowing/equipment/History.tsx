@@ -4,6 +4,7 @@ import { Head, Link } from '@inertiajs/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { BackButton } from '@/components/ui/back-button';
 import { ArrowLeft } from 'lucide-react';
 
 interface Props {
@@ -15,6 +16,8 @@ interface Props {
 export default function History({ equipment, borrowings, stockLogs }: Props) {
     return (
         <AppLayout breadcrumbs={[
+            { title: 'งานธุรการ', href: '/admin-hub' },
+            { title: 'ยืมอุปกรณ์แพทย์', href: route('equipment-borrowing.dashboard') },
             { title: 'จัดการอุปกรณ์', href: route('equipment-borrowing.equipment.index') },
             { title: equipment.name, href: '#' },
         ]}>
@@ -22,7 +25,7 @@ export default function History({ equipment, borrowings, stockLogs }: Props) {
 
             <div className="p-6 space-y-6">
                 <div className="flex items-center gap-4">
-                    <Link href={route('equipment-borrowing.equipment.index')}><Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4" /></Button></Link>
+                    <BackButton fallbackUrl={route('equipment-borrowing.equipment.index')} iconOnly />
                     <div>
                         <h1 className="text-2xl font-bold">{equipment.name}</h1>
                         <p className="text-muted-foreground">{equipment.asset_code} · สต็อก {equipment.quantity_available}/{equipment.quantity_total}</p>

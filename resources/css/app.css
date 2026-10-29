@@ -378,3 +378,135 @@
 [x-cloak] { 
     display: none !important; 
 }
+
+/* =========================================================================
+   Standard Hospital Report Print Styles (HA & Quality Management)
+   ========================================================================= */
+@media print {
+    *, ::before, ::after {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    body {
+        background-color: #ffffff !important;
+        color: #0f172a !important;
+        font-family: var(--font-sans) !important;
+    }
+
+    table {
+        page-break-inside: auto;
+        border-collapse: collapse !important;
+    }
+
+    tr {
+        page-break-inside: avoid !important;
+        page-break-after: auto;
+    }
+
+    thead {
+        display: table-header-group !important;
+    }
+
+    tfoot {
+        display: table-footer-group !important;
+    }
+
+    .print-break-inside-avoid {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+    }
+
+    .print-break-before-page {
+        break-before: page !important;
+        page-break-before: always !important;
+    }
+
+    /* Print orientation helper classes */
+    .print-landscape {
+        @page {
+            size: A4 landscape;
+            margin: 10mm 10mm;
+        }
+    }
+
+    .print-portrait {
+        @page {
+            size: A4 portrait;
+            margin: 12mm 10mm;
+        }
+    }
+}
+
+/* Modern Calendar Custom Styling */
+.calendar-styled-container .fc {
+    font-family: inherit;
+    --fc-border-color: rgba(226, 232, 240, 0.8);
+    --fc-today-bg-color: rgba(240, 249, 255, 0.7);
+}
+
+.dark .calendar-styled-container .fc {
+    --fc-border-color: rgba(30, 41, 59, 0.8);
+    --fc-today-bg-color: rgba(12, 74, 110, 0.15);
+}
+
+.calendar-styled-container .fc-theme-standard td,
+.calendar-styled-container .fc-theme-standard th {
+    border-color: var(--fc-border-color);
+}
+
+.calendar-styled-container .fc-col-header-cell {
+    background-color: rgba(248, 250, 252, 0.8);
+    padding: 8px 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #64748b;
+}
+
+.dark .calendar-styled-container .fc-col-header-cell {
+    background-color: rgba(15, 23, 42, 0.6);
+    color: #94a3b8;
+}
+
+.calendar-styled-container .fc-daygrid-day-number {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    padding: 6px 8px;
+    color: #334155;
+}
+
+.dark .calendar-styled-container .fc-daygrid-day-number {
+    color: #cbd5e1;
+}
+
+.calendar-styled-container .fc-day-today .fc-daygrid-day-number {
+    background-color: #0284c7;
+    color: #ffffff !important;
+    border-radius: 8px;
+    margin: 4px;
+    display: inline-block;
+    min-width: 24px;
+    text-align: center;
+}
+
+.calendar-styled-container .fc-event {
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    margin-bottom: 2px;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.calendar-styled-container .fc-event:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+}
+
+/* Hide scrollbar for clean mobile horizontal pill chips */
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}

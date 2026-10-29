@@ -19,6 +19,7 @@ export default function Settings({ categories, priorities }: SettingsProps) {
 
     return (
         <AppLayout breadcrumbs={[
+            { title: 'งานธุรการ', href: '/admin-hub' },
             { title: 'ระบบแจ้งซ่อม', href: route('maintenance.dashboard') },
             { title: 'ตั้งค่า', href: '#' }
         ]}>

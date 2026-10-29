@@ -210,8 +210,17 @@ class PostLoginRedirect
         return true;
     }
 
+    public static function defaultPath(?object $user = null): string
+    {
+        if ($user && method_exists($user, 'hasPasswordSet') && ! $user->hasPasswordSet()) {
+            return 'settings/password';
+        }
+
+        return 'menus-hub';
+    }
+
     public static function destinationAfterRegistration(object $user, ?Request $request = null): string
     {
-        return self::toCurrent('dashboard', $request);
+        return self::toCurrent(self::defaultPath($user), $request);
     }
 }

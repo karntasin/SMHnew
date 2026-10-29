@@ -65,31 +65,31 @@ export default function Login({ status, canResetPassword, lineLoginEnabled, line
                         <LineLoginButton intent="login" label="เปิด LINE บนเครื่องนี้" />
                         <div className="flex items-center gap-3 text-xs text-gray-400">
                             <span className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
-                            หรือใช้อีเมล
+                            หรือใช้บัญชี
                             <span className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
                         </div>
                     </div>
                 )}
                 <div className="grid gap-5">
-                    {/* Email Field */}
+                    {/* Email / username Field */}
                     <div className="grid gap-2">
                         <Label htmlFor="email" className="text-gray-700 dark:text-gray-300 font-medium flex items-center gap-2">
                             <Mail className="w-4 h-4 text-blue-500" />
-                            อีเมล
+                            อีเมลหรือชื่อผู้ใช้
                         </Label>
                         <div className="relative group">
                             <Input
                                 id="email"
-                                type="email"
+                                type="text"
                                 required
                                 autoFocus
                                 tabIndex={1}
-                                autoComplete="email"
+                                autoComplete="username"
                                 value={data.email}
                                 onChange={(e) => setData('email', e.target.value)}
                                 onFocus={() => setFocusedField('email')}
                                 onBlur={() => setFocusedField(null)}
-                                placeholder="กรอกอีเมลของคุณ"
+                                placeholder="อีเมลหรือชื่อผู้ใช้"
                                 className={`pl-4 pr-4 py-3 h-12 rounded-xl border-2 transition-all duration-300 bg-white dark:bg-gray-800 ${
                                     focusedField === 'email' 
                                         ? 'border-blue-500 ring-4 ring-blue-500/20' 

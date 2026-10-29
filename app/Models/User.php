@@ -7,11 +7,17 @@ use Spatie\Permission\Traits\HasRoles;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Support\Facades\Hash;
 use Spatie\MediaLibrary\InteractsWithMedia;
 use Spatie\MediaLibrary\HasMedia;
 
 class User extends Authenticatable implements HasMedia
 {
+    public const INITIAL_PASSWORD = '123456';
+
+    /** @deprecated ใช้ INITIAL_PASSWORD — คงไว้ตรวจ migration ของเก่า */
+    public const LEGACY_ADMIN_RESET_PASSWORD = 'ResetPasswordNya';
+
     /**
      * Many-to-many relationship: User positions
      */
@@ -72,8 +78,11 @@ class User extends Authenticatable implements HasMedia
         'name',
         'prefix',
         'email',
+        'username',
         'cid',
         'password',
+        'must_change_password',
+        'password_changed_at',
         'line_id',
         'line_display_name',
         'chat_display_name',
@@ -112,7 +121,105 @@ class User extends Authenticatable implements HasMedia
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'must_change_password' => 'boolean',
+            'password_changed_at' => 'datetime',
             'profile_completed' => 'boolean',
+        ];
+    }
+
+    /**
+     * ตั้งรหัสเริ่มต้น (123456) และบังคับเปลี่ยนครั้งถัดไป
+     */
+    public function assignInitialPassword(): void
+    {
+        $this->forceFill([
+            'password' => self::INITIAL_PASSWORD,
+            'must_change_password' => true,
+            'password_changed_at' => null,
+        ])->save();
+    }
+
+    public function needsPasswordChange(): bool
+    {
+        if ($this->must_change_password) {
+            return true;
+        }
+
+        $hash = (string) ($this->getAuthPassword() ?? '');
+        if ($hash === '') {
+            return true;
+        }
+
+        return Hash::check(self::INITIAL_PASSWORD, $hash);
+    }
+
+    /** ผู้ใช้กำหนดรหัสผ่านของตนเองแล้ว (ไม่ว่างเปล่า และไม่ใช่รหัสเริ่มต้น) */
+    public function hasPasswordSet(): bool
+    {
+        $hash = (string) ($this->getAuthPassword() ?? '');
+        if ($hash === '') {
+            return false;
+        }
+
+        return ! $this->needsPasswordChange();
+    }
+
+    public function markPasswordChanged(): void
+    {
+        $this->forceFill([
+            'must_change_password' => false,
+            'password_changed_at' => now(),
+        ])->save();
+    }
+
+    public function hasRealEmail(): bool
+    {
+        $email = strtolower(trim((string) $this->email));
+
+        return $email !== '' && ! str_ends_with($email, '@line.login');
+    }
+
+    public function needsUsername(): bool
+    {
+        return ! $this->hasRealEmail() && trim((string) ($this->username ?? '')) === '';
+    }
+
+    /** รหัสที่ผู้ใช้ตั้งเอง และมีอีเมลจริงหรือ username สำหรับเข้าสู่ระบบ */
+    public function isLoginReady(): bool
+    {
+        return ! $this->needsPasswordChange() && ! $this->needsUsername();
+    }
+
+    public static function findForLogin(string $identifier): ?self
+    {
+        $login = strtolower(trim($identifier));
+        if ($login === '') {
+            return null;
+        }
+
+        return static::query()
+            ->where(function ($query) use ($login) {
+                $query->whereRaw('LOWER(email) = ?', [$login])
+                    ->orWhereRaw('LOWER(username) = ?', [$login]);
+            })
+            ->first();
+    }
+
+    /** @return array<int, string|\Illuminate\Validation\Rules\Unique> */
+    public static function usernameRules(?int $ignoreUserId = null): array
+    {
+        $unique = \Illuminate\Validation\Rule::unique('users', 'username');
+        if ($ignoreUserId) {
+            $unique = $unique->ignore($ignoreUserId);
+        }
+
+        return [
+            'required',
+            'string',
+            'min:3',
+            'max:50',
+            'regex:/^[A-Za-z0-9._-]+$/',
+            $unique,
         ];
     }
 

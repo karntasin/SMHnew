@@ -24,7 +24,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ThaiDatePicker } from '@/components/ui/thai-date-picker';
 import axios from 'axios';
-import { warehouseActive, warehouseHome, wh } from '@/pages/Pharmacy/inventoryCatalog';
+import { warehouseActive, warehouseHome, warehouseNoun, warehouseSupply, wh } from '@/pages/Pharmacy/inventoryCatalog';
 
 type Location = {
     id: number;
@@ -117,6 +117,10 @@ export default function DrugOut({
     const [activeTab, setActiveTab] = useState<'issue' | 'return' | 'history'>('issue');
     const [locationId, setLocationId] = useState<number>(initialLocationId);
 
+    const isSupply = warehouseSupply();
+    const noun = warehouseNoun();
+    const locationNoun = isSupply ? 'จุดจ่าย/คลัง' : 'ห้องยา';
+
     // Selected Drug & Stock info state
     const [selectedDrug, setSelectedDrug] = useState<Drug | null>(null);
     const [stockInfo, setStockInfo] = useState<StockInfo | null>(null);
@@ -150,7 +154,28 @@ export default function DrugOut({
     const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
 
     // Quick department chips
-    const commonDepartments = ['ตึกผู้ป่วยใน (IPD)', 'ห้องฉุกเฉิน (ER)', 'ห้องผ่าตัด (OR)', 'คลินิก ARI', 'ห้องคลอด (LR)', 'กลุ่มงานทันตกรรม', 'แผนกไตเทียม'];
+    const commonDepartments = isSupply
+        ? [
+              'ตึกผู้ป่วยใน (IPD)',
+              'ห้องฉุกเฉิน (ER)',
+              'ห้องผ่าตัด (OR)',
+              'คลินิก ARI',
+              'ห้องคลอด (LR)',
+              'กลุ่มงานทันตกรรม',
+              'แผนกไตเทียม',
+              'ออกหน่วยแพทย์เคลื่อนที่',
+              'งานเวชปฏิบัติครอบครัว (PCU)',
+          ]
+        : [
+              'ตึกผู้ป่วยใน (IPD)',
+              'ห้องฉุกเฉิน (ER)',
+              'ห้องผ่าตัด (OR)',
+              'คลินิก ARI',
+              'ห้องคลอด (LR)',
+              'กลุ่มงานทันตกรรม',
+              'แผนกไตเทียม',
+              'ออกหน่วยแพทย์เคลื่อนที่',
+          ];
 
     // Load Stock Info for selected drug in location
     const loadStockInfo = async (drugIcode: string, locId: number, preferredUnitId?: number) => {
@@ -334,9 +359,9 @@ export default function DrugOut({
     return (
         <AppLayout breadcrumbs={pharmacyBreadcrumbs([
             { title: warehouseHome(), href: wh('index') },
-            { title: 'ยาออกหน่วย' },
+            { title: isSupply ? 'เวชภัณฑ์ออกหน่วย' : 'ยาออกหน่วย' },
         ])}>
-            <Head title="ระบบยาออกหน่วย (ตัดยาออกหน่วย / คืนยาเข้าห้องยา)" />
+            <Head title={isSupply ? "ระบบเวชภัณฑ์ออกหน่วย (ตัดเวชภัณฑ์ออกหน่วย / คืนเวชภัณฑ์เข้าคลัง/จุดจ่าย)" : "ระบบยาออกหน่วย (ตัดยาออกหน่วย / คืนยาเข้าห้องยา)"} />
 
             <div className="container mx-auto space-y-6 px-4 py-6">
                 <PharmacySubNav active={warehouseActive()} />
@@ -347,18 +372,20 @@ export default function DrugOut({
                         <div className="space-y-1">
                             <div className="inline-flex items-center gap-2 rounded-full bg-rose-500/20 px-3 py-1 text-xs font-semibold text-rose-300 backdrop-blur-xs">
                                 <PackageMinus className="h-3.5 w-3.5" />
-                                Drug Issue to Ward/Unit & Return
+                                {isSupply ? 'Medical Supplies Issue to Ward/Unit & Return' : 'Drug Issue to Ward/Unit & Return'}
                             </div>
-                            <h1 className="text-3xl font-black tracking-tight">ระบบยาออกหน่วย</h1>
+                            <h1 className="text-3xl font-black tracking-tight">{isSupply ? 'ระบบเวชภัณฑ์ออกหน่วย' : 'ระบบยาออกหน่วย'}</h1>
                             <p className="text-sm text-rose-100/80 max-w-2xl">
-                                ระบบตัดยาออกจากห้องยาให้หน่วยงาน/หอผู้ป่วย (เบิกให้วอร์ด, จ่ายผู้ป่วย, ตัดยาชำรุด/หมดอายุ/ส่งทำลาย) และรับคืนยาเข้าสู่สต็อกห้องยา
+                                {isSupply
+                                    ? 'ระบบตัดเวชภัณฑ์ออกจากจุดจ่าย/คลังให้หน่วยงาน/หอผู้ป่วย (เบิกให้วอร์ด, จ่ายผู้ป่วย, ตัดเวชภัณฑ์ชำรุด/เสื่อมสภาพ/หมดอายุ) และรับคืนเวชภัณฑ์เข้าสู่สต็อก'
+                                    : 'ระบบตัดยาออกจากห้องยาให้หน่วยงาน/หอผู้ป่วย (เบิกให้วอร์ด, จ่ายผู้ป่วย, ตัดยาชำรุด/หมดอายุ/ส่งทำลาย) และรับคืนยาเข้าสู่สต็อกห้องยา'}
                             </p>
                         </div>
 
                         {/* Location Selector */}
                         <div className="rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur-md">
                             <label className="text-xs font-medium text-rose-200 block mb-1">
-                                จุดห้องยาที่ทำรายการ:
+                                {isSupply ? 'จุดจ่าย/คลังที่ทำรายการ:' : 'จุดห้องยาที่ทำรายการ:'}
                             </label>
                             <select
                                 value={locationId}
@@ -367,7 +394,7 @@ export default function DrugOut({
                             >
                                 {locations.map((loc) => (
                                     <option key={loc.id} value={loc.id} className="bg-slate-900 text-white">
-                                        {loc.name} ({loc.type === 'warehouse' ? 'คลังยา' : 'ห้องยา'})
+                                        {loc.name} ({loc.type === 'warehouse' ? (isSupply ? 'คลังเวชภัณฑ์' : 'คลังยา') : (isSupply ? 'จุดจ่ายเวชภัณฑ์' : 'ห้องยา')})
                                     </option>
                                 ))}
                             </select>
@@ -377,7 +404,7 @@ export default function DrugOut({
                     {/* Stats Bar */}
                     <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4 pt-4 border-t border-white/10">
                         <div className="rounded-xl bg-white/5 p-3">
-                            <div className="text-xs text-rose-200/80">ตัดยาออกหน่วยวันนี้ (จำนวน)</div>
+                            <div className="text-xs text-rose-200/80">ตัด{noun}ออกหน่วยวันนี้ (จำนวน)</div>
                             <div className="text-xl font-bold text-rose-300 mt-0.5">
                                 {stats.today_issued_qty.toLocaleString()}
                             </div>
@@ -385,7 +412,7 @@ export default function DrugOut({
                         </div>
 
                         <div className="rounded-xl bg-white/5 p-3">
-                            <div className="text-xs text-emerald-200/80">รับคืนยาวันนี้ (จำนวน)</div>
+                            <div className="text-xs text-emerald-200/80">รับคืน{noun}วันนี้ (จำนวน)</div>
                             <div className="text-xl font-bold text-emerald-300 mt-0.5">
                                 {stats.today_returned_qty.toLocaleString()}
                             </div>
@@ -405,7 +432,7 @@ export default function DrugOut({
                             <div className="text-sm font-semibold text-white mt-1 truncate">
                                 โรงพยาบาลค่ายสุรสิงหนาท
                             </div>
-                            <div className="text-[11px] text-white/60">กลุ่มงานเภสัชกรรม</div>
+                            <div className="text-[11px] text-white/60">{isSupply ? 'กลุ่มงานเภสัชกรรม / คลังเวชภัณฑ์' : 'กลุ่มงานเภสัชกรรม'}</div>
                         </div>
                     </div>
                 </div>
@@ -436,7 +463,7 @@ export default function DrugOut({
                         }`}
                     >
                         <PackageMinus className="h-4 w-4" />
-                        1. ตัดยาออกหน่วย (Issue to Unit)
+                        1. ตัด{noun}ออกหน่วย (Issue to Unit)
                     </button>
 
                     <button
@@ -449,7 +476,7 @@ export default function DrugOut({
                         }`}
                     >
                         <Undo2 className="h-4 w-4" />
-                        2. คืนยาให้ห้องยา (Return In)
+                        2. คืน{noun}เข้า{locationNoun} (Return In)
                     </button>
 
                     <button
@@ -462,7 +489,7 @@ export default function DrugOut({
                         }`}
                     >
                         <History className="h-4 w-4" />
-                        3. ประวัติยาออกหน่วย & คืนยา ({recentMovements.length})
+                        3. ประวัติ{noun}ออกหน่วย & คืน{noun} ({recentMovements.length})
                     </button>
                 </div>
 
@@ -476,7 +503,7 @@ export default function DrugOut({
                                 <div className="flex items-center justify-between">
                                     <h2 className="text-sm font-bold text-foreground flex items-center gap-2">
                                         <Search className="h-4 w-4 text-violet-600" />
-                                        ค้นหายา หรือ สแกนบาร์โค้ด / QR Code
+                                        ค้นหา{noun} หรือ สแกนบาร์โค้ด / QR Code
                                     </h2>
                                     {selectedDrug && (
                                         <Button
@@ -491,7 +518,7 @@ export default function DrugOut({
                                             }}
                                         >
                                             <Trash2 className="mr-1 h-3.5 w-3.5" />
-                                            ล้างรายการยาที่เลือก
+                                            ล้างรายการ{noun}ที่เลือก
                                         </Button>
                                     )}
                                 </div>
@@ -603,7 +630,7 @@ export default function DrugOut({
 
                                         {/* Stock On-hand Badge */}
                                         <div className="rounded-2xl border border-border bg-muted/40 p-3 text-right">
-                                            <div className="text-xs text-muted-foreground">คงเหลือในห้องยานี้</div>
+                                            <div className="text-xs text-muted-foreground">คงเหลือใน{locationNoun}นี้</div>
                                             <div className={`text-2xl font-black ${
                                                 (stockInfo?.qty_on_hand ?? 0) > 0 ? 'text-foreground' : 'text-rose-600'
                                             }`}>
@@ -619,7 +646,7 @@ export default function DrugOut({
                                     {stockInfo?.active_lots && stockInfo.active_lots.length > 0 ? (
                                         <div className="rounded-2xl border border-border/80 bg-muted/20 p-3 space-y-2">
                                             <div className="text-xs font-bold text-muted-foreground flex items-center justify-between">
-                                                <span>Lot ที่เปิดใช้อยู่ในห้องยานี้ (ตัดตามลำดับ FEFO):</span>
+                                                <span>Lot ที่เปิดใช้อยู่ใน{locationNoun}นี้ (ตัดตามลำดับ FEFO):</span>
                                                 <span>{stockInfo.active_lots.length} Lot</span>
                                             </div>
                                             <div className="grid gap-2 sm:grid-cols-2">
@@ -643,7 +670,7 @@ export default function DrugOut({
                                         </div>
                                     ) : (
                                         <div className="rounded-xl border border-dashed border-amber-200 bg-amber-50/50 p-3 text-xs text-amber-800">
-                                            ⚠️ ไม่พบ Lot ยาคงเหลือในห้องยานี้
+                                            ⚠️ ไม่พบ Lot {noun}คงเหลือใน{locationNoun}นี้
                                         </div>
                                     )}
 
@@ -653,7 +680,7 @@ export default function DrugOut({
                                             <div className="rounded-2xl border border-rose-200 bg-rose-50/30 p-4 space-y-4 dark:border-rose-950 dark:bg-rose-950/20">
                                                 <div className="text-sm font-bold text-rose-900 dark:text-rose-300 flex items-center gap-1.5">
                                                     <ArrowUpRight className="h-4 w-4" />
-                                                    ระบุข้อมูลการตัดยาออกหน่วย
+                                                    ระบุข้อมูลการตัด{noun}ออกหน่วย
                                                 </div>
 
                                                 <div className="grid gap-4 sm:grid-cols-2">
@@ -697,28 +724,28 @@ export default function DrugOut({
 
                                                 {/* Reason Picker */}
                                                 <div className="space-y-1.5">
-                                                    <Label className="text-xs font-bold">สาเหตุ / วัตถุประสงค์การตัดยา *</Label>
+                                                    <Label className="text-xs font-bold">สาเหตุ / วัตถุประสงค์การตัด{noun} *</Label>
                                                     <select
                                                         value={issueReason}
                                                         onChange={(e) => setIssueReason(e.target.value)}
                                                         className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm font-medium"
                                                     >
-                                                        <option value="department">เบิกจ่ายให้หน่วยงาน / หอผู้ป่วย (Ward / Clinic / ER)</option>
-                                                        <option value="patient">จ่ายยาให้ผู้ป่วย (กรณีนอกระบบ / ใบสั่งพิเศษ)</option>
-                                                        <option value="damaged">ตัดยาชำรุด / แตกหัก / เสื่อมสภาพ</option>
-                                                        <option value="expired">ตัดยาหมดอายุ / นำส่งทำลาย</option>
+                                                        <option value="department">เบิกจ่ายให้หน่วยงาน / หอผู้ป่วย (Ward / Clinic / ER / ออกหน่วย)</option>
+                                                        <option value="patient">จ่าย{noun}ให้ผู้ป่วย (กรณีนอกระบบ / ใบสั่งพิเศษ)</option>
+                                                        <option value="damaged">ตัด{noun}ชำรุด / เสื่อมสภาพ / แตกหัก</option>
+                                                        <option value="expired">ตัด{noun}หมดอายุ / นำส่งทำลาย</option>
                                                         <option value="borrow">ยืมระหว่างโรงพยาบาล / หน่วยงานภายนอก</option>
-                                                        <option value="other">ตัดยาออกกรณีอื่นๆ (ระบุในหมายเหตุ)</option>
+                                                        <option value="other">ตัด{noun}ออกกรณีอื่นๆ (ระบุในหมายเหตุ)</option>
                                                     </select>
                                                 </div>
 
                                                 {/* Recipient / Department */}
                                                 <div className="space-y-1.5">
-                                                    <Label className="text-xs font-bold">หน่วยงาน / แผนก / ผู้รับยา</Label>
+                                                    <Label className="text-xs font-bold">หน่วยงาน / แผนก / ผู้รับ{noun}</Label>
                                                     <Input
                                                         value={issueRecipient}
                                                         onChange={(e) => setIssueRecipient(e.target.value)}
-                                                        placeholder="เช่น ตึกผู้ป่วยใน IPD, ห้องฉุกเฉิน ER, ห้องผ่าตัด, ชื่อผู้ป่วย..."
+                                                        placeholder="เช่น ตึกผู้ป่วยใน IPD, ห้องฉุกเฉิน ER, ห้องผ่าตัด, ออกหน่วยแพทย์, ชื่อผู้ป่วย..."
                                                         className="rounded-xl bg-background"
                                                     />
                                                     {/* Quick Chips */}
@@ -771,12 +798,12 @@ export default function DrugOut({
                                                     ) : (
                                                         <PackageMinus className="mr-2 h-4 w-4" />
                                                     )}
-                                                    ยืนยันตัดยาออกหน่วย ({issueBaseQty.toLocaleString()} {selectedDrug.unit})
+                                                    ยืนยันตัด{noun}ออกหน่วย ({issueBaseQty.toLocaleString()} {selectedDrug.unit})
                                                 </Button>
 
                                                 {(stockInfo?.qty_on_hand ?? 0) < issueBaseQty && (
                                                     <p className="text-xs text-rose-600 text-center font-semibold">
-                                                        ⚠️ สต็อกคงเหลือในห้องยานี้ไม่เพียงพอสำหรับการตัดยา
+                                                        ⚠️ สต็อกคงเหลือใน{locationNoun}นี้ไม่เพียงพอสำหรับการตัด{noun}
                                                     </p>
                                                 )}
                                             </div>
@@ -789,7 +816,7 @@ export default function DrugOut({
                                             <div className="rounded-2xl border border-emerald-200 bg-emerald-50/30 p-4 space-y-4 dark:border-emerald-950 dark:bg-emerald-950/20">
                                                 <div className="text-sm font-bold text-emerald-900 dark:text-emerald-300 flex items-center gap-1.5">
                                                     <ArrowDownLeft className="h-4 w-4" />
-                                                    ระบุข้อมูลการรับคืนยาเข้าสู่ห้องยา
+                                                    ระบุข้อมูลการรับคืน{noun}เข้าสู่{locationNoun}
                                                 </div>
 
                                                 <div className="grid gap-4 sm:grid-cols-2">
@@ -833,36 +860,36 @@ export default function DrugOut({
 
                                                 {/* Return Reason */}
                                                 <div className="space-y-1.5">
-                                                    <Label className="text-xs font-bold">สาเหตุการรับคืนยา *</Label>
+                                                    <Label className="text-xs font-bold">สาเหตุการรับคืน{noun} *</Label>
                                                     <select
                                                         value={returnReason}
                                                         onChange={(e) => setReturnReason(e.target.value)}
                                                         className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm font-medium"
                                                     >
-                                                        <option value="patient_return">ผู้ป่วยนำยามาคืน (หยุดยา / ปรับขนาดยา / ผู้ป่วย Admit)</option>
-                                                        <option value="department_return">หน่วยงาน / หอผู้ป่วย ส่งคืนยาเหลือใช้</option>
-                                                        <option value="order_cancel">ยกเลิกใบสั่งยา / สั่งผิด</option>
-                                                        <option value="other_return">รับคืนยากรณีอื่นๆ</option>
+                                                        <option value="patient_return">ผู้ป่วยนำ{noun}มาคืน (หยุดยา / ปรับขนาด / ผู้ป่วย Admit / เหลือใช้)</option>
+                                                        <option value="department_return">หน่วยงาน / หอผู้ป่วย ส่งคืน{noun}เหลือใช้</option>
+                                                        <option value="order_cancel">ยกเลิกใบสั่ง{noun} / สั่งผิด</option>
+                                                        <option value="other_return">รับคืน{noun}กรณีอื่นๆ</option>
                                                     </select>
                                                 </div>
 
                                                 <div className="grid gap-4 sm:grid-cols-2">
                                                     {/* Source / Patient HN */}
                                                     <div className="space-y-1.5">
-                                                        <Label className="text-xs font-bold">รับคืนจาก (HN ผู้ป่วย หรือ ชื่อตึก/วอร์ด)</Label>
+                                                        <Label className="text-xs font-bold">รับคืนจาก (HN ผู้ป่วย หรือ ชื่อตึก/วอร์ด/หน่วยงาน)</Label>
                                                         <Input
                                                             value={returnSource}
                                                             onChange={(e) => setReturnSource(e.target.value)}
-                                                            placeholder="เช่น HN 1234567, วอร์ดชาย, ER..."
+                                                            placeholder="เช่น HN 1234567, วอร์ดชาย, ER, ออกหน่วย..."
                                                             className="rounded-xl bg-background"
                                                         />
                                                     </div>
 
                                                     {/* Expiry Date */}
                                                     <div className="space-y-1.5">
-                                                        <Label className="text-xs font-bold">วันหมดอายุของยาที่รับคืน</Label>
+                                                        <Label className="text-xs font-bold">วันหมดอายุของ{noun}ที่รับคืน</Label>
                                                         <ThaiDatePicker
-                                                            label="วันหมดอายุของยาที่รับคืน"
+                                                            label={`วันหมดอายุของ${noun}ที่รับคืน`}
                                                             value={returnExpiresAt}
                                                             onChange={setReturnExpiresAt}
                                                         />
@@ -872,7 +899,7 @@ export default function DrugOut({
                                                 <div className="grid gap-4 sm:grid-cols-2">
                                                     {/* Ref Slip */}
                                                     <div className="space-y-1.5">
-                                                        <Label className="text-xs font-bold">เลขที่ใบคืนยา / เลขใบสั่งเดิม</Label>
+                                                        <Label className="text-xs font-bold">เลขที่ใบคืน{noun} / เลขใบสั่งเดิม</Label>
                                                         <Input
                                                             value={returnRefId}
                                                             onChange={(e) => setReturnRefId(e.target.value)}
@@ -905,7 +932,7 @@ export default function DrugOut({
                                                     <Input
                                                         value={returnNote}
                                                         onChange={(e) => setReturnNote(e.target.value)}
-                                                        placeholder="บันทึกสภาพยา หรือสาเหตุการคืน..."
+                                                        placeholder={`บันทึกสภาพ${noun} หรือสาเหตุการคืน...`}
                                                         className="rounded-xl bg-background"
                                                     />
                                                 </div>
@@ -921,7 +948,7 @@ export default function DrugOut({
                                                     ) : (
                                                         <Undo2 className="mr-2 h-4 w-4" />
                                                     )}
-                                                    ยืนยันรับคืนยาเข้าห้องยา (+{returnBaseQty.toLocaleString()} {selectedDrug.unit})
+                                                    ยืนยันรับคืน{noun}เข้า{locationNoun} (+{returnBaseQty.toLocaleString()} {selectedDrug.unit})
                                                 </Button>
                                             </div>
                                         </form>
@@ -930,9 +957,9 @@ export default function DrugOut({
                             ) : (
                                 <div className="rounded-3xl border border-dashed border-border bg-card p-12 text-center text-muted-foreground">
                                     <Package className="mx-auto h-12 w-12 opacity-30 mb-3" />
-                                    <h3 className="text-base font-semibold text-foreground">ยังไม่ได้เลือกรายการยา</h3>
+                                    <h3 className="text-base font-semibold text-foreground">ยังไม่ได้เลือกรายการ{noun}</h3>
                                     <p className="mt-1 text-sm max-w-md mx-auto">
-                                        กรุณาสแกนบาร์โค้ด / QR Code หรือพิมพ์ค้นหายาด้านบนเพื่อดำเนินการตัดยาออกหรือรับคืนยา
+                                        กรุณาสแกนบาร์โค้ด / QR Code หรือพิมพ์ค้นหา{noun}ด้านบนเพื่อดำเนินการตัด{noun}ออกหรือรับคืน{noun}
                                     </p>
                                 </div>
                             )}
@@ -944,26 +971,26 @@ export default function DrugOut({
                             <div className="rounded-3xl border border-border bg-card p-5 shadow-xs space-y-3">
                                 <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
                                     <FileText className="h-4 w-4 text-violet-600" />
-                                    แนวทางมาตรฐานระบบยาออก
+                                    แนวทางมาตรฐานระบบ{noun}ออก
                                 </h3>
                                 <ul className="text-xs text-muted-foreground space-y-2 leading-relaxed">
                                     <li className="flex items-start gap-1.5">
                                         <span className="text-rose-500 font-bold">•</span>
-                                        <span><b>การตัดยาออก:</b> ระบบจะตัดทอนสต็อกตามหลักการ FEFO (Lot ใกล้หมดอายุถูกตัดออกก่อน)</span>
+                                        <span><b>การตัด{noun}ออก:</b> ระบบจะตัดทอนสต็อกตามหลักการ FEFO (Lot ใกล้หมดอายุถูกตัดออกก่อน)</span>
                                     </li>
                                     <li className="flex items-start gap-1.5">
                                         <span className="text-emerald-500 font-bold">•</span>
-                                        <span><b>การรับคืนยา:</b> ตรวจสอบสภาพยาและวันหมดอายุก่อนรับคืนเข้าสต็อกห้องยาเสมอ</span>
+                                        <span><b>การรับคืน{noun}:</b> ตรวจสอบสภาพ{noun}และวันหมดอายุก่อนรับคืนเข้าสต็อก{locationNoun}เสมอ</span>
                                     </li>
                                     <li className="flex items-start gap-1.5">
                                         <span className="text-blue-500 font-bold">•</span>
-                                        <span><b>Stock Card:</b> ทุกรายการจะวิ่งตรงเข้าสู่บัตรคุมยาและประวัติเคลื่อนไหวทันที</span>
+                                        <span><b>Stock Card:</b> ทุกรายการจะวิ่งตรงเข้าสู่บัตรคุม{noun}และประวัติเคลื่อนไหวทันที</span>
                                     </li>
                                 </ul>
                                 <div className="pt-2 border-t border-border">
                                     <Button asChild variant="outline" size="sm" className="w-full rounded-xl text-xs">
                                         <Link href={wh('stock-card')}>
-                                            เปิดดูบัตรคุมยา (Stock Card) →
+                                            เปิดดูบัตรคุม{noun} (Stock Card) →
                                         </Link>
                                     </Button>
                                 </div>
@@ -972,7 +999,7 @@ export default function DrugOut({
                             {/* Mini Recent Transactions */}
                             <div className="rounded-3xl border border-border bg-card p-5 shadow-xs space-y-3">
                                 <div className="flex items-center justify-between">
-                                    <h3 className="text-sm font-bold text-foreground">รายการล่าสุดในห้องยานี้</h3>
+                                    <h3 className="text-sm font-bold text-foreground">รายการล่าสุดใน{locationNoun}นี้</h3>
                                     <button
                                         type="button"
                                         onClick={() => setActiveTab('history')}
@@ -1014,7 +1041,7 @@ export default function DrugOut({
                                     ))}
                                     {recentMovements.length === 0 && (
                                         <div className="text-xs text-muted-foreground text-center py-4">
-                                            ยังไม่มีรายการเคลื่อนไหวในห้องยานี้
+                                            ยังไม่มีรายการเคลื่อนไหวใน{locationNoun}นี้
                                         </div>
                                     )}
                                 </div>
@@ -1029,10 +1056,10 @@ export default function DrugOut({
                         <div className="flex flex-wrap items-center justify-between gap-4">
                             <div>
                                 <h2 className="text-lg font-bold text-foreground">
-                                    ประวัติรายการยาออกหน่วยและรับคืนยา
+                                    ประวัติรายการ{noun}ออกหน่วยและรับคืน{noun}
                                 </h2>
                                 <p className="text-xs text-muted-foreground">
-                                    แสดงประวัติความเคลื่อนไหวทั้งหมดที่เกิดขึ้นในห้องยา
+                                    แสดงประวัติความเคลื่อนไหวทั้งหมดที่เกิดขึ้นใน{locationNoun}
                                 </p>
                             </div>
 
@@ -1051,9 +1078,9 @@ export default function DrugOut({
                                     <tr>
                                         <th className="px-4 py-3">วัน-เวลา</th>
                                         <th className="px-4 py-3">ประเภท</th>
-                                        <th className="px-4 py-3">รายการยา</th>
+                                        <th className="px-4 py-3">รายการ{noun}</th>
                                         <th className="px-4 py-3 text-right">จำนวน</th>
-                                        <th className="px-4 py-3">ห้องยา / สถานที่</th>
+                                        <th className="px-4 py-3">{locationNoun} / สถานที่</th>
                                         <th className="px-4 py-3">เลขที่เอกสาร / อ้างอิง</th>
                                         <th className="px-4 py-3">หมายเหตุ / เหตุผล</th>
                                         <th className="px-4 py-3">ผู้บันทึก</th>
@@ -1073,7 +1100,7 @@ export default function DrugOut({
                                                             : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
                                                     }`}
                                                 >
-                                                    {m.type === 'dispense' ? '📤 ตัดยาออกหน่วย' : '📥 รับคืนยา'}
+                                                    {m.type === 'dispense' ? `📤 ตัด${noun}ออกหน่วย` : `📥 รับคืน${noun}`}
                                                 </span>
                                             </td>
                                             <td className="px-4 py-2.5">
@@ -1107,7 +1134,7 @@ export default function DrugOut({
                                     {recentMovements.length === 0 && (
                                         <tr>
                                             <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">
-                                                ยังไม่มีประวัติการตัดยาออกหรือรับคืนยาในระบบ
+                                                ยังไม่มีประวัติการตัด{noun}ออกหรือรับคืน{noun}ในระบบ
                                             </td>
                                         </tr>
                                     )}

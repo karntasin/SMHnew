@@ -6,10 +6,12 @@
   "start_url": "/chat",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "orientation": "portrait-primary",
   "background_color": "#06101c",
   "theme_color": "#06101c",
   "lang": "th",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/icons/s-chat-192.png",

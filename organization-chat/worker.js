@@ -8,9 +8,10 @@ import { handleChatAction } from './chat-api.js';
 import { handleFileDownload, handleFileUpload } from './chat-files.js';
 import { handleAiAsk } from './chat-ai.js';
 import { handleInternal } from './chat-sync.js';
+import { handleTranscribe } from './chat-transcribe.js';
 
 const CONFIG = {
-  VERSION: '8.5.0-push',
+  VERSION: '8.6.0-systems-bot',
   SYSTEM: 'S-Chat',
   LIFF_ID: '2011190976-nGVbTYZD',
   CHANNEL_ID: '2011190976',
@@ -61,9 +62,17 @@ function wrapForLiff(action, worker, payload, ok = true) {
 }
 
 function pageConfig(env) {
+  let webAppOrigin = 'https://fshh-app.online';
+  try {
+    const laravelApi = String((env && env.LARAVEL_API_URL) || '');
+    if (laravelApi) webAppOrigin = new URL(laravelApi).origin;
+  } catch (_) {
+    /* keep default */
+  }
   return {
     ...CONFIG,
     VAPID_PUBLIC_KEY: String((env && env.VAPID_PUBLIC_KEY) || ''),
+    WEB_APP_ORIGIN: webAppOrigin,
   };
 }
 
@@ -337,11 +346,21 @@ async function router(request, env) {
     return handleAiAsk(request, env);
   }
 
+  if (url.pathname === '/api/transcribe' && (request.method === 'POST' || request.method === 'OPTIONS')) {
+    return handleTranscribe(request, env);
+  }
+
   if (url.pathname.startsWith('/files/')) {
     return handleFileDownload(request, env);
   }
 
-  if (url.pathname === '/' || url.pathname === '/liff' || url.pathname === '/index.html' || url.pathname === '/chat') {
+  if (
+    url.pathname === '/'
+    || url.pathname === '/liff'
+    || url.pathname === '/index.html'
+    || url.pathname === '/chat'
+    || url.pathname === '/s-chat'
+  ) {
     return htmlResponse(buildChatPage(url.origin, pageConfig(env)));
   }
 
@@ -373,7 +392,7 @@ async function router(request, env) {
       hasD1: Boolean(env && env.DB),
       hasFiles: Boolean(env && env.FILES),
       liffId: CONFIG.LIFF_ID,
-      endpoints: ['/', '/chat', '/health', '/api/gas', '/api/ai', '/api/upload', '/api/internal', '/files/', '/stickers/'],
+      endpoints: ['/', '/chat', '/s-chat', '/health', '/api/gas', '/api/ai', '/api/transcribe', '/api/upload', '/api/internal', '/files/', '/stickers/'],
       timestamp: new Date().toISOString(),
     });
   }

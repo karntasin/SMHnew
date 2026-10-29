@@ -2,7 +2,7 @@ import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Transition } from '@headlessui/react';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { FormEventHandler, useRef, useState } from 'react';
-import { Camera, MessageCircle, User, FileDown, BookOpen } from 'lucide-react';
+import { Camera, MessageCircle, User, FileDown, BookOpen, KeyRound } from 'lucide-react';
 
 import DeleteUser from '@/components/delete-user';
 import DepartmentPicker from '@/components/department-picker';
@@ -44,7 +44,7 @@ export default function Profile({
     chatLiffUrl,
     addFriendUrl,
 }: ProfilePageProps) {
-    const { auth, errors, lineLoginEnabled } = usePage<SharedData>().props;
+    const { auth, errors, lineLoginEnabled, accountSetup } = usePage<SharedData>().props;
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [previewUrl, setPreviewUrl] = useState<string | null>(auth.user.avatar || auth.user.line_picture_url || null);
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -161,6 +161,30 @@ export default function Profile({
                 )}
 
                 <div className="space-y-6">
+                    {accountSetup?.needsPassword && (
+                        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950 shadow-xs dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="flex items-start gap-3">
+                                    <div className="mt-0.5 rounded-full bg-amber-200 p-2 text-amber-900 dark:bg-amber-900 dark:text-amber-200 shrink-0">
+                                        <KeyRound className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                        <h4 className="font-semibold text-sm text-amber-900 dark:text-amber-100">
+                                            คุณยังไม่ได้กำหนดรหัสผ่านสำหรับการเข้าสู่ระบบ
+                                        </h4>
+                                        <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-300">
+                                            เพื่อความปลอดภัยและความสะดวกในการเข้าใช้งานระบบครั้งถัดไป กรุณากำหนดรหัสผ่านส่วนตัวของคุณ
+                                        </p>
+                                    </div>
+                                </div>
+                                <Button asChild size="sm" className="bg-amber-600 hover:bg-amber-700 text-white shrink-0 shadow-xs">
+                                    <Link href={route('password.edit')}>
+                                        กำหนดรหัสผ่านตอนนี้
+                                    </Link>
+                                </Button>
+                            </div>
+                        </div>
+                    )}
                     <div className="rounded-xl border border-slate-200/90 bg-gradient-to-r from-emerald-50/60 via-slate-50 to-blue-50/60 p-4 shadow-2xs">
                         <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
                             <div className="space-y-0.5">

@@ -9,8 +9,10 @@ use App\Models\Im\AssetRepair;
 use App\Models\Im\ChangeRequest;
 use App\Models\Im\Competency;
 use App\Models\User;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -24,6 +26,7 @@ class ResourceController extends Controller
             'repairs' => fn ($q) => $q->latest('reported_at')->latest('id')->limit(20),
             'openRepair',
             'disposals' => fn ($q) => $q->latest('disposed_at')->latest('id')->limit(10),
+            'systemSpec',
         ])->latest()->get();
 
         $competencies = Competency::with('user:id,name')->latest('assessed_at')->get();
@@ -37,6 +40,7 @@ class ResourceController extends Controller
             'changes' => $changes,
             'staff' => User::orderBy('name')->get(['id', 'name']),
             'deviceTypes' => Asset::DEVICE_TYPES,
+            'serverLanIp' => $this->getServerLanIp(),
             'summary' => [
                 'hardware' => $assets->where('type', 'hardware')->count(),
                 'software' => $assets->where('type', 'software')->count(),
@@ -51,6 +55,70 @@ class ResourceController extends Controller
                 'pending_changes' => $changes->where('status', 'pending')->count(),
             ],
         ]);
+    }
+
+    /**
+     * Get real-time status and live metrics for a computer asset
+     * Does NOT save logs to DB; uses transient cache and direct ping
+     */
+    public function liveStatus(Request $request, Asset $asset): JsonResponse
+    {
+        // Signal agent that admin is actively watching (triggers live streaming if agent reports)
+        Cache::put('im_live_watch_'.$asset->id, true, 30);
+
+        $spec = $asset->systemSpec;
+        $ip = $spec?->ip_address;
+
+        $pingResult = ['ok' => false, 'ms' => null];
+        if ($ip && filter_var($ip, FILTER_VALIDATE_IP)) {
+            $pingResult = $this->pingHost($ip);
+        }
+
+        $liveStats = Cache::get('im_live_stats_'.$asset->id);
+        $lastSeenTimestamp = Cache::get('im_agent_last_seen_'.$asset->id);
+
+        $isOnline = $pingResult['ok'] || ($lastSeenTimestamp && (time() - $lastSeenTimestamp < 150));
+
+        return response()->json([
+            'asset_id' => $asset->id,
+            'online' => $isOnline,
+            'ping_ms' => $pingResult['ms'],
+            'last_seen_at' => $spec?->last_seen_at?->toIso8601String(),
+            'live_stats' => $liveStats,
+            'spec' => $spec,
+        ]);
+    }
+
+    private function pingHost(string $host): array
+    {
+        $flag = PHP_OS_FAMILY === 'Windows' ? '-n 1 -w 800' : '-c 1 -W 1';
+        $cmd = 'ping '.$flag.' '.escapeshellarg($host).' 2>&1';
+
+        try {
+            $output = shell_exec($cmd) ?? '';
+        } catch (\Throwable) {
+            return ['ok' => false, 'ms' => null];
+        }
+
+        if (preg_match('/(?:time[=<]|เวลา=)\s*(\d+)\s*ms/i', $output, $m)) {
+            return ['ok' => true, 'ms' => (int) $m[1]];
+        }
+
+        if (stripos($output, 'TTL=') !== false || stripos($output, 'ttl=') !== false) {
+            return ['ok' => true, 'ms' => 1];
+        }
+
+        return ['ok' => false, 'ms' => null];
+    }
+
+    private function getServerLanIp(): string
+    {
+        $ip = gethostbyname(gethostname());
+        if ($ip && filter_var($ip, FILTER_VALIDATE_IP) && ! str_starts_with($ip, '127.')) {
+            return $ip;
+        }
+
+        return '192.168.1.214';
     }
 
     public function storeAsset(Request $request)

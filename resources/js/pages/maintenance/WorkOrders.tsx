@@ -197,6 +197,8 @@ export default function WorkOrders({ workOrders, stats, filters, userPositions, 
 
     return (
         <AppLayout breadcrumbs={[
+            { title: 'งานธุรการ', href: '/admin-hub' },
+            { title: 'ระบบแจ้งซ่อม', href: route('maintenance.dashboard') },
             { title: 'ใบงานซ่อมบำรุง', href: '#' }
         ]}>
             <Head title="ใบงานซ่อมบำรุง" />

@@ -3,9 +3,11 @@ import AppLayout from '@/layouts/app-layout';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { BackButton } from '@/components/ui/back-button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { VoiceTextInput, VoiceTextarea } from '@/components/voice';
 import { ThaiDatePicker } from '@/components/ui/thai-date-picker';
 import { cn } from '@/lib/utils';
 import EquipmentSubNav from '../EquipmentSubNav';
@@ -66,6 +68,7 @@ export default function Create({ equipment, preselectEquipmentId = null }: Props
 
     return (
         <AppLayout breadcrumbs={[
+            { title: 'งานธุรการ', href: '/admin-hub' },
             { title: 'ยืมอุปกรณ์แพทย์', href: route('equipment-borrowing.dashboard') },
             { title: 'ขอยืมอุปกรณ์', href: '#' },
         ]}>
@@ -161,13 +164,13 @@ export default function Create({ equipment, preselectEquipmentId = null }: Props
 
                             <div className="space-y-2">
                                 <Label>ภารกิจ *</Label>
-                                <Input value={data.purpose} onChange={(e) => setData('purpose', e.target.value)} placeholder="เช่น ออกหน่วยแพทย์, ฝึกซ้อม CPR, ห้องผ่าตัด" />
+                                <VoiceTextInput value={data.purpose} onChange={(val) => setData('purpose', val)} placeholder="เช่น ออกหน่วยแพทย์, ฝึกซ้อม CPR, ห้องผ่าตัด" />
                                 {errors.purpose && <p className="text-red-500 text-sm">{errors.purpose}</p>}
                             </div>
 
                             <div className="space-y-2">
                                 <Label>รายละเอียดการใช้งาน</Label>
-                                <Textarea value={data.usage_detail} onChange={(e) => setData('usage_detail', e.target.value)} rows={2} />
+                                <VoiceTextarea value={data.usage_detail} onChange={(val) => setData('usage_detail', val)} rows={2} />
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
@@ -177,7 +180,7 @@ export default function Create({ equipment, preselectEquipmentId = null }: Props
                                 </div>
                                 <div className="space-y-2">
                                     <Label>หอผู้ป่วย/สถานที่ใช้</Label>
-                                    <Input value={data.ward_location} onChange={(e) => setData('ward_location', e.target.value)} />
+                                    <VoiceTextInput value={data.ward_location} onChange={(val) => setData('ward_location', val)} />
                                 </div>
                             </div>
 
@@ -208,12 +211,12 @@ export default function Create({ equipment, preselectEquipmentId = null }: Props
 
                             <div className="space-y-2">
                                 <Label>หมายเหตุ</Label>
-                                <Textarea value={data.notes} onChange={(e) => setData('notes', e.target.value)} rows={2} />
+                                <VoiceTextarea value={data.notes} onChange={(val) => setData('notes', val)} rows={2} />
                             </div>
 
                             <div className="flex gap-2">
                                 <Button type="submit" disabled={processing}>ส่งคำขอเบิก</Button>
-                                <Link href={route('equipment-borrowing.borrowings.my')}><Button type="button" variant="outline">ยกเลิก</Button></Link>
+                                <BackButton fallbackUrl={route('equipment-borrowing.borrowings.my')} label="ยกเลิก" variant="outline" />
                             </div>
                         </form>
                     </CardContent>

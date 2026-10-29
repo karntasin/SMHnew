@@ -2,8 +2,17 @@ import { isValidStickerId, stickerPreviewText } from './stickers.js';
 import { sendWebPush } from './web-push.js';
 
 export const SYSTEM_LINE_ID = '__fshh_system__';
+export { SYSTEMS_BOT_LINE_ID, SYSTEMS_BOT_NAME } from './chat-systems-bot.js';
 
 const SESSION_HOURS = 6;
+
+function systemsBotApi() {
+  return {
+    nowIso,
+    recordOutboundMessage,
+    sanitizeCardColor,
+  };
+}
 
 export function nowIso() {
   return new Date().toISOString();
@@ -261,17 +270,20 @@ function isOnlineFromLogin(lastLogin) {
 
 function serializeUser(row) {
   if (!row) return null;
+  const lineUserId = String(row.line_user_id || '');
+  const isBot = lineUserId === '__smh_systems_bot__';
   const lastLogin = row.last_login || '';
-  const online = isOnlineFromLogin(lastLogin);
+  const online = isBot ? true : isOnlineFromLogin(lastLogin);
   return {
     userId: String(row.id),
-    lineUserId: String(row.line_user_id || ''),
+    lineUserId,
     displayName: row.display_name || 'LINE User',
-    department: row.department || '',
+    department: isBot ? 'บอท' : (row.department || ''),
     email: row.email || '',
     avatar: row.avatar || '',
     status: online ? 'online' : 'offline',
     online,
+    isBot,
     createdAt: row.created_at || '',
     lastLogin,
   };
@@ -305,12 +317,24 @@ export function parseCardMessage(raw) {
         if (label && value) fields.push({ label, value });
       }
     }
+    const actions = [];
+    if (Array.isArray(data.actions)) {
+      for (const item of data.actions) {
+        if (!item || typeof item !== 'object') continue;
+        const label = String(item.label || '').trim();
+        const url = String(item.url || '').trim();
+        if (label && url && /^https?:\/\//i.test(url)) {
+          actions.push({ label, url });
+        }
+      }
+    }
     return {
       title: String(data.title || '').trim(),
       body: String(data.body || '').trim(),
       color: sanitizeCardColor(data.color) || '#64748B',
       priority: String(data.priority || '').trim(),
       fields,
+      actions,
     };
   } catch {
     return null;
@@ -328,6 +352,11 @@ function cardFallbackText(card) {
     }
   } else if (card.body) {
     lines.push(card.body);
+  }
+  if (card.actions && card.actions.length) {
+    for (const action of card.actions) {
+      lines.push(action.label + ': ' + action.url);
+    }
   }
   return lines.join('\n');
 }
@@ -516,12 +545,15 @@ export async function loginResponse(env, user) {
 }
 
 export async function getUsers(env) {
+  const { ensureSystemsBotUser, SYSTEMS_BOT_LINE_ID } = await import('./chat-systems-bot.js');
+  await ensureSystemsBotUser(env, systemsBotApi());
   const { results } = await env.DB.prepare(
     `SELECT * FROM users
      WHERE line_user_id != ?
-     ORDER BY display_name COLLATE NOCASE ASC`
+     ORDER BY CASE WHEN line_user_id = ? THEN 0 ELSE 1 END,
+              display_name COLLATE NOCASE ASC`
   )
-    .bind(SYSTEM_LINE_ID)
+    .bind(SYSTEM_LINE_ID, SYSTEMS_BOT_LINE_ID)
     .all();
   return (results || []).map(serializeUser);
 }
@@ -590,6 +622,16 @@ export async function getOrCreateConversation(env, userId, otherUserId) {
       .first();
     await addMember(env, conv.id, u1, 'member', ts);
     await addMember(env, conv.id, u2, 'member', ts);
+  }
+  try {
+    const { ensureBotWelcomeIfEmpty } = await import('./chat-systems-bot.js');
+    await ensureBotWelcomeIfEmpty(env, systemsBotApi(), {
+      userId,
+      conversationId: conv.id,
+      otherUserId: a,
+    });
+  } catch (err) {
+    console.error('systems bot welcome failed', err);
   }
   return { success: true, conversationId: String(conv.id), type: 'direct' };
 }
@@ -830,7 +872,9 @@ async function getUserConversations(env, userId, options = {}) {
       lastMessage: c.last_message_text || lastMessagePreview(last),
       lastMessageType: c.last_message_type || '',
       lastMessageAt: c.last_message_at || c.updated_at || '',
-      unreadCount: Number(c.member_unread_count || c.unread_count || 0),
+      unreadCount: Number(
+        c.member_unread_count != null ? c.member_unread_count : (c.unread_count != null ? c.unread_count : 0)
+      ) || 0,
       source: c.source || '',
       sourceKey: c.source_key || '',
       managed: isManagedConv(c),
@@ -1075,6 +1119,30 @@ async function sendMessage(env, senderId, params) {
     message: clean,
     createdAt: ts,
   });
+
+  if (messageType === 'text' && receiverId) {
+    try {
+      const { isSystemsBotLineId, replySystemsBot } = await import('./chat-systems-bot.js');
+      const receiver = await env.DB.prepare('SELECT * FROM users WHERE id = ?')
+        .bind(receiverId)
+        .first();
+      if (receiver && isSystemsBotLineId(receiver.line_user_id)) {
+        const sender = await env.DB.prepare('SELECT * FROM users WHERE id = ?')
+          .bind(senderId)
+          .first();
+        if (sender) {
+          await replySystemsBot(env, systemsBotApi(), {
+            sender,
+            conversationId: convId,
+            text: clean,
+          });
+        }
+      }
+    } catch (err) {
+      console.error('systems bot reply failed', err);
+    }
+  }
+
   return {
     success: true,
     messageId: 'M' + messageId,
@@ -1133,14 +1201,17 @@ export async function handleChatAction(env, action, params, config) {
     case 'searchUsers': {
       const q = String(params.q || params.query || '').trim();
       if (!q) return { success: true, users: await getUsers(env) };
+      const { ensureSystemsBotUser, SYSTEMS_BOT_LINE_ID } = await import('./chat-systems-bot.js');
+      await ensureSystemsBotUser(env, systemsBotApi());
       const like = '%' + q + '%';
       const { results } = await env.DB.prepare(
         `SELECT * FROM users
          WHERE line_user_id != ?
-           AND (display_name LIKE ? OR email LIKE ? OR line_user_id LIKE ?)
-         ORDER BY display_name COLLATE NOCASE ASC LIMIT 50`
+           AND (display_name LIKE ? OR email LIKE ? OR line_user_id LIKE ? OR department LIKE ?)
+         ORDER BY CASE WHEN line_user_id = ? THEN 0 ELSE 1 END,
+                  display_name COLLATE NOCASE ASC LIMIT 50`
       )
-        .bind(SYSTEM_LINE_ID, like, like, like)
+        .bind(SYSTEM_LINE_ID, like, like, like, like, SYSTEMS_BOT_LINE_ID)
         .all();
       return { success: true, users: (results || []).map(serializeUser) };
     }
@@ -1180,6 +1251,45 @@ export async function handleChatAction(env, action, params, config) {
       return loginResponse(env, user);
     }
 
+    case 'passwordLogin': {
+      const email = String(params.email || '').trim();
+      const password = String(params.password || '');
+      if (!email || !password) throw new Error('กรุณากรอกอีเมลและรหัสผ่าน');
+      const laravelUrl = String((env && env.LARAVEL_API_URL) || '').trim()
+        || 'https://fshh-app.online/organization-chat/api';
+      let laravelRes;
+      try {
+        laravelRes = await fetch(laravelUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'passwordLogin',
+            email,
+            password,
+          }),
+          signal: AbortSignal.timeout(20000),
+        });
+      } catch (err) {
+        throw new Error('เชื่อมต่อเซิร์ฟเวอร์ล็อกอินไม่สำเร็จ');
+      }
+      let data = null;
+      try {
+        data = await laravelRes.json();
+      } catch {
+        throw new Error('เซิร์ฟเวอร์ล็อกอินตอบกลับไม่ถูกต้อง');
+      }
+      if (!data || data.success === false || !data.sessionToken) {
+        throw new Error((data && data.error) || 'อีเมลหรือรหัสผ่านไม่ถูกต้อง');
+      }
+      return {
+        success: true,
+        sessionToken: String(data.sessionToken),
+      };
+    }
+
     case 'conversations':
     case 'getConversations': {
       const user = await resolveUser(env, params.sessionToken);
@@ -1202,6 +1312,20 @@ export async function handleChatAction(env, action, params, config) {
     case 'messages':
     case 'getMessages': {
       const user = await resolveUser(env, params.sessionToken);
+      const conv = await requireConversation(env, user.id, params.conversationId);
+      if (!isGroupConv(conv)) {
+        const otherId = conv.user1_id === user.id ? conv.user2_id : conv.user1_id;
+        try {
+          const { ensureBotWelcomeIfEmpty } = await import('./chat-systems-bot.js');
+          await ensureBotWelcomeIfEmpty(env, systemsBotApi(), {
+            userId: user.id,
+            conversationId: conv.id,
+            otherUserId: otherId,
+          });
+        } catch (err) {
+          console.error('systems bot welcome failed', err);
+        }
+      }
       return {
         success: true,
         messages: await getMessages(env, user.id, params.conversationId, 80, null),

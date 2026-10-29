@@ -2,9 +2,8 @@ import InputError from '@/components/input-error';
 import AppLayout from '@/layouts/app-layout';
 import SettingsLayout from '@/layouts/settings/layout';
 import { type BreadcrumbItem } from '@/types';
-import { Transition } from '@headlessui/react';
-import { Head, useForm } from '@inertiajs/react';
-import { FormEventHandler, useRef } from 'react';
+import { Head, useForm, usePage } from '@inertiajs/react';
+import { FormEventHandler, useRef, useState } from 'react';
 
 import HeadingSmall from '@/components/heading-small';
 import { Button } from '@/components/ui/button';
@@ -18,12 +17,19 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
+type PasswordPageProps = {
+    mustChangePassword?: boolean;
+    requiresUsername?: boolean;
+    username?: string | null;
+};
+
 export default function Password() {
     const passwordInput = useRef<HTMLInputElement>(null);
-    const currentPasswordInput = useRef<HTMLInputElement>(null);
+    const { mustChangePassword, requiresUsername, username } = usePage().props as PasswordPageProps;
+    const [passwordSaved, setPasswordSaved] = useState(false);
 
-    const { data, setData, errors, put, reset, processing, recentlySuccessful } = useForm({
-        current_password: '',
+    const { data, setData, errors, put, reset, processing } = useForm({
+        username: username || '',
         password: '',
         password_confirmation: '',
     });
@@ -33,16 +39,14 @@ export default function Password() {
 
         put(route('password.update'), {
             preserveScroll: true,
-            onSuccess: () => reset(),
-            onError: (errors) => {
-                if (errors.password) {
+            onSuccess: () => {
+                reset('password', 'password_confirmation');
+                setPasswordSaved(true);
+            },
+            onError: (formErrors) => {
+                if (formErrors.password) {
                     reset('password', 'password_confirmation');
                     passwordInput.current?.focus();
-                }
-
-                if (errors.current_password) {
-                    reset('current_password');
-                    currentPasswordInput.current?.focus();
                 }
             },
         });
@@ -54,25 +58,43 @@ export default function Password() {
 
             <SettingsLayout>
                 <div className="space-y-6">
-                    <HeadingSmall title="เปลี่ยนรหัสผ่าน" description="ใช้รหัสผ่านที่ยาวและซับซ้อนเพื่อความปลอดภัยของบัญชี" />
+                    <HeadingSmall
+                        title={mustChangePassword ? 'ตั้งรหัสผ่านใหม่' : 'เปลี่ยนรหัสผ่าน'}
+                        description={
+                            mustChangePassword
+                                ? requiresUsername
+                                    ? 'บัญชีของคุณยังไม่มีอีเมลจริง กรุณาตั้งชื่อผู้ใช้และรหัสผ่านใหม่ก่อนใช้งานต่อ'
+                                    : 'บัญชีของคุณยังใช้รหัสเริ่มต้น กรุณาตั้งรหัสผ่านใหม่ก่อนใช้งานต่อ'
+                                : 'ใช้รหัสผ่านที่ยาวและซับซ้อนเพื่อความปลอดภัยของบัญชี'
+                        }
+                    />
+
+                    {passwordSaved && (
+                        <div className="rounded-lg border border-muted/40 bg-muted/30 px-4 py-3 text-sm text-muted-foreground opacity-70">
+                            ตั้งรหัสผ่านใหม่แล้ว — สามารถกลับมาแก้ได้ที่หน้านี้
+                        </div>
+                    )}
 
                     <form onSubmit={updatePassword} className="space-y-6">
-                        <div className="grid gap-2">
-                            <Label htmlFor="current_password">รหัสผ่านปัจจุบัน</Label>
-
-                            <Input
-                                id="current_password"
-                                ref={currentPasswordInput}
-                                value={data.current_password}
-                                onChange={(e) => setData('current_password', e.target.value)}
-                                type="password"
-                                className="mt-1 block w-full"
-                                autoComplete="current-password"
-                                placeholder="กรอกรหัสผ่านปัจจุบัน"
-                            />
-
-                            <InputError message={errors.current_password} />
-                        </div>
+                        {requiresUsername && (
+                            <div className="grid gap-2">
+                                <Label htmlFor="username">ชื่อผู้ใช้</Label>
+                                <Input
+                                    id="username"
+                                    value={data.username}
+                                    onChange={(e) => setData('username', e.target.value)}
+                                    type="text"
+                                    className="mt-1 block w-full"
+                                    autoComplete="username"
+                                    placeholder="เช่น somchai.w หรือ nurse01"
+                                    required
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    ใช้ตัวอักษร ตัวเลข และ . _ - ความยาว 3–50 ตัว — ใช้เข้าสู่ระบบแทนอีเมลได้
+                                </p>
+                                <InputError message={errors.username} />
+                            </div>
+                        )}
 
                         <div className="grid gap-2">
                             <Label htmlFor="password">รหัสผ่านใหม่</Label>
@@ -109,16 +131,6 @@ export default function Password() {
 
                         <div className="flex items-center gap-4">
                             <Button disabled={processing}>บันทึกรหัสผ่าน</Button>
-
-                            <Transition
-                                show={recentlySuccessful}
-                                enter="transition ease-in-out"
-                                enterFrom="opacity-0"
-                                leave="transition ease-in-out"
-                                leaveTo="opacity-0"
-                            >
-                                <p className="text-sm text-gray-600">บันทึกแล้ว</p>
-                            </Transition>
                         </div>
                     </form>
                 </div>

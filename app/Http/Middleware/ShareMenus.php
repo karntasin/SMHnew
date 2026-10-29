@@ -71,8 +71,8 @@ class ShareMenus
                         return !$menu->permission_name || $user->can($menu->permission_name);
                     })
                     ->map(function ($menu) use (&$buildTree, $getRouteUrl) {
-                        // Settings Hub: sidebar แสดงลิงก์เดียว ไม่ขยายเมนูย่อย
-                        $children = in_array($menu->route, ['settings.hub', 'km.learn.hub'], true)
+                        // Settings Hub, Learning Hub & HA Hub: sidebar แสดงลิงก์เดียว ไม่ขยายเมนูย่อย
+                        $children = in_array($menu->route, ['settings.hub', 'km.learn.hub', '/ha', 'ha.hub'], true)
                             ? collect()
                             : $buildTree($menu->id)->values();
 

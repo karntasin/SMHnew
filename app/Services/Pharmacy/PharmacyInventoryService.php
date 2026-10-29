@@ -958,7 +958,7 @@ class PharmacyInventoryService
         ?string $note = null,
     ): PharmacyStockMovement {
         if ($qty <= 0) {
-            throw new RuntimeException('จำนวนตัดยาต้องมากกว่า 0');
+            throw new RuntimeException('จำนวนตัดจ่ายต้องมากกว่า 0');
         }
 
         return DB::transaction(function () use ($pharmacyLocationId, $icode, $qty, $reason, $referenceId, $recipient, $unitId, $note) {
@@ -972,7 +972,7 @@ class PharmacyInventoryService
 
             $balance = $this->lockBalance($location->id, $item->id);
             if ((float) $balance->qty_on_hand < $qty) {
-                throw new RuntimeException('สต็อกห้องยาไม่พอสำหรับ '.$item->name.' (คงเหลือ '.$balance->qty_on_hand.' '.$item->baseUnitName().')');
+                throw new RuntimeException('สต็อกคงเหลือไม่พอสำหรับ '.$item->name.' (คงเหลือ '.$balance->qty_on_hand.' '.$item->baseUnitName().')');
             }
 
             $remaining = $qty;
@@ -1013,15 +1013,17 @@ class PharmacyInventoryService
             $balance->qty_on_hand = (float) $balance->qty_on_hand - $qty;
             $balance->save();
 
+            $isNondrug = $item->isNondrug();
+            $noun = $isNondrug ? 'เวชภัณฑ์' : 'ยา';
             $reasonLabels = [
                 'department' => 'เบิกจ่ายให้หน่วยงาน/หอผู้ป่วย',
-                'patient' => 'จ่ายยาผู้ป่วย',
-                'damaged' => 'ตัดยาชำรุด/แตกหัก/เสียหาย',
-                'expired' => 'ตัดยาหมดอายุ/ส่งทำลาย',
+                'patient' => "จ่าย{$noun}ผู้ป่วย",
+                'damaged' => "ตัด{$noun}ชำรุด/แตกหัก/เสียหาย",
+                'expired' => "ตัด{$noun}หมดอายุ/ส่งทำลาย",
                 'borrow' => 'ยืมระหว่างหน่วยงาน/รพ.',
-                'other' => 'ตัดยาออก (อื่นๆ)',
+                'other' => "ตัด{$noun}ออก (อื่นๆ)",
             ];
-            $reasonText = $reasonLabels[$reason] ?? 'ตัดยาออก';
+            $reasonText = $reasonLabels[$reason] ?? "ตัด{$noun}ออก";
             $fullNote = $reasonText . ($recipient ? " [{$recipient}]" : '') . ($note ? " · {$note}" : '');
 
             return PharmacyStockMovement::query()->create([
@@ -1056,7 +1058,7 @@ class PharmacyInventoryService
         ?int $lotId = null,
     ): PharmacyStockMovement {
         if ($qty <= 0) {
-            throw new RuntimeException('จำนวนคืนยาต้องมากกว่า 0');
+            throw new RuntimeException('จำนวนรับคืนต้องมากกว่า 0');
         }
 
         return DB::transaction(function () use ($pharmacyLocationId, $icode, $qty, $reason, $referenceId, $source, $unitId, $expiresAt, $note, $lotId) {
@@ -1121,17 +1123,19 @@ class PharmacyInventoryService
                     'qr_token' => \Illuminate\Support\Str::lower((string) \Illuminate\Support\Str::ulid()),
                     'status' => 'active',
                     'received_by' => Auth::id(),
-                    'notes' => 'รับคืนเข้าห้องยา: ' . ($source ?: 'ผู้ป่วย/แผนก'),
+                    'notes' => 'รับคืนเข้า' . ($item->isNondrug() ? 'จุดจ่าย/คลัง: ' : 'ห้องยา: ') . ($source ?: 'ผู้ป่วย/แผนก'),
                 ]);
             }
 
+            $isNondrug = $item->isNondrug();
+            $noun = $isNondrug ? 'เวชภัณฑ์' : 'ยา';
             $reasonLabels = [
-                'patient_return' => 'ผู้ป่วยนำยามาคืน',
-                'department_return' => 'หน่วยงาน/หอผู้ป่วย คืนยา',
-                'order_cancel' => 'ยกเลิกใบสั่งยา/สั่งผิด',
-                'other_return' => 'รับคืนยา (อื่นๆ)',
+                'patient_return' => "ผู้ป่วยนำ{$noun}มาคืน",
+                'department_return' => "หน่วยงาน/หอผู้ป่วย คืน{$noun}",
+                'order_cancel' => "ยกเลิกใบสั่ง{$noun}/สั่งผิด",
+                'other_return' => "รับคืน{$noun} (อื่นๆ)",
             ];
-            $reasonText = $reasonLabels[$reason] ?? 'รับคืนยา';
+            $reasonText = $reasonLabels[$reason] ?? "รับคืน{$noun}";
             $fullNote = $reasonText . ($source ? " [{$source}]" : '') . ($note ? " · {$note}" : '');
 
             return PharmacyStockMovement::query()->create([

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Head, Link, router } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import { Button } from '@/components/ui/button';
+import { BackButton } from '@/components/ui/back-button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -177,9 +178,7 @@ export default function LeaveIndex({
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2 mb-1">
-                  <Link href="/admin-hub" className="text-muted-foreground hover:text-primary">
-                    <ArrowLeft className="h-4 w-4" />
-                  </Link>
+                  <BackButton fallbackUrl="/admin-hub" iconOnly />
                   <h1 className="text-2xl font-bold tracking-tight">ระบบบันทึกการลา</h1>
                 </div>
                 <p className="text-muted-foreground text-sm">ตามระเบียบกองทัพบก ว่าด้วยการลา พ.ศ. ๒๕๕๖</p>

@@ -4,6 +4,7 @@ import DocumentShell from './DocumentShell';
 import { documentBreadcrumbs } from './DocumentSubNav';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { BackButton } from '@/components/ui/back-button';
 import { Badge } from '@/components/ui/badge';
 import {
     ArrowLeft, FileText, CheckCircle, Send, Eye, UserPlus, Users, CheckCheck,
@@ -268,11 +269,7 @@ export default function Show({ document, directors, departments, users = [], cur
         >
             <div className="mx-auto max-w-6xl space-y-6">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                    <Button asChild variant="ghost" className="rounded-xl text-slate-600">
-                        <Link href={route('documents.index')}>
-                            <ArrowLeft className="mr-2 h-4 w-4" /> กลับรายการ
-                        </Link>
-                    </Button>
+                    <BackButton fallbackUrl={route('documents.index')} label="กลับรายการ" className="rounded-xl text-slate-600" />
                     {['completed', 'approved', 'rejected', 'distributed'].includes(document.status) && (
                         <Button
                             className="rounded-xl bg-stone-700 hover:bg-stone-800"
@@ -310,9 +307,7 @@ export default function Show({ document, directors, departments, users = [], cur
                 </Card>
 
                 <div className="flex justify-between items-center">
-                    <Link href={route('documents.index')} className="text-muted-foreground hover:text-foreground flex items-center gap-2">
-                        <ArrowLeft className="w-4 h-4" /> กลับไปหน้ารายการ
-                    </Link>
+                    <BackButton fallbackUrl={route('documents.index')} label="กลับไปหน้ารายการ" />
                     <div className="flex flex-wrap gap-2 justify-end">
                         {/* ลายเซ็น/ตราประทับ */}
                         <Dialog open={isSignatureOpen} onOpenChange={setIsSignatureOpen}>

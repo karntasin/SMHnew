@@ -133,6 +133,7 @@ export default function List({ rooms = [], bookings = [], stats, currentFilter =
 
     return (
         <AppLayout breadcrumbs={[
+            { title: 'งานธุรการ', href: '/admin-hub' },
             { title: 'ระบบจองห้องประชุม', href: '/administration/rooms' },
             { title: currentFilter === 'my' ? 'การจองของฉัน' : 'รายการจอง', href: '#' },
         ]}>

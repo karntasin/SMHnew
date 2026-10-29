@@ -134,6 +134,7 @@ export function Modal({
     children,
     footer,
     wide,
+    extraWide,
 }: {
     open: boolean;
     onClose: () => void;
@@ -141,10 +142,11 @@ export function Modal({
     children: React.ReactNode;
     footer?: React.ReactNode;
     wide?: boolean;
+    extraWide?: boolean;
 }) {
     return (
         <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-            <DialogContent className={cn('max-h-[90vh] overflow-y-auto', wide ? 'sm:max-w-3xl' : 'sm:max-w-lg')}>
+            <DialogContent className={cn('max-h-[90vh] overflow-y-auto', extraWide ? 'sm:max-w-5xl' : wide ? 'sm:max-w-3xl' : 'sm:max-w-lg')}>
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
                 </DialogHeader>

@@ -3,6 +3,7 @@ import AppLayout from '@/layouts/app-layout';
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { BackButton } from '@/components/ui/back-button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -66,6 +67,7 @@ export default function DirectorReview({ document, pendingAction, userSignatures
 
     return (
         <AppLayout breadcrumbs={[
+            { title: 'งานธุรการ', href: '/admin-hub' },
             { title: 'ระบบรับส่งหนังสือ', href: route('documents.index') },
             { title: 'กล่องงานผู้อำนวยการ', href: route('documents.director.index') },
             { title: 'พิจารณาและลงนาม', href: '#' },
@@ -74,9 +76,7 @@ export default function DirectorReview({ document, pendingAction, userSignatures
 
             <div className="p-6 max-w-5xl mx-auto space-y-6">
                 <div className="flex flex-wrap justify-between items-center gap-4">
-                    <Link href={route('documents.director.index')} className="text-muted-foreground hover:text-foreground flex items-center gap-2">
-                        <ArrowLeft className="w-4 h-4" /> กลับกล่องงาน
-                    </Link>
+                    <BackButton fallbackUrl={route('documents.director.index')} label="กลับกล่องงาน" />
                     <Badge className="bg-amber-100 text-amber-800">รอพิจารณาและลงนาม</Badge>
                 </div>
 

@@ -18,6 +18,7 @@ export default function CalendarPage() {
     return (
         <AppLayout
             breadcrumbs={[
+                { title: 'งานธุรการ', href: '/admin-hub' },
                 { title: 'ระบบจองห้องประชุม', href: '/administration/rooms' },
                 { title: 'ปฏิทินการจอง', href: '/administration/rooms/calendar' },
             ]}

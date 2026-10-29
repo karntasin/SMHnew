@@ -5,12 +5,14 @@ import AppLayout from '@/layouts/app-layout';
 import { Head, Link, useForm } from '@inertiajs/react';
 
 import { Button } from '@/components/ui/button';
+import { BackButton } from '@/components/ui/back-button';
 
 import { Input } from '@/components/ui/input';
 
 import { Label } from '@/components/ui/label';
 
 import { Textarea } from '@/components/ui/textarea';
+import { VoiceTextInput, VoiceTextarea } from '@/components/voice';
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
@@ -93,11 +95,9 @@ export default function Create({ categories, priorities }: CreateProps) {
         <AppLayout
 
             breadcrumbs={[
-
+                { title: 'งานธุรการ', href: '/admin-hub' },
                 { title: 'ระบบแจ้งซ่อม', href: route('maintenance.dashboard') },
-
                 { title: 'แจ้งซ่อมใหม่', href: '#' },
-
             ]}
 
         >
@@ -146,18 +146,12 @@ export default function Create({ categories, priorities }: CreateProps) {
 
                                     <Label htmlFor="title">หัวข้อการแจ้งซ่อม</Label>
 
-                                    <Input
-
+                                    <VoiceTextInput
                                         id="title"
-
                                         className="rounded-xl"
-
                                         value={data.title}
-
-                                        onChange={(e) => setData('title', e.target.value)}
-
+                                        onChange={(val) => setData('title', val)}
                                         placeholder="เช่น แอร์เสียห้องประชุม"
-
                                     />
 
                                     {errors.title && <p className="text-sm text-red-500">{errors.title}</p>}
@@ -170,18 +164,12 @@ export default function Create({ categories, priorities }: CreateProps) {
 
                                     <Label htmlFor="location">สถานที่ / จุดที่พบปัญหา</Label>
 
-                                    <Input
-
+                                    <VoiceTextInput
                                         id="location"
-
                                         className="rounded-xl"
-
                                         value={data.location}
-
-                                        onChange={(e) => setData('location', e.target.value)}
-
+                                        onChange={(val) => setData('location', val)}
                                         placeholder="เช่น อาคาร A ห้อง 101"
-
                                     />
 
                                     {errors.location && <p className="text-sm text-red-500">{errors.location}</p>}
@@ -322,20 +310,13 @@ export default function Create({ categories, priorities }: CreateProps) {
 
                                     <Label htmlFor="description">รายละเอียดปัญหา</Label>
 
-                                    <Textarea
-
+                                    <VoiceTextarea
                                         id="description"
-
-                                        className="rounded-xl"
-
+                                        className="rounded-xl min-h-[96px]"
                                         value={data.description}
-
-                                        onChange={(e) => setData('description', e.target.value)}
-
+                                        onChange={(val) => setData('description', val)}
                                         placeholder="ระบุรายละเอียดของปัญหา..."
-
                                         rows={4}
-
                                     />
 
                                     {errors.description && <p className="text-sm text-red-500">{errors.description}</p>}
@@ -371,17 +352,7 @@ export default function Create({ categories, priorities }: CreateProps) {
 
 
                                 <div className="flex justify-end gap-4">
-
-                                    <Link href={route('maintenance.dashboard')}>
-
-                                        <Button variant="outline" type="button" className="rounded-xl">
-
-                                            ยกเลิก
-
-                                        </Button>
-
-                                    </Link>
-
+                                    <BackButton fallbackUrl={route('maintenance.dashboard')} label="ยกเลิก" variant="outline" className="rounded-xl" />
                                     <Button type="submit" disabled={processing} className="rounded-xl bg-orange-600 hover:bg-orange-700">
 
                                         บันทึกแจ้งซ่อม

@@ -2,9 +2,11 @@ import React from 'react';
 import AppLayout from '@/layouts/app-layout';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
+import { BackButton } from '@/components/ui/back-button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { VoiceTextInput, VoiceTextarea } from '@/components/voice';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -33,6 +35,7 @@ export default function Edit({ maintenanceRequest, categories, priorities }: Edi
 
     return (
         <AppLayout breadcrumbs={[
+            { title: 'งานธุรการ', href: '/admin-hub' },
             { title: 'ระบบแจ้งซ่อม', href: route('maintenance.dashboard') },
             { title: 'รายการของฉัน', href: route('maintenance.requests.my') },
             { title: 'แก้ไขแจ้งซ่อม', href: '#' }
@@ -48,10 +51,10 @@ export default function Edit({ maintenanceRequest, categories, priorities }: Edi
                         <form onSubmit={handleSubmit} className="space-y-6">
                             <div className="space-y-2">
                                 <Label htmlFor="title">หัวข้อการแจ้งซ่อม</Label>
-                                <Input
+                                <VoiceTextInput
                                     id="title"
                                     value={data.title}
-                                    onChange={e => setData('title', e.target.value)}
+                                    onChange={val => setData('title', val)}
                                     placeholder="เช่น แอร์เสียห้องประชุม"
                                 />
                                 {errors.title && <p className="text-red-500 text-sm">{errors.title}</p>}
@@ -59,10 +62,10 @@ export default function Edit({ maintenanceRequest, categories, priorities }: Edi
 
                             <div className="space-y-2">
                                 <Label htmlFor="location">สถานที่ / จุดที่พบปัญหา</Label>
-                                <Input
+                                <VoiceTextInput
                                     id="location"
                                     value={data.location}
-                                    onChange={e => setData('location', e.target.value)}
+                                    onChange={val => setData('location', val)}
                                     placeholder="เช่น อาคาร A ห้อง 101"
                                 />
                                 {errors.location && <p className="text-red-500 text-sm">{errors.location}</p>}
@@ -106,10 +109,10 @@ export default function Edit({ maintenanceRequest, categories, priorities }: Edi
 
                             <div className="space-y-2">
                                 <Label htmlFor="description">รายละเอียดปัญหา</Label>
-                                <Textarea
+                                <VoiceTextarea
                                     id="description"
                                     value={data.description}
-                                    onChange={e => setData('description', e.target.value)}
+                                    onChange={val => setData('description', val)}
                                     placeholder="ระบุรายละเอียดของปัญหา..."
                                     rows={4}
                                 />
@@ -117,9 +120,7 @@ export default function Edit({ maintenanceRequest, categories, priorities }: Edi
                             </div>
 
                             <div className="flex justify-end gap-4">
-                                <Link href={route('maintenance.requests.my')}>
-                                    <Button variant="outline" type="button">ยกเลิก</Button>
-                                </Link>
+                                <BackButton fallbackUrl={route('maintenance.requests.my')} label="ยกเลิก" variant="outline" />
                                 <Button type="submit" disabled={processing}>
                                     บันทึกการแก้ไข
                                 </Button>

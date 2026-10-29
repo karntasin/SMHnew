@@ -26,6 +26,35 @@
 
     <meta name="app-base-url" content="{{ rtrim(asset(''), '/') }}">
 
+    <!-- PWA & Mobile Web App: Dynamic Manifest & Identity separation for Calendar vs SMH -->
+    @if (request()->is('calendar*') || request()->is('cal*'))
+        <meta name="theme-color" content="#0284c7">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="default">
+        <meta name="apple-mobile-web-app-title" content="ปฏิทิน SMH">
+        <link rel="apple-touch-icon" href="{{ asset('icons/calendar-192.png') }}">
+        <link rel="manifest" href="{{ asset('calendar-manifest.webmanifest') }}">
+    @else
+        <meta name="theme-color" content="#7c3aed">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="default">
+        <meta name="apple-mobile-web-app-title" content="SMH">
+        <link rel="apple-touch-icon" href="{{ asset('logosmh.png') }}">
+        <link rel="manifest" href="{{ asset('manifest.json') }}">
+    @endif
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').catch(err => {
+                    console.log('SW registration skipped or error:', err);
+                });
+            });
+        }
+    </script>
+
 
     @routes
     @viteReactRefresh

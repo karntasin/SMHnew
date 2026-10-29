@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import AppLayout from '@/layouts/app-layout';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
+import { BackButton } from '@/components/ui/back-button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -179,6 +180,7 @@ export default function Show({ maintenanceRequest, technicians = [], canAssign =
 
     return (
         <AppLayout breadcrumbs={[
+            { title: 'งานธุรการ', href: '/admin-hub' },
             { title: 'ระบบแจ้งซ่อม', href: route('maintenance.dashboard') },
             { title: 'รายการแจ้งซ่อม', href: route('maintenance.requests.index') },
             { title: maintenanceRequest.ticket_number, href: '#' }
@@ -189,11 +191,7 @@ export default function Show({ maintenanceRequest, technicians = [], canAssign =
                 {/* Header */}
                 <div className="flex items-center justify-between mb-6">
                     <div className="flex items-center gap-4">
-                        <Link href={route('maintenance.requests.index')}>
-                            <Button variant="outline" size="icon">
-                                <ArrowLeft className="h-4 w-4" />
-                            </Button>
-                        </Link>
+                        <BackButton fallbackUrl={route('maintenance.dashboard')} iconOnly variant="outline" />
                         <div>
                             <div className="flex items-center gap-3">
                                 <h1 className="text-2xl font-bold">{maintenanceRequest.ticket_number}</h1>

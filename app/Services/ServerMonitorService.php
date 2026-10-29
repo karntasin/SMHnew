@@ -145,13 +145,14 @@ class ServerMonitorService
 
         foreach ($servers as $server) {
             $key = $server['key'];
+            $keys = $key === 'hosxp_backup' ? [$key, 'hosxp'] : [$key];
             $latest = ServerMonitorSnapshot::query()
-                ->where('server_key', $key)
+                ->whereIn('server_key', $keys)
                 ->orderByDesc('checked_at')
                 ->first();
 
             $history = ServerMonitorSnapshot::query()
-                ->where('server_key', $key)
+                ->whereIn('server_key', $keys)
                 ->where('checked_at', '>=', $since)
                 ->orderBy('checked_at')
                 ->get(['checked_at', 'status', 'ping_ms', 'mysql_ms', 'ping_ok', 'mysql_ok', 'cpu_percent', 'memory_percent', 'disk_percent', 'snmp_ok']);

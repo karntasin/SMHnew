@@ -30,12 +30,14 @@ class MenusHubController extends Controller
             'collapsed' => ['present', 'array', 'max:500'],
             'collapsed.*' => ['string', 'regex:/^(child|root)-\d+$/', 'max:64'],
             'tones' => ['present', 'array', 'max:500'],
+            'viewMode' => ['sometimes', 'nullable', 'string', 'in:all,main,sub'],
         ]);
 
         $layout = [
             'order' => array_values(array_unique($data['order'])),
             'collapsed' => array_values(array_unique($data['collapsed'])),
             'tones' => $this->tones($data['tones']),
+            'viewMode' => in_array($data['viewMode'] ?? '', ['all', 'main', 'sub'], true) ? $data['viewMode'] : 'all',
         ];
 
         UserHubLayout::query()->updateOrCreate(
@@ -56,7 +58,7 @@ class MenusHubController extends Controller
     }
 
     /**
-     * @return array{order: list<string>, collapsed: list<string>, tones: array<string, int>}
+     * @return array{order: list<string>, collapsed: list<string>, tones: array<string, int>, viewMode: string}
      */
     private function normalize(mixed $layout): array
     {
@@ -66,6 +68,7 @@ class MenusHubController extends Controller
             'order' => $this->cardKeys($layout['order'] ?? []),
             'collapsed' => $this->cardKeys($layout['collapsed'] ?? []),
             'tones' => $this->tones($layout['tones'] ?? []),
+            'viewMode' => in_array($layout['viewMode'] ?? '', ['all', 'main', 'sub'], true) ? $layout['viewMode'] : 'all',
         ];
     }
 

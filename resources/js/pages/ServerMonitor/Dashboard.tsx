@@ -207,6 +207,7 @@ function MetricRing({
 function StatTile({
     icon: Icon,
     label,
+    description,
     value,
     unit,
     ok,
@@ -217,6 +218,7 @@ function StatTile({
 }: {
     icon: React.ElementType;
     label: string;
+    description?: string;
     value: string;
     unit?: string;
     ok?: boolean;
@@ -246,6 +248,7 @@ function StatTile({
                     <span className="text-4xl font-bold tabular-nums tracking-tight text-white">{value}</span>
                     {unit && <span className="text-sm text-slate-500">{unit}</span>}
                 </div>
+                {description && <p className="mt-2 text-xs leading-relaxed text-slate-400">{description}</p>}
                 {children}
             </div>
         </div>
@@ -329,14 +332,16 @@ export default function ServerMonitorDashboard({ initial, ranges }: Props) {
         return () => clearInterval(interval);
     }, [fetchMetrics, range, data.refresh_seconds]);
 
-    const primary = data.current[0];
-    const primarySeries = data.series[0];
-    const primarySummary = data.summary[0];
-    const status = primary?.latest?.status ?? 'offline';
+    const [selectedKey, setSelectedKey] = useState<string>(() => initial.current[0]?.key ?? '');
+
+    const currentServer = data.current.find((s) => s.key === selectedKey) || data.current[0];
+    const currentSeries = data.series.find((s) => s.key === currentServer?.key) || data.series[0];
+    const currentSummary = data.summary.find((s) => s.key === currentServer?.key) || data.summary[0];
+    const status = currentServer?.latest?.status ?? 'offline';
     const statusCfg = STATUS_CONFIG[status];
     const StatusIcon = statusCfg.icon;
 
-    const chartData = (primarySeries?.points ?? []).map((p) => ({
+    const chartData = (currentSeries?.points ?? []).map((p) => ({
         ...p,
         label: p.time,
         status_value: p.status === 'online' ? 1 : p.status === 'degraded' ? 0.5 : 0,
@@ -374,13 +379,13 @@ export default function ServerMonitorDashboard({ initial, ranges }: Props) {
                                         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75" />
                                         <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-400" />
                                     </span>
-                                    Live NOC Monitor
+                                    ศูนย์เฝ้าระวังเซิร์ฟเวอร์แบบเรียลไทม์ (Live Monitor)
                                 </div>
                                 <h1 className="bg-gradient-to-r from-white via-cyan-100 to-violet-200 bg-clip-text text-3xl font-bold tracking-tight text-transparent sm:text-4xl">
                                     ศูนย์ควบคุมเซิร์ฟเวอร์ HOSxP
                                 </h1>
-                                <p className="mt-2 max-w-xl text-sm text-slate-400">
-                                    ตรวจสอบ Ping · MySQL · SNMP แบบเรียลไทม์ — อัปเดตทุก {data.refresh_seconds || 10} วินาที
+                                <p className="mt-2 max-w-2xl text-sm text-slate-400 leading-relaxed">
+                                    ระบบติดตามสถานะเซิร์ฟเวอร์ฐานข้อมูล ตรวจสอบสัญญาณเครือข่าย (Ping), ความเร็วฐานข้อมูล (MySQL) และสถานะฮาร์ดแวร์ (SNMP) อัตโนมัติทุก {data.refresh_seconds || 10} วินาที
                                 </p>
                             </div>
 
@@ -430,7 +435,96 @@ export default function ServerMonitorDashboard({ initial, ranges }: Props) {
                 </div>
 
                 <div className="relative mx-auto max-w-7xl space-y-6 px-6 py-8">
-                    {primary && (
+                    {/* Server selector / overview cards */}
+                    {data.current.length > 0 && (
+                        <div>
+                            <div className="mb-3 flex items-center justify-between">
+                                <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                                    เซิร์ฟเวอร์ในระบบ ({data.current.length})
+                                </span>
+                                <span className="text-xs text-slate-500">
+                                    คลิกการ์ดเพื่อดูรายละเอียดและกราฟของแต่ละเครื่อง
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                {data.current.map((srv) => {
+                                    const isSelected = srv.key === currentServer?.key;
+                                    const srvStatus = srv.latest?.status ?? 'offline';
+                                    const cfg = STATUS_CONFIG[srvStatus];
+                                    const SrvIcon = cfg.icon;
+                                    return (
+                                        <button
+                                            key={srv.key}
+                                            type="button"
+                                            onClick={() => setSelectedKey(srv.key)}
+                                            className={cn(
+                                                'group relative text-left overflow-hidden rounded-2xl border p-4 backdrop-blur-xl transition-all duration-200 cursor-pointer',
+                                                isSelected
+                                                    ? 'border-cyan-400/60 bg-slate-900/90 shadow-[0_0_30px_rgba(34,211,238,0.15)] ring-1 ring-cyan-400/50'
+                                                    : 'border-white/10 bg-slate-900/40 hover:border-white/20 hover:bg-slate-900/60'
+                                            )}
+                                        >
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={cn(
+                                                        'flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 transition',
+                                                        isSelected ? 'bg-cyan-500/20 text-cyan-300' : 'bg-slate-800/60 text-slate-400'
+                                                    )}>
+                                                        <Server className="h-5 w-5" />
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex items-center gap-2">
+                                                            <h3 className="font-semibold text-white text-sm">{srv.name}</h3>
+                                                            {isSelected && (
+                                                                <span className="rounded bg-cyan-400/20 px-1.5 py-0.5 text-[10px] font-medium text-cyan-300">
+                                                                    กำลังดู
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <p className="font-mono text-xs text-cyan-400/70">{srv.host}</p>
+                                                    </div>
+                                                </div>
+                                                <span className={cn('inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-medium', cfg.badge)}>
+                                                    <SrvIcon className="h-3 w-3" />
+                                                    {cfg.label}
+                                                </span>
+                                            </div>
+
+                                            {/* Quick metrics row */}
+                                            <div className="mt-3 grid grid-cols-4 gap-2 rounded-xl border border-white/5 bg-black/30 p-2 text-center text-xs">
+                                                <div>
+                                                    <span className="text-[10px] text-slate-500 block">Ping</span>
+                                                    <span className={cn('font-bold font-mono', srv.latest?.ping_ok ? 'text-white' : 'text-red-400')}>
+                                                        {srv.latest?.ping_ms != null ? `${srv.latest.ping_ms}ms` : '—'}
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-[10px] text-slate-500 block">MySQL</span>
+                                                    <span className={cn('font-bold font-mono', srv.latest?.mysql_ok ? 'text-white' : 'text-red-400')}>
+                                                        {srv.latest?.mysql_ms != null ? `${srv.latest.mysql_ms}ms` : '—'}
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-[10px] text-slate-500 block">CPU</span>
+                                                    <span className="font-bold font-mono text-cyan-300">
+                                                        {srv.latest?.cpu_percent != null ? `${srv.latest.cpu_percent}%` : '—'}
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-[10px] text-slate-500 block">RAM</span>
+                                                    <span className="font-bold font-mono text-violet-300">
+                                                        {srv.latest?.memory_percent != null ? `${srv.latest.memory_percent}%` : '—'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {currentServer && (
                         <>
                             {/* Hero status card */}
                             <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-900/40 backdrop-blur-xl">
@@ -445,21 +539,21 @@ export default function ServerMonitorDashboard({ initial, ranges }: Props) {
                                         </div>
                                         <div>
                                             <div className="flex flex-wrap items-center gap-3">
-                                                <h2 className="text-xl font-bold text-white">{primary.name}</h2>
+                                                <h2 className="text-xl font-bold text-white">{currentServer.name}</h2>
                                                 <span className={cn('inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold', statusCfg.badge)}>
                                                     <StatusIcon className="h-3.5 w-3.5" />
                                                     {statusCfg.label}
                                                 </span>
                                             </div>
-                                            <p className="mt-1 font-mono text-sm text-cyan-400/80">{primary.host}</p>
-                                            {primary.latest?.snmp_sys_name && (
+                                            <p className="mt-1 font-mono text-sm text-cyan-400/80">{currentServer.host}</p>
+                                            {currentServer.latest?.snmp_sys_name && (
                                                 <p className="mt-1 text-xs text-slate-500">
-                                                    Hostname: <span className="text-slate-400">{primary.latest.snmp_sys_name}</span>
+                                                    Hostname: <span className="text-slate-400">{currentServer.latest.snmp_sys_name}</span>
                                                 </p>
                                             )}
-                                            {primary.latest?.message && (
+                                            {currentServer.latest?.message && (
                                                 <p className="mt-3 max-w-2xl rounded-xl border border-white/5 bg-black/20 px-3 py-2 text-xs leading-relaxed text-slate-400">
-                                                    {primary.latest.message}
+                                                    {currentServer.latest.message}
                                                 </p>
                                             )}
                                         </div>
@@ -467,20 +561,23 @@ export default function ServerMonitorDashboard({ initial, ranges }: Props) {
 
                                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                                         <div className="rounded-xl border border-white/5 bg-black/20 px-4 py-3 text-center">
-                                            <p className="text-[10px] uppercase tracking-widest text-slate-500">Uptime ช่วง</p>
+                                            <p className="text-[10px] uppercase tracking-wider text-slate-400">ความพร้อมใช้งาน (Uptime)</p>
                                             <p className="mt-1 text-2xl font-bold text-white">
-                                                {primarySummary?.uptime_percent != null ? `${primarySummary.uptime_percent}%` : '—'}
+                                                {currentSummary?.uptime_percent != null ? `${currentSummary.uptime_percent}%` : '—'}
                                             </p>
+                                            <span className="mt-0.5 block text-[10px] text-slate-500">สัดส่วนเวลาที่ระบบออนไลน์</span>
                                         </div>
                                         <div className="rounded-xl border border-white/5 bg-black/20 px-4 py-3 text-center">
-                                            <p className="text-[10px] uppercase tracking-widest text-slate-500">Server Up</p>
+                                            <p className="text-[10px] uppercase tracking-wider text-slate-400">เปิดทำงานต่อเนื่อง</p>
                                             <p className="mt-1 text-lg font-bold text-cyan-300">
-                                                {formatUptime(primary.latest?.snmp_uptime_seconds ?? null)}
+                                                {formatUptime(currentServer.latest?.snmp_uptime_seconds ?? null)}
                                             </p>
+                                            <span className="mt-0.5 block text-[10px] text-slate-500">เวลาตั้งแต่เปิดเครื่องล่าสุด</span>
                                         </div>
                                         <div className="col-span-2 rounded-xl border border-white/5 bg-black/20 px-4 py-3 text-center sm:col-span-1">
-                                            <p className="text-[10px] uppercase tracking-widest text-slate-500">Samples</p>
-                                            <p className="mt-1 text-2xl font-bold text-white">{primarySummary?.samples ?? 0}</p>
+                                            <p className="text-[10px] uppercase tracking-wider text-slate-400">รอบที่สแกน</p>
+                                            <p className="mt-1 text-2xl font-bold text-white">{currentSummary?.samples ?? 0}</p>
+                                            <span className="mt-0.5 block text-[10px] text-slate-500">จำนวนครั้งที่บันทึกข้อมูล</span>
                                         </div>
                                     </div>
                                 </div>
@@ -490,62 +587,69 @@ export default function ServerMonitorDashboard({ initial, ranges }: Props) {
                             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                 <StatTile
                                     icon={Wifi}
-                                    label="Network Ping"
-                                    value={primary.latest?.ping_ms != null ? String(primary.latest.ping_ms) : '—'}
+                                    label="ความเร็วเครือข่าย (Network Ping)"
+                                    description="เวลาส่งสัญญาณไป-กลับเครือข่าย ยิ่งน้อยยิ่งตอบสนองไว (เกณฑ์ปกติ < 50ms)"
+                                    value={currentServer.latest?.ping_ms != null ? String(currentServer.latest.ping_ms) : '—'}
                                     unit="ms"
-                                    ok={primary.latest?.ping_ok}
-                                    okText="ตอบสนองปกติ"
-                                    failText="ไม่ตอบสนอง"
+                                    ok={currentServer.latest?.ping_ok}
+                                    okText="สัญญาณเครือข่ายตอบสนองปกติ"
+                                    failText="เครือข่ายไม่ตอบสนอง"
                                     accent="from-blue-600/20 to-transparent"
                                 />
                                 <StatTile
                                     icon={Database}
-                                    label="MySQL Latency"
-                                    value={primary.latest?.mysql_ms != null ? String(primary.latest.mysql_ms) : '—'}
+                                    label="ความเร็วฐานข้อมูล (MySQL Latency)"
+                                    description="เวลาตอบสนองการสืบค้นข้อมูลจริงของฐานข้อมูล HOSxP (เกณฑ์ปกติ < 50ms)"
+                                    value={currentServer.latest?.mysql_ms != null ? String(currentServer.latest.mysql_ms) : '—'}
                                     unit="ms"
-                                    ok={primary.latest?.mysql_ok ?? undefined}
-                                    okText="เชื่อมต่อได้"
-                                    failText="เชื่อมต่อไม่ได้"
+                                    ok={currentServer.latest?.mysql_ok ?? undefined}
+                                    okText="เชื่อมต่อฐานข้อมูลได้ปกติ"
+                                    failText="ไม่สามารถเชื่อมต่อฐานข้อมูลได้"
                                     accent="from-violet-600/20 to-transparent"
                                 >
-                                    {primary.latest?.ports?.map((p) => (
+                                    {currentServer.latest?.ports?.map((p) => (
                                         <p key={p.port} className="mt-2 text-xs text-slate-500">
                                             <span className={p.open ? 'text-emerald-400' : 'text-red-400'}>
                                                 {p.open ? '●' : '○'}
                                             </span>{' '}
-                                            {p.label} :{p.port}
+                                            พอร์ตบริการ {p.label} :{p.port} ({p.open ? 'เปิดใช้งาน' : 'ปิดอยู่'})
                                         </p>
                                     ))}
                                 </StatTile>
                             </div>
 
                             {/* SNMP resource rings */}
-                            {primary.latest?.snmp_ok && (
+                            {currentServer.latest?.snmp_ok && (
                                 <div>
-                                    <div className="mb-4 flex items-center gap-2">
-                                        <Activity className="h-4 w-4 text-cyan-400" />
-                                        <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
-                                            ทรัพยากรระบบ (SNMP)
-                                        </h3>
+                                    <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <Activity className="h-4 w-4 text-cyan-400" />
+                                            <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-300">
+                                                ทรัพยากรระบบและฮาร์ดแวร์ (SNMP Metrics)
+                                            </h3>
+                                        </div>
+                                        <span className="text-xs text-slate-500">
+                                            ตรวจวัดภาระงาน CPU, หน่วยความจำ RAM และพื้นที่ดิสก์แบบเรียลไทม์
+                                        </span>
                                     </div>
                                     <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                                         <MetricRing
-                                            label="CPU Load"
-                                            value={primary.latest.cpu_percent}
+                                            label="ภาระงานซีพียู (CPU)"
+                                            value={currentServer.latest.cpu_percent}
                                             icon={Cpu}
-                                            sublabel="โหลดเฉลี่ยจาก snmpd"
+                                            sublabel="ภาระงานประมวลผลปัจจุบัน (ควรน้อยกว่า 80%)"
                                         />
                                         <MetricRing
-                                            label="Memory"
-                                            value={primary.latest.memory_percent}
+                                            label="หน่วยความจำ (RAM)"
+                                            value={currentServer.latest.memory_percent}
                                             icon={Activity}
-                                            sublabel="หน่วยความจำที่ใช้งาน"
+                                            sublabel="สัดส่วน RAM ที่ถูกใช้งานโดย Service ต่างๆ"
                                         />
                                         <MetricRing
-                                            label="Disk /"
-                                            value={primary.latest.disk_percent}
+                                            label="พื้นที่ดิสก์ (Disk /)"
+                                            value={currentServer.latest.disk_percent}
                                             icon={HardDrive}
-                                            sublabel={primary.latest.snmp_sys_name ?? 'Root partition'}
+                                            sublabel={`พาร์ติชันหลัก Root ${currentServer.latest.snmp_sys_name ? `(${currentServer.latest.snmp_sys_name})` : ''}`}
                                         />
                                     </div>
                                 </div>
@@ -556,8 +660,8 @@ export default function ServerMonitorDashboard({ initial, ranges }: Props) {
                     {/* Charts */}
                     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
                         <ChartPanel
-                            title="Latency Timeline"
-                            description="Ping vs MySQL response time"
+                            title="ไทม์ไลน์ความเร็วการตอบสนอง (Latency Timeline)"
+                            description="เปรียบเทียบเวลาตอบสนองระหว่างสัญญาณเครือข่าย (Ping) และฐานข้อมูล (MySQL) หน่วยมิลลิวินาที (ms)"
                             hasData={chartData.length > 0}
                             empty="ยังไม่มีข้อมูล — กด สแกนทันที หรือรอ scheduler"
                         >
@@ -577,7 +681,7 @@ export default function ServerMonitorDashboard({ initial, ranges }: Props) {
                                     <Line
                                         type="monotone"
                                         dataKey="ping_ms"
-                                        name="Ping"
+                                        name="เครือข่าย (Ping)"
                                         stroke="#22d3ee"
                                         strokeWidth={2}
                                         dot={false}
@@ -587,7 +691,7 @@ export default function ServerMonitorDashboard({ initial, ranges }: Props) {
                                     <Line
                                         type="monotone"
                                         dataKey="mysql_ms"
-                                        name="MySQL"
+                                        name="ฐานข้อมูล (MySQL)"
                                         stroke="#a78bfa"
                                         strokeWidth={2}
                                         dot={false}
@@ -599,8 +703,8 @@ export default function ServerMonitorDashboard({ initial, ranges }: Props) {
                         </ChartPanel>
 
                         <ChartPanel
-                            title="Availability"
-                            description="สถานะ online / degraded / offline"
+                            title="ประวัติความพร้อมให้บริการ (Availability)"
+                            description="ประวัติสถานะการเปิดให้บริการย้อนหลัง: ออนไลน์ (ปกติ) / ลดประสิทธิภาพ / ออฟไลน์ (หยุดทำงาน)"
                             hasData={chartData.length > 0}
                             empty="ยังไม่มีข้อมูล"
                         >
@@ -646,11 +750,11 @@ export default function ServerMonitorDashboard({ initial, ranges }: Props) {
                             <Clock className="h-3.5 w-3.5" />
                             <span>
                                 อัปเดต UI: {lastRefresh.toLocaleTimeString('th-TH')}
-                                {primary?.latest?.checked_at && ` · สแกนล่าสุด: ${primary.latest.checked_at}`}
+                                {currentServer?.latest?.checked_at && ` · สแกนล่าสุด: ${currentServer.latest.checked_at}`}
                             </span>
                         </div>
                         <p className="text-center sm:text-right">
-                            SNMP จากเซิร์ฟเวอร์ปลายทาง · Disk ที่ <code className="rounded bg-white/5 px-1 text-cyan-400">/</code> · Ping/MySQL จากเซิร์ฟเวอร์แอป
+                            ดึงข้อมูลทรัพยากรผ่าน SNMP จากเซิร์ฟเวอร์ปลายทาง · พื้นที่ดิสก์ Root <code className="rounded bg-white/5 px-1 text-cyan-400">/</code> · ทดสอบ Ping และ MySQL จากเครื่องแอป (192.168.1.214)
                         </p>
                     </div>
                 </div>

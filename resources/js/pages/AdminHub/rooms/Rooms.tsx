@@ -135,6 +135,7 @@ export default function Rooms({ rooms = [], facilityOptions = {} }: Props) {
     return (
         <AppLayout
             breadcrumbs={[
+                { title: 'งานธุรการ', href: '/admin-hub' },
                 { title: 'ระบบจองห้องประชุม', href: '/administration/rooms' },
                 { title: 'ตั้งค่าห้องประชุม', href: '/administration/rooms/settings' },
             ]}

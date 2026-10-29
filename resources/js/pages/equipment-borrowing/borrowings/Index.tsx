@@ -36,6 +36,7 @@ export default function BorrowingsIndex({ borrowings, filters, statusOptions }: 
 
     return (
         <AppLayout breadcrumbs={[
+            { title: 'งานธุรการ', href: '/admin-hub' },
             { title: 'ยืมอุปกรณ์แพทย์', href: route('equipment-borrowing.dashboard') },
             { title: 'รายการยืมทั้งหมด', href: '#' },
         ]}>

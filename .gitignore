@@ -20,10 +20,19 @@ organization-chat/.dev.vars
 /public/storage
 /storage/*.key
 /storage/app/google/*.json
+/storage/app/drive-backup-temp
+/storage/framework/backup-locks
 /storage/fonts
 /storage/pail
 /vendor
-/.php82
+/.php82*
+cookies.txt
+/storage/backups/
+/deploy/rustdesk/
+/excel/
+*.xlsx
+.cursor/
+.roo/
 /cloudflared.exe
 /cloudflared.exe.download
 /deploy/cloudflare/config.yml
@@ -34,4 +43,5 @@ npm-debug.log
 yarn-error.log
 tmp_*.php
 /scratch/
+/meshcentral/
 q-ER.jpg

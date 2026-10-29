@@ -3,6 +3,7 @@ import AppLayout from '@/layouts/app-layout';
 import { Head, Link, useForm, router } from '@inertiajs/react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { BackButton } from '@/components/ui/back-button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -168,6 +169,8 @@ export default function WorkOrderDetail({ workOrder }: WorkOrderDetailProps) {
 
     return (
         <AppLayout breadcrumbs={[
+            { title: 'งานธุรการ', href: '/admin-hub' },
+            { title: 'ระบบแจ้งซ่อม', href: route('maintenance.dashboard') },
             { title: 'ใบงานซ่อมบำรุง', href: route('technician.work-orders.index') },
             { title: workOrder.ticket_number, href: '#' }
         ]}>
@@ -177,11 +180,7 @@ export default function WorkOrderDetail({ workOrder }: WorkOrderDetailProps) {
                 {/* Header */}
                 <div className="flex items-center justify-between mb-6">
                     <div className="flex items-center gap-4">
-                        <Link href={route('technician.work-orders.index')}>
-                            <Button variant="outline" size="icon">
-                                <ArrowLeft className="h-4 w-4" />
-                            </Button>
-                        </Link>
+                        <BackButton fallbackUrl={route('technician.work-orders.index')} iconOnly variant="outline" />
                         <div>
                             <div className="flex items-center gap-3">
                                 <h1 className="text-2xl font-bold">{workOrder.ticket_number}</h1>

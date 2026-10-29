@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { VoiceTextInput, VoiceTextarea } from '@/components/voice';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Clock, Users } from 'lucide-react';
 import { ThaiDatePicker } from '@/components/ui/thai-date-picker';
@@ -85,11 +86,11 @@ export default function CreateModal({ open, onOpenChange, rooms, defaultRoomId =
 
                     <div className="space-y-2">
                         <Label htmlFor="title">หัวข้อการประชุม <span className="text-red-500">*</span></Label>
-                        <Input
+                        <VoiceTextInput
                             id="title"
                             placeholder="เช่น ประชุมประจำเดือน, สัมภาษณ์งาน"
                             value={data.title}
-                            onChange={(e) => setData('title', e.target.value)}
+                            onChange={(val) => setData('title', val)}
                             required
                         />
                         {errors.title && <p className="text-sm text-red-500">{errors.title}</p>}
@@ -157,12 +158,12 @@ export default function CreateModal({ open, onOpenChange, rooms, defaultRoomId =
 
                     <div className="space-y-2">
                         <Label htmlFor="description">รายละเอียดเพิ่มเติม</Label>
-                        <Textarea
+                        <VoiceTextarea
                             id="description"
                             placeholder="รายละเอียดอื่นๆ หรืออุปกรณ์ที่ต้องการเพิ่มเติม"
-                            className="h-24"
+                            className="min-h-[96px]"
                             value={data.description}
-                            onChange={(e) => setData('description', e.target.value)}
+                            onChange={(val) => setData('description', val)}
                         />
                     </div>
 

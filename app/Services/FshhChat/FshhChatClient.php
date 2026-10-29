@@ -57,4 +57,49 @@ class FshhChatClient
 
         return $json;
     }
+
+    /**
+     * Proxy audio to Workers AI Whisper via /api/transcribe.
+     *
+     * @return array{success: bool, text?: string, error?: string, code?: string}
+     */
+    public function transcribe(string $binary, string $filename = 'audio.webm', string $mime = 'audio/webm', int $timeout = 60): array
+    {
+        if (! $this->isConfigured()) {
+            return ['success' => false, 'error' => 'ยังไม่ได้ตั้งค่า S-Chat / Workers', 'code' => 'NOT_CONFIGURED'];
+        }
+
+        try {
+            $http = Http::withHeaders([
+                'X-Chat-Secret' => (string) config('services.fshh_chat.secret'),
+                'Accept' => 'application/json',
+            ])->timeout($timeout);
+
+            if (! config('services.fshh_chat.verify_ssl', true)) {
+                $http = $http->withoutVerifying();
+            }
+
+            $response = $http->attach('audio', $binary, $filename)
+                ->post(rtrim((string) config('services.fshh_chat.url'), '/').'/api/transcribe');
+        } catch (\Throwable $e) {
+            Log::warning('S-Chat transcribe failed: '.$e->getMessage());
+
+            return ['success' => false, 'error' => $e->getMessage(), 'code' => 'NETWORK'];
+        }
+
+        $json = $response->json();
+        if (! is_array($json)) {
+            return ['success' => false, 'error' => 'แปลงเสียงตอบกลับไม่ถูกต้อง', 'code' => 'BAD_RESPONSE'];
+        }
+
+        if (! $response->successful()) {
+            return [
+                'success' => false,
+                'error' => (string) ($json['error'] ?? 'แปลงเสียงไม่สำเร็จ'),
+                'code' => (string) ($json['code'] ?? ($response->status() === 429 ? 'QUOTA' : 'AI_ERROR')),
+            ];
+        }
+
+        return $json;
+    }
 }

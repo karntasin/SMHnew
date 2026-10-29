@@ -1,5 +1,5 @@
 /* S-Chat service worker — push, badge, notification click */
-const SW_VERSION = 's-chat-sw-v7';
+const SW_VERSION = 's-chat-sw-v11';
 const ICON_URL = '/icons/s-chat-192.png';
 const BADGE_URL = '/icons/badge-96.png?v=3';
 let activeConversationId = '';
@@ -13,38 +13,76 @@ self.addEventListener('activate', (event) => {
 });
 
 async function applyBadge(count) {
-  const n = Number(count) || 0;
+  const n = Math.max(0, Number(count) || 0);
+  // iOS Home Screen PWA: setAppBadge จาก SW ระหว่าง push event เชื่อถือได้ที่สุด
   try {
-    if (n > 0 && self.registration.setAppBadge) {
-      await self.registration.setAppBadge(n);
-    } else if (self.registration.clearAppBadge) {
-      await self.registration.clearAppBadge();
+    if (n > 0) {
+      if (self.registration.setAppBadge) {
+        await self.registration.setAppBadge(n);
+        return;
+      }
+      if (self.navigator && self.navigator.setAppBadge) {
+        await self.navigator.setAppBadge(n);
+        return;
+      }
+    } else {
+      if (self.registration.clearAppBadge) {
+        await self.registration.clearAppBadge();
+        return;
+      }
+      if (self.navigator && self.navigator.clearAppBadge) {
+        await self.navigator.clearAppBadge();
+      }
     }
   } catch (_) {
-    /* launcher may not support badges */
+    // fallback: จุดแดงไม่มีตัวเลข (บางเวอร์ชัน iOS)
+    try {
+      if (n > 0 && self.registration.setAppBadge) await self.registration.setAppBadge();
+      else if (n <= 0 && self.registration.clearAppBadge) await self.registration.clearAppBadge();
+    } catch (_2) { /* launcher may not support badges */ }
+  }
+}
+
+/**
+ * iOS Safari ไม่รองรับ vibrate, renotify, silent ใน notification options
+ * ต้องตรวจ UA แล้วลบ options ที่ไม่รองรับออก มิฉะนั้น showNotification() จะ throw
+ */
+function isIosUserAgent() {
+  try {
+    var ua = (self.navigator && self.navigator.userAgent) || '';
+    return /iPhone|iPad|iPod/i.test(ua);
+  } catch (_) {
+    return false;
   }
 }
 
 function notificationOptions(data) {
-  return {
+  const opts = {
     body: data.body || '',
     icon: ICON_URL,
     badge: BADGE_URL,
     tag: data.tag || 'org-chat',
-    renotify: true,
-    silent: false,
-    vibrate: [120, 60, 120],
     data: { url: data.url || '/chat' },
   };
+  // vibrate, renotify, silent ไม่รองรับบน iOS — ใส่เฉพาะ non-iOS
+  if (!isIosUserAgent()) {
+    opts.renotify = true;
+    opts.silent = false;
+    opts.vibrate = [120, 60, 120];
+  }
+  return opts;
 }
 
-function clientIsFocused(client) {
-  return Boolean(client && client.focused);
+/** true เฉพาะเมื่อหน้าต่างกำลังถูกมองอยู่ — iOS PWA อาจค้าง focused=true ตอนอยู่พื้นหลัง */
+function clientIsActivelyViewing(client) {
+  if (!client) return false;
+  if (client.visibilityState === 'hidden') return false;
+  return Boolean(client.focused);
 }
 
 function shouldShowNotification(data, windowClients) {
-  const focused = windowClients.some(clientIsFocused);
-  if (!focused) return true;
+  const viewing = windowClients.some(clientIsActivelyViewing);
+  if (!viewing) return true;
   const incoming = String(data.conversationId || '');
   if (!incoming) return false;
   return String(activeConversationId) !== incoming;
@@ -61,6 +99,10 @@ async function showChatNotification(title, data) {
       tag: full.tag,
       data: full.data,
     });
+  }
+  // หลังโชว์แจ้งเตือน บังคับอัปเดตจุดแดงอีกครั้ง (iOS)
+  if (data && data.unread != null) {
+    await applyBadge(data.unread);
   }
 }
 
@@ -92,8 +134,13 @@ self.addEventListener('push', (event) => {
     const windowClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     windowClients.forEach((client) => client.postMessage({
       type: 'PUSH_MESSAGE',
+      kind: data.kind || 'message',
       conversationId: data.conversationId || '',
+      messageId: data.messageId || '',
       tag: data.tag || '',
+      title: data.title || 'S-Chat',
+      body: data.body || '',
+      unread: Number.isFinite(Number(data.unread)) ? Number(data.unread) : undefined,
     }));
     if (!shouldShowNotification(data, windowClients)) return;
     await showChatNotification(data.title || 'S-Chat', data);

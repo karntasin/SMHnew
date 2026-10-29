@@ -72,6 +72,7 @@ export default function Index({ vehicles, filters }: Props) {
 
     return (
         <AppLayout breadcrumbs={[
+            { title: 'งานธุรการ', href: '/admin-hub' },
             { title: 'ระบบจองรถ', href: route('vehicles.index') },
             { title: 'จัดการรถ', href: route('vehicles.manage.index') },
         ]}>

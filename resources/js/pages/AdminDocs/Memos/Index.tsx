@@ -35,11 +35,15 @@ interface Props {
     filters: { kind: string; search: string };
 }
 
-const kindTone: Record<MemoKind, string> = {
+const kindTone: Record<string, string> = {
     internal: 'bg-emerald-50 text-emerald-800',
     external: 'bg-sky-50 text-sky-800',
     order: 'bg-amber-50 text-amber-800',
 };
+
+function toneFor(kind: string): string {
+    return kindTone[kind] ?? 'bg-slate-50 text-slate-700';
+}
 
 const breadcrumbs = [
     { title: 'งานธุรการ', href: '/admin-hub' },
@@ -135,7 +139,7 @@ export default function Index({ memos, kinds, filters }: Props) {
                                     <article key={memo.id} className="flex flex-col gap-3 p-4 md:flex-row md:items-center">
                                         <div className="min-w-0 flex-1">
                                             <div className="mb-1 flex flex-wrap items-center gap-2">
-                                                <span className={cn('rounded-full px-2.5 py-0.5 text-xs font-medium', kindTone[memo.kind])}>
+                                                <span className={cn('rounded-full px-2.5 py-0.5 text-xs font-medium', toneFor(memo.kind))}>
                                                     {kinds[memo.kind]?.label ?? memo.kind}
                                                 </span>
                                                 {memo.document_no && <span className="text-xs text-slate-500">ที่ {memo.document_no}</span>}

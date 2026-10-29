@@ -371,6 +371,20 @@ class OrganizationChatService
 
     private function loginResponse(User $user): array
     {
+        if ($user->needsPasswordChange() || $user->needsUsername()) {
+            $origin = rtrim((string) config('app.url'), '/');
+            $msg = $user->needsUsername()
+                ? 'กรุณาตั้งชื่อผู้ใช้และรหัสผ่านก่อนใช้งาน S-Chat'
+                : 'กรุณาตั้งรหัสผ่านใหม่ก่อนใช้งาน S-Chat';
+
+            return [
+                'success' => false,
+                'mustChangePassword' => true,
+                'error' => $msg,
+                'passwordSettingsUrl' => $origin.'/login?redirect='.rawurlencode('/settings/password'),
+            ];
+        }
+
         $user->touch();
 
         $session = $this->createSession($user);
@@ -414,7 +428,8 @@ class OrganizationChatService
                 'name' => '',
                 'line_display_name' => $displayName,
                 'email' => $email,
-                'password' => bcrypt(Str::random(32)),
+                'password' => User::INITIAL_PASSWORD,
+                'must_change_password' => true,
                 'line_id' => $lineUserId,
                 'avatar' => $pictureUrl,
                 'line_picture_url' => $pictureUrl,

@@ -32,6 +32,7 @@ class Asset extends Model
         'cpu',
         'os',
         'mac_address',
+        'remote_id',
         'license_status',
         'quantity',
         'capacity',
@@ -67,5 +68,10 @@ class Asset extends Model
     public function latestDisposal(): HasOne
     {
         return $this->hasOne(AssetDisposal::class, 'asset_id')->latestOfMany('id');
+    }
+
+    public function systemSpec(): HasOne
+    {
+        return $this->hasOne(AssetSpec::class, 'asset_id');
     }
 }

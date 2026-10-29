@@ -3,9 +3,11 @@ import AppLayout from '@/layouts/app-layout';
 import { Head, useForm, Link } from '@inertiajs/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { BackButton } from '@/components/ui/back-button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { VoiceTextInput, VoiceTextarea } from '@/components/voice';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ArrowLeft, Car, Save } from 'lucide-react';
 import { storageUrl } from '@/lib/asset';
@@ -63,6 +65,7 @@ export default function Create({ vehicles, categories, preselectVehicleId = null
 
     return (
         <AppLayout breadcrumbs={[
+            { title: 'งานธุรการ', href: '/admin-hub' },
             { title: 'ระบบจองรถ', href: route('vehicles.index') },
             { title: 'ขอใช้รถใหม่', href: '#' },
         ]}>
@@ -77,9 +80,7 @@ export default function Create({ vehicles, categories, preselectVehicleId = null
                     <Card className="rounded-[1.5rem] border-slate-200/80 shadow-sm">
                         <CardHeader>
                             <div className="flex items-center gap-4">
-                                <Link href={route('vehicles.index')}>
-                                    <Button variant="ghost" size="icon"><ArrowLeft className="h-4 w-4" /></Button>
-                                </Link>
+                                <BackButton fallbackUrl={route('vehicles.index')} iconOnly />
                                 <CardTitle>แบบฟอร์มขอใช้รถ</CardTitle>
                             </div>
                         </CardHeader>
@@ -172,11 +173,11 @@ export default function Create({ vehicles, categories, preselectVehicleId = null
 
                                 <div className="space-y-2">
                                     <Label htmlFor="purpose">วัตถุประสงค์การใช้รถ</Label>
-                                    <Input
+                                    <VoiceTextInput
                                         id="purpose"
                                         className="rounded-xl"
                                         value={data.purpose}
-                                        onChange={(e) => setData('purpose', e.target.value)}
+                                        onChange={(val) => setData('purpose', val)}
                                         placeholder="เช่น ไปราชการ, รับส่งผู้ป่วย"
                                     />
                                     {errors.purpose && <p className="text-sm text-red-500">{errors.purpose}</p>}
@@ -184,11 +185,11 @@ export default function Create({ vehicles, categories, preselectVehicleId = null
 
                                 <div className="space-y-2">
                                     <Label htmlFor="destination">สถานที่ไป (ปลายทาง)</Label>
-                                    <Input
+                                    <VoiceTextInput
                                         id="destination"
                                         className="rounded-xl"
                                         value={data.destination}
-                                        onChange={(e) => setData('destination', e.target.value)}
+                                        onChange={(val) => setData('destination', val)}
                                         placeholder="ระบุสถานที่"
                                     />
                                     {errors.destination && <p className="text-sm text-red-500">{errors.destination}</p>}
@@ -196,20 +197,18 @@ export default function Create({ vehicles, categories, preselectVehicleId = null
 
                                 <div className="space-y-2">
                                     <Label htmlFor="note">หมายเหตุ (ถ้ามี)</Label>
-                                    <Textarea
+                                    <VoiceTextarea
                                         id="note"
                                         className="rounded-xl"
                                         value={data.note}
-                                        onChange={(e) => setData('note', e.target.value)}
+                                        onChange={(val) => setData('note', val)}
                                         placeholder="รายละเอียดเพิ่มเติม"
                                     />
                                     {errors.note && <p className="text-sm text-red-500">{errors.note}</p>}
                                 </div>
 
                                 <div className="flex justify-end gap-4">
-                                    <Link href={route('vehicles.index')}>
-                                        <Button variant="outline" type="button" className="rounded-xl">ยกเลิก</Button>
-                                    </Link>
+                                    <BackButton fallbackUrl={route('vehicles.index')} label="ยกเลิก" variant="outline" className="rounded-xl" />
                                     <Button type="submit" disabled={processing} className="rounded-xl bg-emerald-600 hover:bg-emerald-700">
                                         <Save className="mr-2 h-4 w-4" /> บันทึกคำขอ
                                     </Button>
