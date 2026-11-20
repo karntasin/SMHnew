@@ -1,13 +1,16 @@
 import React from 'react';
-import { Link } from '@inertiajs/react';
+import { Link, router } from '@inertiajs/react';
 import {
     AlertTriangle,
     Building2,
+    CheckCircle2,
     ChevronRight,
     ClipboardList,
+    Clock,
     FileCheck2,
     FileWarning,
     Heart,
+    RefreshCw,
     Shield,
     Upload,
     Wallet,
@@ -45,6 +48,18 @@ interface Props {
         planned_modules: number;
     };
     schemes: SchemeCard[];
+    lastAutoSync?: {
+        started_at?: string;
+        completed_at?: string;
+        duration_seconds?: number;
+        smt?: {
+            status: string;
+            synced_count: number;
+            total_amount: number;
+            pdf_downloaded: number;
+        };
+        schemes?: Record<string, any>;
+    } | null;
 }
 
 const money = (n: number) =>
@@ -67,7 +82,9 @@ const toneBox: Record<string, string> = {
     teal: 'bg-teal-100 text-teal-700',
 };
 
-export default function FinanceDataHubIndex({ hosxpReady, stats, schemes }: Props) {
+export default function FinanceDataHubIndex({ hosxpReady, stats, schemes, lastAutoSync }: Props) {
+    const smt = lastAutoSync?.smt;
+
     return (
         <QualityPage
             tone="emerald"
@@ -79,14 +96,63 @@ export default function FinanceDataHubIndex({ hosxpReady, stats, schemes }: Prop
             headTitle="Financial Data Hub"
             subNav={<DataHubSubNav active="finance.data-hub" />}
             actions={
-                <Button asChild className="rounded-xl bg-emerald-600 hover:bg-emerald-700">
-                    <Link href={route('finance.cgd.import')}>
-                        <Upload className="mr-2 h-4 w-4" />
-                        นำเข้า REP (จ่ายตรง)
-                    </Link>
-                </Button>
+                <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        className="rounded-xl border-emerald-300 bg-emerald-50/50 text-emerald-800 hover:bg-emerald-100/70 text-xs font-semibold"
+                        onClick={() => router.post(route('finance.data-hub.auto-sync-now'))}
+                    >
+                        <RefreshCw className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
+                        ซิงค์อัตโนมัติตอนนี้
+                    </Button>
+                    <Button asChild className="rounded-xl bg-emerald-600 hover:bg-emerald-700">
+                        <Link href={route('finance.cgd.import')}>
+                            <Upload className="mr-2 h-4 w-4" />
+                            นำเข้า REP (จ่ายตรง)
+                        </Link>
+                    </Button>
+                </div>
             }
         >
+            <div className="mb-4 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50/90 to-teal-50/70 p-4 shadow-xs">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-xs">
+                            <Clock className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className="font-bold text-sm text-emerald-950">
+                                    ระบบอัตโนมัติทำงานเบื้องหลัง: ทุกวันเวลา 12.00 น.
+                                </span>
+                                <span className="inline-flex items-center rounded-full bg-emerald-200/60 px-2 py-0.5 text-[10px] font-bold text-emerald-900">
+                                    ACTIVE · 12:00 น.
+                                </span>
+                            </div>
+                            <div className="mt-0.5 text-xs text-emerald-800/90">
+                                ตรวจสอบและดาวน์โหลด REP/STM ทุกกองทุน และดึงข้อมูลการโอนเงิน/PDF งาน SMT ทุกวันอัตโนมัติ
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-xs">
+                        {lastAutoSync?.completed_at ? (
+                            <div className="rounded-xl border border-emerald-300/80 bg-white/80 px-3 py-1.5 text-right shadow-2xs">
+                                <div className="text-[11px] text-slate-500">ซิงค์ล่าสุดเมื่อ:</div>
+                                <div className="font-semibold text-emerald-900">
+                                    {new Date(lastAutoSync.completed_at).toLocaleString('th-TH')}
+                                    {smt && ` (SMT +${smt.synced_count || 0} รายการ, PDF ${smt.pdf_downloaded || 0} ไฟล์)`}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="text-xs text-slate-500">
+                                ยังไม่มีประวัติการรันอัตโนมัติ (จะเริ่มรอบถัดไปเวลา 12:00 น.)
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
             {!hosxpReady && (
                 <div className="mb-4 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />

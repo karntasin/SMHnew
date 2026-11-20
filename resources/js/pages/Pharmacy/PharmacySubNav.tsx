@@ -1,11 +1,12 @@
 import { Link } from '@inertiajs/react';
 import { cn } from '@/lib/utils';
-import { AlertTriangle, LayoutDashboard, Package, Pill, ClipboardList, Warehouse } from 'lucide-react';
+import { AlertTriangle, LayoutDashboard, Package, Pill, ClipboardList, Warehouse, Calculator } from 'lucide-react';
 
 export type PharmacyChannel =
     | 'pharmacy.index'
     | 'pharmacy.inventory.index'
     | 'pharmacy.supplies.index'
+    | 'pharmacy.pricing.index'
     | 'pharmacy.drug-alerts'
     | 'rdu.index'
     | 'drug-usage.index';
@@ -23,6 +24,13 @@ const channels: {
         hint: 'เลือกช่องทางงาน',
         icon: LayoutDashboard,
         matchPrefixes: ['pharmacy.index'],
+    },
+    {
+        key: 'pharmacy.pricing.index',
+        label: 'วิเคราะห์ราคายา ว.111',
+        hint: 'ทุน · ราคาขาย · ประมาณการ',
+        icon: Calculator,
+        matchPrefixes: ['pharmacy.pricing.'],
     },
     {
         key: 'pharmacy.inventory.index',

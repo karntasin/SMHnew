@@ -7,6 +7,7 @@ use App\Models\QualityIndicatorEntry;
 use App\Models\Department;
 use App\Models\TeamHa;
 use App\Services\QualityIndicatorFamilyService;
+use App\Services\Rcm\RcmQualityIndicatorSyncService;
 use App\Services\ThaiPdfService;
 use App\Support\ThaiFiscalPeriod;
 use Carbon\Carbon;
@@ -356,6 +357,17 @@ class QualityIndicatorController extends Controller
         $entry->delete();
 
         return redirect()->back()->with('success', 'ลบข้อมูลการวัดผลเรียบร้อย');
+    }
+
+    public function syncFromRcm(Request $request, QualityIndicator $indicator, RcmQualityIndicatorSyncService $syncService)
+    {
+        $result = $syncService->syncIm11();
+
+        if (! $result['success']) {
+            return redirect()->back()->withErrors(['sync' => $result['message']]);
+        }
+
+        return redirect()->back()->with('success', $result['message']);
     }
 
     private function validateEntry(Request $request): array

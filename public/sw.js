@@ -1,5 +1,5 @@
 // SMH & Calendar App Service Worker for Android & iOS PWA
-const CACHE_NAME = 'smh-pwa-v3';
+const CACHE_NAME = 'smh-pwa-v4';
 const STATIC_ASSETS = [
   '/logosmh.png',
   '/manifest.json',
@@ -34,15 +34,55 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Network-first strategy for dynamic pages and API calls
+// Network-first strategy ONLY for Calendar PWA and basic static assets
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') {
     return;
   }
 
-  // Skip caching for API endpoints and dev routes
+  // Never intercept Inertia AJAX requests, JSON API calls, or backend ERP modules
+  const isInertia = event.request.headers.get('X-Inertia') === 'true';
+  const acceptHeader = event.request.headers.get('Accept') || '';
+  if (isInertia || acceptHeader.includes('application/json')) {
+    return;
+  }
+
   const url = new URL(event.request.url);
-  if (url.pathname.startsWith('/api') || url.pathname.startsWith('/calendar/events') || url.pathname.startsWith('/dev/')) {
+
+  // Skip all dynamic ERP, Finance, RCM, Auth, Dev, and API endpoints
+  if (
+    url.pathname.startsWith('/api') ||
+    url.pathname.startsWith('/rcm') ||
+    url.pathname.startsWith('/finance') ||
+    url.pathname.startsWith('/tv') ||
+    url.pathname.startsWith('/admin') ||
+    url.pathname.startsWith('/im') ||
+    url.pathname.startsWith('/hrd') ||
+    url.pathname.startsWith('/quality') ||
+    url.pathname.startsWith('/maintenance') ||
+    url.pathname.startsWith('/vehicles') ||
+    url.pathname.startsWith('/documents') ||
+    url.pathname.startsWith('/rdu') ||
+    url.pathname.startsWith('/drug-usage') ||
+    url.pathname.startsWith('/firewall') ||
+    url.pathname.startsWith('/server-monitor') ||
+    url.pathname.startsWith('/dev') ||
+    url.pathname.startsWith('/login') ||
+    url.pathname.startsWith('/logout') ||
+    url.pathname.startsWith('/sanctum') ||
+    url.pathname.startsWith('/calendar/events')
+  ) {
+    return;
+  }
+
+  // Only handle Calendar PWA views and static assets
+  const isCalendar = url.pathname.startsWith('/calendar') || url.pathname.startsWith('/cal');
+  const isStaticAsset = url.pathname.startsWith('/icons/') ||
+                        url.pathname.startsWith('/build/') ||
+                        url.pathname.startsWith('/images/') ||
+                        /\.(png|jpe?g|svg|ico|webmanifest|json|woff2?|ttf|css|js)$/i.test(url.pathname);
+
+  if (!isCalendar && !isStaticAsset) {
     return;
   }
 
@@ -58,8 +98,17 @@ self.addEventListener('fetch', (event) => {
         }
         return networkResponse;
       })
-      .catch(() => {
-        return caches.match(event.request);
+      .catch(async () => {
+        const cached = await caches.match(event.request);
+        if (cached) {
+          return cached;
+        }
+        // Must return a valid Response instance; returning undefined causes "Failed to convert value to 'Response'"
+        return new Response('Offline: Resource not available in cache.', {
+          status: 504,
+          statusText: 'Gateway Timeout',
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+        });
       })
   );
 });

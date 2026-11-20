@@ -38,6 +38,8 @@ import {
     Pill,
     Download,
     FileSpreadsheet,
+    RefreshCw,
+    Zap,
 } from 'lucide-react';
 
 interface FilterProps {
@@ -128,6 +130,8 @@ interface Props {
     top_drugs: DrugRow[];
     monthly: MonthlyRow[];
     opd_vs_ipd: OpdVsIpd[];
+    is_cached?: boolean;
+    cached_at?: string | null;
 }
 
 const formatCurrency = (value: number) =>
@@ -159,11 +163,14 @@ export default function RevenueDashboard({
     top_drugs = [],
     monthly,
     opd_vs_ipd,
+    is_cached = false,
+    cached_at = null,
 }: Props) {
     const { t } = useTranslation();
     const [startDate, setStartDate] = useState(filter?.start_date || '');
     const [endDate, setEndDate] = useState(filter?.end_date || '');
     const [dateError, setDateError] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
         setStartDate(filter?.start_date || '');
@@ -181,10 +188,93 @@ export default function RevenueDashboard({
             return;
         }
         setDateError('');
+        setIsLoading(true);
         router.get(
             route('finance.revenue'),
             { start_date: startDate, end_date: endDate },
-            { preserveScroll: true },
+            {
+                preserveScroll: true,
+                onFinish: () => setIsLoading(false),
+            },
+        );
+    };
+
+    const handleRefresh = () => {
+        if (!startDate || !endDate) {
+            setDateError('กรุณาเลือกวันที่เริ่มต้นและสิ้นสุด');
+            return;
+        }
+        setDateError('');
+        setIsLoading(true);
+        router.get(
+            route('finance.revenue'),
+            { start_date: startDate, end_date: endDate, refresh: 1 },
+            {
+                preserveScroll: true,
+                onFinish: () => setIsLoading(false),
+            },
+        );
+    };
+
+    const applyPreset = (preset: 'this_month' | 'last_month' | 'last_3m' | 'last_6m' | 'fiscal_year' | 'last_12m') => {
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = now.getMonth();
+
+        const pad = (n: number) => String(n).padStart(2, '0');
+
+        let start = '';
+        let end = '';
+
+        if (preset === 'this_month') {
+            start = `${y}-${pad(m + 1)}-01`;
+            const lastDay = new Date(y, m + 1, 0).getDate();
+            end = `${y}-${pad(m + 1)}-${pad(lastDay)}`;
+        } else if (preset === 'last_month') {
+            const prevMonthDate = new Date(y, m - 1, 1);
+            const py = prevMonthDate.getFullYear();
+            const pm = prevMonthDate.getMonth();
+            start = `${py}-${pad(pm + 1)}-01`;
+            const lastDay = new Date(py, pm + 1, 0).getDate();
+            end = `${py}-${pad(pm + 1)}-${pad(lastDay)}`;
+        } else if (preset === 'last_3m') {
+            const startD = new Date(y, m - 2, 1);
+            start = `${startD.getFullYear()}-${pad(startD.getMonth() + 1)}-01`;
+            const lastDay = new Date(y, m + 1, 0).getDate();
+            end = `${y}-${pad(m + 1)}-${pad(lastDay)}`;
+        } else if (preset === 'last_6m') {
+            const startD = new Date(y, m - 5, 1);
+            start = `${startD.getFullYear()}-${pad(startD.getMonth() + 1)}-01`;
+            const lastDay = new Date(y, m + 1, 0).getDate();
+            end = `${y}-${pad(m + 1)}-${pad(lastDay)}`;
+        } else if (preset === 'fiscal_year') {
+            // ปีงบประมาณไทย: 1 ต.ค. - 30 ก.ย.
+            if (m >= 9) {
+                start = `${y}-10-01`;
+                end = `${y + 1}-09-30`;
+            } else {
+                start = `${y - 1}-10-01`;
+                end = `${y}-09-30`;
+            }
+        } else if (preset === 'last_12m') {
+            const startD = new Date(y, m - 11, 1);
+            start = `${startD.getFullYear()}-${pad(startD.getMonth() + 1)}-01`;
+            const lastDay = new Date(y, m + 1, 0).getDate();
+            end = `${y}-${pad(m + 1)}-${pad(lastDay)}`;
+        }
+
+        setStartDate(start);
+        setEndDate(end);
+        setDateError('');
+        setIsLoading(true);
+
+        router.get(
+            route('finance.revenue'),
+            { start_date: start, end_date: end },
+            {
+                preserveScroll: true,
+                onFinish: () => setIsLoading(false),
+            },
         );
     };
 
@@ -332,9 +422,74 @@ export default function RevenueDashboard({
                             <Filter className="h-5 w-5 text-emerald-600" />
                             <CardTitle>ตัวกรองช่วงวันที่</CardTitle>
                         </div>
-                        <CardDescription>เลือกช่วง vstdate จากตาราง opitemrece</CardDescription>
+                        <CardDescription>เลือกช่วงวันที่สำหรับรายงานรายได้ (รองรับการดึงข้อมูลรายเดือน/รายปี)</CardDescription>
                     </CardHeader>
-                    <CardContent className="pt-6">
+                    <CardContent className="pt-6 space-y-4">
+                        {/* Quick Preset Buttons */}
+                        <div className="flex flex-wrap items-center gap-2 pb-2 border-b">
+                            <span className="text-xs font-medium text-muted-foreground mr-1">ปุ่มลัดเลือกช่วงเวลา:</span>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={isLoading}
+                                onClick={() => applyPreset('this_month')}
+                                className="h-7 text-xs hover:bg-emerald-50"
+                            >
+                                เดือนนี้
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={isLoading}
+                                onClick={() => applyPreset('last_month')}
+                                className="h-7 text-xs hover:bg-emerald-50"
+                            >
+                                เดือนที่แล้ว
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={isLoading}
+                                onClick={() => applyPreset('last_3m')}
+                                className="h-7 text-xs hover:bg-emerald-50"
+                            >
+                                3 เดือนย้อนหลัง
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={isLoading}
+                                onClick={() => applyPreset('last_6m')}
+                                className="h-7 text-xs hover:bg-emerald-50"
+                            >
+                                6 เดือนย้อนหลัง
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={isLoading}
+                                onClick={() => applyPreset('fiscal_year')}
+                                className="h-7 text-xs font-semibold text-emerald-700 border-emerald-300 bg-emerald-50/50 hover:bg-emerald-100/60"
+                            >
+                                ปีงบประมาณนี้
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={isLoading}
+                                onClick={() => applyPreset('last_12m')}
+                                className="h-7 text-xs font-semibold text-teal-700 border-teal-300 bg-teal-50/50 hover:bg-teal-100/60"
+                            >
+                                12 เดือน / 1 ปี
+                            </Button>
+                        </div>
+
                         <form onSubmit={handleFilterSubmit} className="flex flex-wrap gap-4 items-end">
                             <div className="flex-1 min-w-[200px]">
                                 <Label className="flex items-center gap-2 mb-2">
@@ -362,10 +517,22 @@ export default function RevenueDashboard({
                             </div>
                             <Button
                                 type="submit"
+                                disabled={isLoading}
                                 className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
                             >
-                                <TrendingUp className="mr-2 h-4 w-4" />
-                                แสดงข้อมูล
+                                <TrendingUp className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                                {isLoading ? 'กำลังโหลด...' : 'แสดงข้อมูล'}
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                disabled={isLoading}
+                                onClick={handleRefresh}
+                                title="ดึงข้อมูลสดจาก HOSxP ใหม่ (ล้างแคช)"
+                                className="border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                            >
+                                <RefreshCw className={`mr-1.5 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                                โหลดข้อมูลใหม่
                             </Button>
                             <div className="flex flex-col gap-1.5">
                                 <span className="text-xs font-medium text-muted-foreground">ดาวน์โหลดรายงานรวม</span>
@@ -389,11 +556,19 @@ export default function RevenueDashboard({
                                 </div>
                             </div>
                         </form>
-                        {filterLabel && (
-                            <p className="mt-3 text-sm text-muted-foreground">
-                                ช่วงข้อมูล: <span className="font-medium text-foreground">{filterLabel}</span>
-                            </p>
-                        )}
+                        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground pt-1">
+                            {filterLabel && (
+                                <p>
+                                    ช่วงข้อมูล: <span className="font-medium text-foreground">{filterLabel}</span>
+                                </p>
+                            )}
+                            {is_cached && cached_at && (
+                                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                    <Zap className="h-3.5 w-3.5 text-emerald-600" />
+                                    <span>ข้อมูลจากแคช ({cached_at})</span>
+                                </div>
+                            )}
+                        </div>
                         {dateError && <p className="mt-2 text-sm text-red-600">{dateError}</p>}
                         {hosxp_error && (
                             <div className="mt-3 flex items-start gap-2 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">

@@ -461,6 +461,11 @@ export default function StmCompare({
             }
         }
 
+        // เมื่อเจาะจงกรอง Error Code ให้เคลียร์สถานะ 'matched_ok' ที่ไม่มี Error เพื่อให้เห็นผลลัพธ์
+        if (next.error_code && status === 'matched_ok') {
+            status = null;
+        }
+
         const raw: Record<string, string | number | null | undefined> = {
             tab: next.tab !== undefined ? next.tab : tab,
             status,

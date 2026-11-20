@@ -249,7 +249,7 @@ export default function BudgetDashboard({
                                 <h1 className="text-2xl font-bold md:text-3xl">งานงบประมาณ</h1>
                             </div>
                             <p className="text-sm text-emerald-100 md:text-base">
-                                ค่ารักษาพยาบาลจาก opitemrece ตามปีงบประมาณ แยก OPD/IPD และเงินสดกับลูกหนี้สิทธิ
+                                สรุปมูลค่าค่ารักษาพยาบาลตามปีงบประมาณ แยก OPD (vn_stat) / IPD (an_stat) สอดคล้องกับรายงานสรุปมูลค่ารักษาพยาบาล
                             </p>
                         </div>
                         {summary && (
@@ -269,7 +269,7 @@ export default function BudgetDashboard({
                             <CardTitle>ปีงบประมาณ</CardTitle>
                         </div>
                         <CardDescription>
-                            นับจากวันที่ลงรายการ (vstdate) 1 ต.ค. – 30 ก.ย. ทั้งผู้ป่วยนอกและผู้ป่วยใน
+                            ผู้ป่วยนอกตามวันรับบริการ (vstdate) และผู้ป่วยในตามวันจำหน่าย (dchdate) 1 ต.ค. – 30 ก.ย.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="pt-6">
@@ -438,7 +438,7 @@ export default function BudgetDashboard({
                         <Card className="shadow-lg">
                             <CardHeader>
                                 <CardTitle>หมวดรายได้</CardTitle>
-                                <CardDescription>จาก opitemrece.income</CardDescription>
+                                <CardDescription>แยกตาม 17 หมวดรายได้มาตรฐาน HOSxP (ค่ายาแยกใน/นอกบัญชีตามสถานะบัญชียา)</CardDescription>
                             </CardHeader>
                             <CardContent className="overflow-x-auto">
                                 <table className="w-full text-sm">
@@ -476,7 +476,7 @@ export default function BudgetDashboard({
                         <Card className="shadow-lg">
                             <CardHeader>
                                 <CardTitle>สิทธิการรักษา</CardTitle>
-                                <CardDescription>ผู้ป่วยในใช้สิทธิจาก ipt ผู้ป่วยนอกใช้สิทธิจาก ovst</CardDescription>
+                                <CardDescription>แยกตามสิทธิการรักษา ผู้ป่วยนอก (vn_stat) และผู้ป่วยใน (an_stat)</CardDescription>
                             </CardHeader>
                             <CardContent className="overflow-x-auto">
                                 <table className="w-full text-sm">

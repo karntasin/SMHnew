@@ -47,6 +47,7 @@ export interface User {
     name: string;
     email: string;
     avatar?: string;
+    roles?: string[];
     line_id?: string | null;
     line_display_name?: string | null;
     chat_display_name?: string | null;

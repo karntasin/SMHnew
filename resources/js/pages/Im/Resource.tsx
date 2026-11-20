@@ -8,7 +8,9 @@ import { imInput, imSelect, fmtDate, STATUS_STYLE, STATUS_LABEL } from '@/pages/
 import {
     Server, Plus, Trash2, Pencil, Cpu, HardDrive, Network, GitPullRequest, GraduationCap,
     Check, X, Wrench, PackageX, History, RotateCcw, Activity, Terminal, Tv,
+    ShieldCheck, ShieldAlert, AlertTriangle, AlertCircle, Filter, Search, Printer, Monitor, Laptop
 } from 'lucide-react';
+import axios from 'axios';
 import AssetAgentInstallModal from '@/pages/Im/AssetAgentInstallModal';
 import AssetSystemInspectorModal from '@/pages/Im/AssetSystemInspectorModal';
 import AssetRemoteModal from '@/pages/Im/AssetRemoteModal';
@@ -112,6 +114,9 @@ interface Props {
         high_utilization: number;
         competency_gap: number;
         pending_changes: number;
+        threats_count?: number;
+        vpn_count?: number;
+        warning_count?: number;
     };
 }
 
@@ -135,6 +140,46 @@ const DISPOSAL_METHOD: Record<string, string> = {
     destroy: 'ทำลาย',
     other: 'อื่นๆ',
 };
+
+export function normalizeCpuFamily(cpu?: string | null): string {
+    if (!cpu || !cpu.trim()) return 'ไม่ระบุ CPU';
+    const s = cpu.trim().toLowerCase();
+
+    if (/\bi3\b|core[ -]?i3|core\(tm\)[ -]?i3|\bi3[- ]/i.test(s)) return 'Core i3';
+    if (/\bi5\b|core[ -]?i5|core\(tm\)[ -]?i5|\bi5[- ]/i.test(s)) return 'Core i5';
+    if (/\bi7\b|core[ -]?i7|core\(tm\)[ -]?i7|\bi7[- ]/i.test(s)) return 'Core i7';
+    if (/\bi9\b|core[ -]?i9|core\(tm\)[ -]?i9|\bi9[- ]/i.test(s)) return 'Core i9';
+
+    if (/ryzen[ -]?3|ryzne[ -]?3/i.test(s)) return 'Ryzen 3';
+    if (/ryzen[ -]?5|ryzne[ -]?5/i.test(s)) return 'Ryzen 5';
+    if (/ryzen[ -]?7|ryzne[ -]?7/i.test(s)) return 'Ryzen 7';
+    if (/ryzen[ -]?9|ryzne[ -]?9/i.test(s)) return 'Ryzen 9';
+    if (/ryzen/i.test(s)) return 'AMD Ryzen';
+
+    if (/pentium|g550|g[0-9]{3}/i.test(s)) return 'Pentium';
+    if (/celeron/i.test(s)) return 'Celeron';
+    if (/xeon/i.test(s)) return 'Intel Xeon';
+    if (/intel/i.test(s)) return 'Intel อื่นๆ';
+
+    return 'อื่นๆ';
+}
+
+export function normalizeOsFamily(os?: string | null): string {
+    if (!os || !os.trim()) return 'ไม่ระบุ OS';
+    const s = os.trim().toLowerCase();
+
+    if (/win(?:dows)?[ -]?11/i.test(s)) return 'Windows 11';
+    if (/win(?:dows)?[ -]?10/i.test(s)) return 'Windows 10';
+    if (/win(?:dows)?[ -]?8(?:\.1)?/i.test(s)) return 'Windows 8 / 8.1';
+    if (/win(?:dows)?[ -]?7/i.test(s)) return 'Windows 7';
+    if (/win(?:dows)?[ -]?xp/i.test(s)) return 'Windows XP';
+    if (/server/i.test(s)) return 'Windows Server';
+    if (/linux|ubuntu|debian/i.test(s)) return 'Linux';
+    if (/mac|macos|darwin/i.test(s)) return 'macOS';
+    if (/win/i.test(s)) return 'Windows อื่นๆ';
+
+    return 'อื่นๆ';
+}
 
 const emptyAssetForm = () => ({
     asset_code: '',
@@ -171,6 +216,163 @@ export default function ResourcePage({ assets, competencies, changes, staff, dev
     const [installModalOpen, setInstallModalOpen] = useState(false);
     const [inspectorAsset, setInspectorAsset] = useState<Asset | null>(null);
     const [remoteAsset, setRemoteAsset] = useState<Asset | null>(null);
+    const [securityFilter, setSecurityFilter] = useState<'all' | 'normal' | 'vpn' | 'threat'>('all');
+    const [deviceTypeFilter, setDeviceTypeFilter] = useState<string>('all');
+    const [cpuFilter, setCpuFilter] = useState<string>('all');
+    const [osFilter, setOsFilter] = useState<string>('all');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [threatActionMsg, setThreatActionMsg] = useState<string | null>(null);
+
+    const cpuOptions = useMemo(() => {
+        const counts: Record<string, number> = {};
+        assets.forEach((a) => {
+            const raw = a.cpu || a.system_spec?.cpu_name;
+            const fam = normalizeCpuFamily(raw);
+            counts[fam] = (counts[fam] || 0) + 1;
+        });
+
+        const preferredOrder = [
+            'Core i3', 'Core i5', 'Core i7', 'Core i9',
+            'Ryzen 3', 'Ryzen 5', 'Ryzen 7', 'Ryzen 9', 'AMD Ryzen',
+            'Pentium', 'Celeron', 'Intel Xeon', 'Intel อื่นๆ', 'อื่นๆ', 'ไม่ระบุ CPU',
+        ];
+
+        return Object.keys(counts)
+            .sort((a, b) => {
+                const idxA = preferredOrder.indexOf(a);
+                const idxB = preferredOrder.indexOf(b);
+                if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                if (idxA !== -1) return -1;
+                if (idxB !== -1) return 1;
+                return a.localeCompare(b);
+            })
+            .map((fam) => ({
+                value: fam,
+                label: `${fam} (${counts[fam]})`,
+                count: counts[fam],
+            }));
+    }, [assets]);
+
+    const osOptions = useMemo(() => {
+        const counts: Record<string, number> = {};
+        assets.forEach((a) => {
+            const raw = a.os || a.system_spec?.os_name;
+            const fam = normalizeOsFamily(raw);
+            counts[fam] = (counts[fam] || 0) + 1;
+        });
+
+        const preferredOrder = [
+            'Windows 11', 'Windows 10', 'Windows 8 / 8.1', 'Windows 7', 'Windows XP',
+            'Windows Server', 'Linux', 'macOS', 'Windows อื่นๆ', 'อื่นๆ', 'ไม่ระบุ OS',
+        ];
+
+        return Object.keys(counts)
+            .sort((a, b) => {
+                const idxA = preferredOrder.indexOf(a);
+                const idxB = preferredOrder.indexOf(b);
+                if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                if (idxA !== -1) return -1;
+                if (idxB !== -1) return 1;
+                return a.localeCompare(b);
+            })
+            .map((fam) => ({
+                value: fam,
+                label: `${fam} (${counts[fam]})`,
+                count: counts[fam],
+            }));
+    }, [assets]);
+
+    const handleQuickThreatTicket = async (a: Asset) => {
+        try {
+            const res = await axios.post(`/im/resource/assets/${a.id}/report-threat-ticket`);
+            if (res.data?.success) {
+                setThreatActionMsg(res.data.message);
+                setTimeout(() => setThreatActionMsg(null), 5000);
+            }
+        } catch (err: any) {
+            alert(err.response?.data?.message || 'เกิดข้อผิดพลาดในการสร้างตั๋วงาน');
+        }
+    };
+
+    const handleExportPdf = () => {
+        const params = new URLSearchParams();
+        if (deviceTypeFilter !== 'all') params.append('device_type', deviceTypeFilter);
+        if (cpuFilter !== 'all') params.append('cpu', cpuFilter);
+        if (osFilter !== 'all') params.append('os', osFilter);
+        const url = `${route('im.resource.computers-pdf')}?${params.toString()}`;
+        window.open(url, '_blank');
+    };
+
+    const hasActiveFilters = searchQuery !== '' || securityFilter !== 'all' || deviceTypeFilter !== 'all' || cpuFilter !== 'all' || osFilter !== 'all';
+
+    const clearFilters = () => {
+        setSearchQuery('');
+        setSecurityFilter('all');
+        setDeviceTypeFilter('all');
+        setCpuFilter('all');
+        setOsFilter('all');
+    };
+
+    const filteredAssets = useMemo(() => {
+        const list = assets.filter((a) => {
+            if (searchQuery.trim()) {
+                const q = searchQuery.toLowerCase();
+                const matchName = (a.name || '').toLowerCase().includes(q);
+                const matchCode = (a.asset_code || '').toLowerCase().includes(q);
+                const matchIp = (a.system_spec?.ip_address || '').toLowerCase().includes(q);
+                const matchMac = (a.mac_address || a.system_spec?.mac_address || '').toLowerCase().includes(q);
+                const matchUser = (a.assigned_user || '').toLowerCase().includes(q);
+                const matchDept = (a.department || '').toLowerCase().includes(q);
+                const matchCpu = (a.cpu || a.system_spec?.cpu_name || '').toLowerCase().includes(q);
+                const matchOs = (a.os || a.system_spec?.os_name || '').toLowerCase().includes(q);
+                if (!matchName && !matchCode && !matchIp && !matchMac && !matchUser && !matchDept && !matchCpu && !matchOs) {
+                    return false;
+                }
+            }
+            if (deviceTypeFilter !== 'all') {
+                if ((a.device_type || 'computer') !== deviceTypeFilter) {
+                    return false;
+                }
+            }
+            if (cpuFilter !== 'all') {
+                const fam = normalizeCpuFamily(a.cpu || a.system_spec?.cpu_name);
+                if (fam !== cpuFilter) {
+                    return false;
+                }
+            }
+            if (osFilter !== 'all') {
+                const fam = normalizeOsFamily(a.os || a.system_spec?.os_name);
+                if (fam !== osFilter) {
+                    return false;
+                }
+            }
+            if (securityFilter === 'threat') {
+                return a.system_spec?.threat_level === 'critical';
+            }
+            if (securityFilter === 'vpn') {
+                return a.system_spec?.vpn_detected === true;
+            }
+            if (securityFilter === 'normal') {
+                return a.system_spec && a.system_spec.threat_level === 'normal' && !a.system_spec.vpn_detected;
+            }
+            return true;
+        });
+
+        // 1. เรียงเครื่องที่สถานะออนไลน์ (Online) ขึ้นก่อนเสมอ
+        // 2. ตามด้วยเครื่องที่มีการเชื่อมต่อล่าสุด (last_seen_at desc)
+        return [...list].sort((a, b) => {
+            const now = Date.now();
+            const aTime = a.system_spec?.last_seen_at ? new Date(a.system_spec.last_seen_at).getTime() : 0;
+            const bTime = b.system_spec?.last_seen_at ? new Date(b.system_spec.last_seen_at).getTime() : 0;
+            const aOnline = aTime > 0 && (now - aTime < 25 * 60 * 1000);
+            const bOnline = bTime > 0 && (now - bTime < 25 * 60 * 1000);
+
+            if (aOnline && !bOnline) return -1;
+            if (!aOnline && bOnline) return 1;
+            if (aTime !== bTime) return bTime - aTime;
+            return (b.id || 0) - (a.id || 0);
+        });
+    }, [assets, searchQuery, securityFilter, deviceTypeFilter, cpuFilter, osFilter]);
 
     useEffect(() => {
         const hash = window.location.hash;
@@ -418,6 +620,35 @@ export default function ResourcePage({ assets, competencies, changes, staff, dev
                 <StatCard label="Change รออนุมัติ" value={summary.pending_changes} icon={GitPullRequest} tone="sky" />
             </div>
 
+            {/* Security Alert Banner if threats detected */}
+            {(summary.threats_count ?? 0) > 0 && (
+                <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-gradient-to-r from-rose-950 via-rose-900 to-slate-900 text-white shadow-md border border-rose-500/40">
+                    <div className="flex items-center gap-3">
+                        <AlertTriangle className="h-6 w-6 text-rose-300 animate-bounce shrink-0" />
+                        <div>
+                            <div className="font-bold text-sm">ตรวจพบภัยคุกคามความปลอดภัยบนเครื่องลูกข่าย ({summary.threats_count} เครื่อง)</div>
+                            <div className="text-xs text-rose-200">มีเครื่องคอมพิวเตอร์ที่ตรวจพบมัลแวร์ ไวรัส หรือเครื่องมือโจมตี กรุณาตรวจสอบใน Security Radar ทันที</div>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => { setTab('assets'); setSecurityFilter('threat'); }}
+                        className="px-3 py-1.5 rounded-xl bg-white text-rose-900 text-xs font-bold hover:bg-rose-50 transition shrink-0"
+                    >
+                        กรองดูเครื่องที่พบภัยคุกคาม ({summary.threats_count})
+                    </button>
+                </div>
+            )}
+
+            {threatActionMsg && (
+                <div className="p-3.5 rounded-xl text-xs font-semibold flex items-center justify-between border bg-emerald-50 text-emerald-800 border-emerald-200">
+                    <div className="flex items-center gap-2">
+                        <Check className="h-4 w-4 text-emerald-600" />
+                        <span>{threatActionMsg}</span>
+                    </div>
+                    <button onClick={() => setThreatActionMsg(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+                </div>
+            )}
+
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap gap-2">
                     {([['assets', 'ทะเบียนทรัพยากร'], ['competencies', 'สมรรถนะ & IDP'], ['changes', 'Change Request']] as [Tab, string][]).map(([k, l]) => (
@@ -435,13 +666,23 @@ export default function ResourcePage({ assets, competencies, changes, staff, dev
                 </div>
                 <div className="flex items-center gap-2">
                     {tab === 'assets' && (
-                        <Button
-                            variant="outline"
-                            className="rounded-xl border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100 hover:text-sky-800 shadow-xs"
-                            onClick={() => setInstallModalOpen(true)}
-                        >
-                            <Terminal className="mr-1.5 h-4 w-4 text-sky-600" /> ติดตั้ง Agent (Windows)
-                        </Button>
+                        <>
+                            <Button
+                                variant="outline"
+                                className="rounded-xl border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100 hover:text-sky-800 shadow-xs"
+                                onClick={() => setInstallModalOpen(true)}
+                            >
+                                <Terminal className="mr-1.5 h-4 w-4 text-sky-600" /> ติดตั้ง Agent (Windows)
+                            </Button>
+                            <Button
+                                variant="outline"
+                                className="rounded-xl border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:text-rose-800 shadow-xs"
+                                onClick={handleExportPdf}
+                                title="ออกรายงาน PDF บัญชีคอมพิวเตอร์ แยกตามประเภท CPU และ OS"
+                            >
+                                <Printer className="mr-1.5 h-4 w-4 text-rose-600" /> รายงาน PDF
+                            </Button>
+                        </>
                     )}
                     <Button
                         className="rounded-xl bg-sky-600 hover:bg-sky-700"
@@ -453,9 +694,136 @@ export default function ResourcePage({ assets, competencies, changes, staff, dev
             </div>
 
             {tab === 'assets' && (
-                <Panel title="ทะเบียนทรัพยากร IT" description="ข้อมูลเครื่อง ผู้ใช้งาน หน่วยงาน และสถานะ ปกติ / ส่งซ่อม / จำหน่าย">
-                    {assets.length === 0 ? (
-                        <EmptyState text="ยังไม่มีทรัพยากร" />
+                <Panel title="ทะเบียนทรัพยากร IT" description="ข้อมูลเครื่อง ผู้ใช้งาน หน่วยงาน และสถานะ ปกติ / ส่งซ่อม / จำหน่าย พร้อมระบบตรวจจับความปลอดภัยและ VPN">
+                    {/* Search and Filters Bar */}
+                    <div className="mb-4 space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 flex-1 min-w-[240px] max-w-md">
+                                <div className="relative w-full">
+                                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                                    <Input
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        placeholder="ค้นหาชื่อเครื่อง, IP, MAC, CPU, OS, ผู้ใช้งาน, แผนก..."
+                                        className="pl-9 bg-white rounded-xl text-xs"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-xs text-slate-400 font-medium">ความปลอดภัย:</span>
+                                <button
+                                    onClick={() => setSecurityFilter('all')}
+                                    className={cn('rounded-lg px-2.5 py-1 text-xs font-semibold border transition', securityFilter === 'all' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50')}
+                                >
+                                    ทั้งหมด ({assets.length})
+                                </button>
+                                <button
+                                    onClick={() => setSecurityFilter('threat')}
+                                    className={cn('rounded-lg px-2.5 py-1 text-xs font-semibold border transition flex items-center gap-1', securityFilter === 'threat' ? 'bg-rose-600 text-white border-rose-600' : 'bg-white text-rose-700 border-rose-200 hover:bg-rose-50')}
+                                >
+                                    <AlertTriangle className="h-3 w-3" />
+                                    ภัยคุกคาม ({summary.threats_count ?? 0})
+                                </button>
+                                <button
+                                    onClick={() => setSecurityFilter('vpn')}
+                                    className={cn('rounded-lg px-2.5 py-1 text-xs font-semibold border transition flex items-center gap-1', securityFilter === 'vpn' ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50')}
+                                >
+                                    <ShieldAlert className="h-3 w-3" />
+                                    พบ VPN ({summary.vpn_count ?? 0})
+                                </button>
+                                <button
+                                    onClick={() => setSecurityFilter('normal')}
+                                    className={cn('rounded-lg px-2.5 py-1 text-xs font-semibold border transition flex items-center gap-1', securityFilter === 'normal' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50')}
+                                >
+                                    <ShieldCheck className="h-3 w-3" />
+                                    ปกติ
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Secondary Filter Row: Device Type, CPU, OS */}
+                        <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t border-slate-100">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
+                                    <Filter className="h-3.5 w-3.5 text-slate-400" />
+                                    <span>ตัวกรอง:</span>
+                                </div>
+
+                                {/* Device Type Filter */}
+                                <select
+                                    value={deviceTypeFilter}
+                                    onChange={(e) => setDeviceTypeFilter(e.target.value)}
+                                    className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 font-medium shadow-2xs hover:border-sky-300 focus:outline-none focus:ring-1 focus:ring-sky-400"
+                                >
+                                    <option value="all">ประเภทอุปกรณ์: ทั้งหมด</option>
+                                    <option value="computer">คอมพิวเตอร์ตั้งโต๊ะ</option>
+                                    <option value="notebook">โน้ตบุ๊ก (Notebook)</option>
+                                    <option value="server">เซิร์ฟเวอร์ (Server)</option>
+                                    <option value="printer">เครื่องพิมพ์</option>
+                                    <option value="scanner">สแกนเนอร์</option>
+                                    <option value="network_device">อุปกรณ์เครือข่าย</option>
+                                    <option value="ups">UPS</option>
+                                    <option value="other">อื่นๆ</option>
+                                </select>
+
+                                {/* CPU Filter */}
+                                <select
+                                    value={cpuFilter}
+                                    onChange={(e) => setCpuFilter(e.target.value)}
+                                    className={cn(
+                                        "rounded-lg border px-2.5 py-1 text-xs font-medium shadow-2xs focus:outline-none focus:ring-1 focus:ring-sky-400 max-w-[200px] truncate",
+                                        cpuFilter !== 'all' ? "border-sky-400 bg-sky-50 text-sky-800 font-semibold" : "border-slate-200 bg-white text-slate-700 hover:border-sky-300"
+                                    )}
+                                    title="กรองตามหน่วยประมวลผล (เช่น Core i3, Core i5, Ryzen)"
+                                >
+                                    <option value="all">CPU: ทั้งหมด ({cpuOptions.length} กลุ่ม)</option>
+                                    {cpuOptions.map((c) => (
+                                        <option key={c.value} value={c.value}>
+                                            {c.label}
+                                        </option>
+                                    ))}
+                                </select>
+
+                                {/* OS Filter */}
+                                <select
+                                    value={osFilter}
+                                    onChange={(e) => setOsFilter(e.target.value)}
+                                    className={cn(
+                                        "rounded-lg border px-2.5 py-1 text-xs font-medium shadow-2xs focus:outline-none focus:ring-1 focus:ring-sky-400 max-w-[200px] truncate",
+                                        osFilter !== 'all' ? "border-sky-400 bg-sky-50 text-sky-800 font-semibold" : "border-slate-200 bg-white text-slate-700 hover:border-sky-300"
+                                    )}
+                                    title="กรองตามระบบปฏิบัติการ (เช่น Windows 11, Windows 10, Windows 7)"
+                                >
+                                    <option value="all">OS: ทั้งหมด ({osOptions.length} ระบบ)</option>
+                                    {osOptions.map((o) => (
+                                        <option key={o.value} value={o.value}>
+                                            {o.label}
+                                        </option>
+                                    ))}
+                                </select>
+
+                                {hasActiveFilters && (
+                                    <button
+                                        type="button"
+                                        onClick={clearFilters}
+                                        className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100 transition shadow-2xs"
+                                        title="ล้างตัวกรองทั้งหมด"
+                                    >
+                                        <RotateCcw className="h-3 w-3" />
+                                        ล้างตัวกรอง
+                                    </button>
+                                )}
+                            </div>
+
+                            <div className="text-xs text-slate-400 font-medium">
+                                แสดง <span className="font-semibold text-slate-700">{filteredAssets.length}</span> จาก {assets.length} รายการ
+                            </div>
+                        </div>
+                    </div>
+
+                    {filteredAssets.length === 0 ? (
+                        <EmptyState text={assets.length === 0 ? "ยังไม่มีทรัพยากร" : "ไม่พบรายการตามเงื่อนไขการค้นหา"} />
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="w-full min-w-[1100px] text-sm">
@@ -475,7 +843,7 @@ export default function ResourcePage({ assets, competencies, changes, staff, dev
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {assets.map((a) => {
+                                    {filteredAssets.map((a) => {
                                         const openRepair = a.open_repair ?? a.repairs?.find((r) => r.status === 'open');
                                         return (
                                             <tr key={a.id} id={`asset-${a.id}`} className="border-b border-slate-50 align-top">
@@ -483,11 +851,62 @@ export default function ResourcePage({ assets, competencies, changes, staff, dev
                                                 <td className="py-2.5 pr-3">
                                                     <div className="font-medium text-slate-700 flex items-center gap-1.5 flex-wrap">
                                                         <span>{a.name}</span>
-                                                        {a.system_spec && (
-                                                            <span
-                                                                className="inline-block h-2 w-2 rounded-full bg-emerald-500 shrink-0"
-                                                                title={`เชื่อมโยง FSHH Agent (IP: ${a.system_spec.ip_address || '-'})`}
-                                                            />
+                                                        {a.system_spec && (() => {
+                                                            const isOnline = Boolean(
+                                                                a.system_spec.last_seen_at &&
+                                                                (Date.now() - new Date(a.system_spec.last_seen_at).getTime() < 25 * 60 * 1000)
+                                                            );
+                                                            return (
+                                                                <span
+                                                                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                                                                        isOnline
+                                                                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                                                            : 'bg-slate-100 text-slate-500 border border-slate-200'
+                                                                    }`}
+                                                                    title={`Agent ${isOnline ? 'ออนไลน์' : 'ออฟไลน์'} (IP: ${a.system_spec.ip_address || '-'})`}
+                                                                >
+                                                                    <span
+                                                                        className={`h-1.5 w-1.5 rounded-full ${
+                                                                            isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
+                                                                        }`}
+                                                                    />
+                                                                    <span>{isOnline ? 'Online' : 'Offline'}</span>
+                                                                </span>
+                                                            );
+                                                        })()}
+                                                        {/* Security Status Badge */}
+                                                        {a.system_spec?.threat_level === 'critical' && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setInspectorAsset(a)}
+                                                                className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-rose-100 text-rose-700 border border-rose-300 animate-pulse hover:bg-rose-200 transition"
+                                                                title="🚨 ตรวจพบภัยคุกคามไซเบอร์: คลิกเพื่อเปิด Security Radar"
+                                                            >
+                                                                <AlertTriangle className="h-3 w-3 text-rose-600" />
+                                                                ภัยคุกคาม
+                                                            </button>
+                                                        )}
+                                                        {a.system_spec?.vpn_detected && a.system_spec?.threat_level !== 'critical' && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setInspectorAsset(a)}
+                                                                className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-amber-100 text-amber-700 border border-amber-300 hover:bg-amber-200 transition"
+                                                                title="⚠️ ตรวจพบการใช้งาน VPN: คลิกเพื่อเปิด Security Radar"
+                                                            >
+                                                                <ShieldAlert className="h-3 w-3 text-amber-600" />
+                                                                VPN
+                                                            </button>
+                                                        )}
+                                                        {a.system_spec && a.system_spec.threat_level === 'normal' && !a.system_spec.vpn_detected && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setInspectorAsset(a)}
+                                                                className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition"
+                                                                title="🛡️ ความปลอดภัยปกติ (Windows Defender Active)"
+                                                            >
+                                                                <ShieldCheck className="h-3 w-3 text-emerald-600" />
+                                                                ปลอดภัย
+                                                            </button>
                                                         )}
                                                         {(a.remote_id || a.system_spec?.remote_id) && (
                                                             <span
@@ -513,6 +932,16 @@ export default function ResourcePage({ assets, competencies, changes, staff, dev
                                                 <td className="py-2.5 pr-3">{assetStatusPill(a.status)}</td>
                                                 <td className="py-2.5 text-right">
                                                     <div className="flex flex-wrap justify-end gap-1">
+                                                        {(a.system_spec?.threat_level === 'critical' || a.system_spec?.vpn_detected) && (
+                                                            <button
+                                                                title="สร้างรายงานปัญหาความปลอดภัย (Service Desk)"
+                                                                onClick={() => handleQuickThreatTicket(a)}
+                                                                className="rounded-lg border border-rose-300 bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-100 transition flex items-center gap-1 shadow-xs"
+                                                            >
+                                                                <AlertCircle className="h-3 w-3 text-rose-600" />
+                                                                รายงานปัญหา
+                                                            </button>
+                                                        )}
                                                         {(a.system_spec || ['computer', 'notebook', 'server'].includes(a.device_type ?? '')) && (
                                                             <>
                                                                 <button

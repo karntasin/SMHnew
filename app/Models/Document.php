@@ -19,7 +19,35 @@ class Document extends Model
         'escalated_at' => 'datetime',
         'director_signed_at' => 'datetime',
         'archived_at' => 'datetime',
+        'director_assigned_departments' => 'array',
     ];
+
+    protected $appends = ['tracking_progress'];
+
+    public function getTrackingProgressAttribute()
+    {
+        $forwardActions = $this->actions->where('action_type', 'forward');
+        $total = $forwardActions->count();
+        if ($total === 0) {
+            return [
+                'total' => 0,
+                'acknowledged' => 0,
+                'completed' => 0,
+                'percent' => 0,
+            ];
+        }
+
+        $acknowledged = $forwardActions->whereNotNull('acknowledged_at')->count();
+        $completed = $forwardActions->whereIn('implementation_status', ['completed', 'not_relevant'])->count();
+        $percent = (int) round(($completed / $total) * 100);
+
+        return [
+            'total' => $total,
+            'acknowledged' => $acknowledged,
+            'completed' => $completed,
+            'percent' => $percent,
+        ];
+    }
 
     public function actions()
     {

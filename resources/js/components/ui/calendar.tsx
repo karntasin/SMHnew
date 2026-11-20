@@ -63,7 +63,10 @@ function Calendar({
           "focus:bg-emerald-600 focus:text-white",
           "shadow-md ring-2 ring-emerald-300/40 scale-105"
         ),
-        outside: "text-muted-foreground/40 aria-selected:bg-primary/5",
+        range_start: "rounded-l-xl rounded-r-none bg-emerald-600 text-white font-bold shadow-sm ring-1 ring-emerald-500",
+        range_middle: "!rounded-none bg-emerald-100/70 text-emerald-900 font-semibold dark:bg-emerald-900/40 dark:text-emerald-100",
+        range_end: "rounded-r-xl rounded-l-none bg-emerald-600 text-white font-bold shadow-sm ring-1 ring-emerald-500",
+        outside: "text-muted-foreground/30 aria-selected:bg-primary/5",
         disabled: "text-muted-foreground opacity-40",
         hidden: "invisible",
         ...classNames,

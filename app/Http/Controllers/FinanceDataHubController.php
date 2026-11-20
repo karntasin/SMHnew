@@ -6,6 +6,11 @@ use App\Models\Finance\CgdReconciliation;
 use App\Models\Finance\CgdStmBatch;
 use App\Services\Finance\CgdHosxpClaimService;
 use App\Support\Finance\DataHubSchemes;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -48,6 +53,29 @@ class FinanceDataHubController extends Controller
                 'planned_modules' => collect($schemes)->where('status', 'planned')->count(),
             ],
             'schemes' => $schemes,
+            'lastAutoSync' => Cache::get('finance_last_auto_sync_report'),
         ]);
+    }
+
+    public function autoSyncStatus(): JsonResponse
+    {
+        $report = Cache::get('finance_last_auto_sync_report');
+
+        return response()->json($report ?: ['status' => 'never_run']);
+    }
+
+    public function autoSyncNow(Request $request): RedirectResponse
+    {
+        @set_time_limit(1800);
+        Artisan::call('finance:auto-sync-all');
+
+        $report = Cache::get('finance_last_auto_sync_report');
+        $smtAmt = number_format($report['smt']['total_amount'] ?? 0, 2);
+        $smtCount = (int) ($report['smt']['synced_count'] ?? 0);
+        $pdfCount = (int) ($report['smt']['pdf_downloaded'] ?? 0);
+
+        $msg = "สั่งรันซิงค์ข้อมูลอัตโนมัติเรียบร้อยแล้ว — SMT: {$smtCount} รายการ ({$smtAmt} บ., PDF {$pdfCount} ไฟล์)";
+
+        return redirect()->back()->with('success', $msg);
     }
 }

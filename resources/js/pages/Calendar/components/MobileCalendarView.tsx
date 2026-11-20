@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CalendarFullEvent, CalendarScope } from '@/types/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ChevronDown } from 'lucide-react';
 
 interface MobileCalendarViewProps {
     currentDate: Date;
@@ -169,9 +171,61 @@ export default function MobileCalendarView({
                     >
                         <ChevronLeft className="h-4 w-4" />
                     </button>
-                    <span className="px-1 text-sm font-bold text-slate-800 dark:text-white">
-                        {thaiMonth} {thaiYear}
-                    </span>
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <button
+                                type="button"
+                                className="px-1 text-xs sm:text-sm font-bold text-slate-800 dark:text-white flex items-center gap-0.5"
+                            >
+                                <span>{thaiMonth} {thaiYear}</span>
+                                <ChevronDown className="h-3 w-3 text-slate-400" />
+                            </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-72 p-2.5 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 z-50">
+                            <div className="flex items-center justify-between pb-1.5 mb-2 border-b border-slate-100 dark:border-slate-800">
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 rounded-md"
+                                    onClick={() => onDateChange(new Date(currentDate.getFullYear() - 1, currentDate.getMonth(), 1))}
+                                >
+                                    <ChevronLeft className="h-3.5 w-3.5" />
+                                </Button>
+                                <span className="text-xs font-bold text-sky-700 dark:text-sky-400">
+                                    พ.ศ. {thaiYear}
+                                </span>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 rounded-md"
+                                    onClick={() => onDateChange(new Date(currentDate.getFullYear() + 1, currentDate.getMonth(), 1))}
+                                >
+                                    <ChevronRight className="h-3.5 w-3.5" />
+                                </Button>
+                            </div>
+                            <div className="grid grid-cols-3 gap-1">
+                                {THAI_MONTHS.map((mName, idx) => {
+                                    const isCurrent = currentDate.getMonth() === idx;
+                                    return (
+                                        <button
+                                            key={mName}
+                                            type="button"
+                                            onClick={() => onDateChange(new Date(currentDate.getFullYear(), idx, 1))}
+                                            className={`rounded-lg py-1.5 px-0.5 text-[11px] font-semibold transition-all ${
+                                                isCurrent
+                                                    ? 'bg-sky-600 text-white shadow-2xs'
+                                                    : 'text-slate-700 hover:bg-sky-50 dark:text-slate-300 dark:hover:bg-slate-800'
+                                            }`}
+                                        >
+                                            {mName}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </PopoverContent>
+                    </Popover>
                     <button
                         type="button"
                         onClick={handleNextMonth}

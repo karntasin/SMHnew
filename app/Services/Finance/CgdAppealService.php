@@ -690,7 +690,7 @@ class CgdAppealService
             'current_amount_approved' => $approved,
             'original_shortfall' => 0,
             'appeal_amount_requested' => 0,
-            'current_status' => CgdAppealCase::STATUS_APPROVED,
+            'current_status' => CgdAppealCase::STATUS_SETTLED,
             'last_updated_at' => now(),
         ]);
         $case->save();
@@ -1176,6 +1176,11 @@ class CgdAppealService
                 CgdAppealEvent::TYPE_APPEAL_IMPORTED,
             ])
             ->exists();
+
+        $appealStatus = ($extraPay > 0 || ($appealApproved > 0 && $originalShortfall > 0 && $appealApproved >= $originalShortfall))
+            ? CgdAppealCase::STATUS_APPROVED
+            : ($appealApproved > 0 ? CgdAppealCase::STATUS_PARTIAL : CgdAppealCase::STATUS_DENIED);
+
         $case->fill([
             'hn' => $currentRow->hn ?: $case->hn,
             'pid' => $currentRow->pid ?: $case->pid,
@@ -1190,7 +1195,7 @@ class CgdAppealService
             'appeal_amount_requested' => $originalShortfall,
             'appeal_amount_approved' => $extraPay,
             'current_amount_approved' => $appealApproved,
-            'current_status' => CgdAppealCase::STATUS_APPROVED,
+            'current_status' => $appealStatus,
             'latest_appeal_batch_id' => $batch->id,
             'appeal_count' => $alreadyCounted
                 ? (int) $case->appeal_count
@@ -1223,23 +1228,38 @@ class CgdAppealService
                     .($docHint ? ' · '.$docHint : ''),
             ];
         }
-        $events[] = [
-            'type' => CgdAppealEvent::TYPE_APPROVED,
-            'rep_no' => $currentRep,
-            'amount_approved_before' => $beforeApproved,
-            'amount_approved_after' => $appealApproved,
-            'appeal_amount_before' => $beforeAppealAmt,
-            'appeal_amount_after' => $extraPay,
-            'note' => 'อุทธรณ์สำเร็จ · REP '.($currentRep ?: '-')
+        $isApproved = ($extraPay > 0 || ($appealApproved > 0 && $originalShortfall > 0 && $appealApproved >= $originalShortfall));
+        $isPartial = (! $isApproved && $appealApproved > 0);
+        $eventType = $isApproved ? CgdAppealEvent::TYPE_APPROVED : ($isPartial ? CgdAppealEvent::TYPE_PARTIAL : CgdAppealEvent::TYPE_DENIED);
+        $eventNote = $isApproved
+            ? ('อุทธรณ์สำเร็จ · REP '.($currentRep ?: '-')
                 .' (ค่ามากที่สุดของ SEQ '.$case->seq_no.')'
                 .' · พึงรับ '.number_format($appealApproved, 2)
+                .($extraPay > 0 ? ' (ชดเชยเพิ่ม +'.number_format($extraPay, 2).' บ.)' : '')
                 .($originalRep && $originalRep !== $currentRep
                     ? ' · อัปเดตจากเคสรออุทธรณ์ REP '.$originalRep
                     : '')
                 .($historyRepKeys !== []
                     ? ' · มีประวัติ REP อื่น '.count($historyRepKeys).' รายการ'
                     : '')
-                .($docHint ? ' · '.$docHint : ''),
+                .($docHint ? ' · '.$docHint : ''))
+            : ($isPartial
+                ? ('อุทธรณ์ได้บางส่วน · REP '.($currentRep ?: '-')
+                    .' · พึงรับ '.number_format($appealApproved, 2)
+                    .($docHint ? ' · '.$docHint : ''))
+                : ('อุทธรณ์ไม่ผ่าน (ปฏิเสธ) · REP '.($currentRep ?: '-')
+                    .' (SEQ '.$case->seq_no.')'
+                    .' · e-Claim ไม่อนุมัติจ่ายเพิ่ม (พึงรับ 0.00 บ.)'
+                    .($docHint ? ' · '.$docHint : '')));
+
+        $events[] = [
+            'type' => $eventType,
+            'rep_no' => $currentRep,
+            'amount_approved_before' => $beforeApproved,
+            'amount_approved_after' => $appealApproved,
+            'appeal_amount_before' => $beforeAppealAmt,
+            'appeal_amount_after' => $extraPay,
+            'note' => $eventNote,
         ];
         $this->replaceEventsForAppealBatch($case, $batch, $events);
 

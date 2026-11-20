@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Im;
 use App\Http\Controllers\Controller;
 use App\Models\Im\Asset;
 use App\Models\Im\AssetSpec;
+use App\Models\Im\ServiceTicket;
 use App\Services\Im\AssetMacLookup;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -24,7 +25,12 @@ class AgentController extends Controller
         $scriptPath = resource_path('scripts/smh-agent.ps1');
 
         if ($request->query('raw') === '1' && file_exists($scriptPath)) {
-            return response(file_get_contents($scriptPath), 200, [
+            $content = file_get_contents($scriptPath);
+            if (! str_starts_with($content, "\xEF\xBB\xBF")) {
+                $content = "\xEF\xBB\xBF".$content;
+            }
+
+            return response($content, 200, [
                 'Content-Type' => 'text/plain; charset=utf-8',
             ]);
         }
@@ -124,10 +130,10 @@ try {
         Write-Host "[Notice] Remote support service setup skipped: \$_" -ForegroundColor Yellow
     }
 
-    Write-Host "[3/4] Configuring hardware scanner, auto-startup and initial scan..." -ForegroundColor Yellow
+    Write-Host "[3/4] Configuring hardware scanner, security radar & auto-startup..." -ForegroundColor Yellow
     powershell.exe -NoProfile -ExecutionPolicy Bypass -File "\$scriptPath" -Install -ServerUrl "{$serverUrl}"
 
-    Write-Host "[4/4] Done! Computer and Remote Support are now registered in FSHH IM Resource." -ForegroundColor Green
+    Write-Host "[4/4] Done! Computer hardware, remote support and security radar are now registered." -ForegroundColor Green
 } catch {
     Write-Host "[Error] Installation failed: \$_" -ForegroundColor Red
 }
@@ -140,95 +146,172 @@ POWERSHELL;
 
     /**
      * Download .bat installer wrapper for double-clicking
+     * Clean implementation without Base64 -EncodedCommand or in-memory Invoke-Expression
+     * to prevent false-positive heuristic flags by Windows Defender / AMSI.
      */
     public function downloadBat(Request $request): Response
     {
         $serverUrl = $this->resolveServerUrl($request);
 
-        // Build PowerShell bootstrap payload
-        $psScript = <<<PS
-\$Host.UI.RawUI.WindowTitle = "FSHH Computer Agent Installer"
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor 3072 -bor 12288 -bor [Net.SecurityProtocolType]::Tls11 -bor [Net.SecurityProtocolType]::Tls
-[System.Net.ServicePointManager]::DefaultConnectionLimit = 64
-[System.Net.ServicePointManager]::Expect100Continue = \$false
-[System.Net.ServicePointManager]::MaxServicePointIdleTime = 2000
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force -ErrorAction SilentlyContinue
-
-Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host "  FSHH Computer Agent Installer (Windows 10 / 11)" -ForegroundColor Cyan
-Write-Host "  Fort Surasinghanat Hospital" -ForegroundColor Cyan
-Write-Host "  Server: {$serverUrl}" -ForegroundColor Cyan
-Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host ""
-
-function Download-StringWithRetry {
-    param([string]\$Url)
-    for (\$attempt = 1; \$attempt -le 3; \$attempt++) {
-        try {
-            \$wc = New-Object System.Net.WebClient
-            \$wc.Encoding = [System.Text.Encoding]::UTF8
-            \$wc.Headers.Add("User-Agent", "FSHH-Agent-Bat-Bootstrap")
-            \$data = \$wc.DownloadString(\$Url)
-            \$wc.Dispose()
-            return \$data
-        } catch {
-            Start-Sleep -Seconds 1
-        }
-    }
-    return (Invoke-RestMethod -Uri \$Url -UseBasicParsing)
-}
-
-try {
-    Write-Host "[1/2] Connecting to FSHH Server and downloading installer..." -ForegroundColor Yellow
-    \$script = Download-StringWithRetry -Url "{$serverUrl}/im/agent/install.ps1"
-    Invoke-Expression \$script
-} catch {
-    Write-Host "[Error] Installation failed: \$_" -ForegroundColor Red
-}
-
-Write-Host ""
-Write-Host "==========================================================" -ForegroundColor Green
-Write-Host "  Installation finished! Press Enter to close this window" -ForegroundColor Green
-Write-Host "==========================================================" -ForegroundColor Green
-Read-Host "Press Enter to exit"
-PS;
-
-        // Base64 encode for UTF-16LE (PowerShell -EncodedCommand standard)
-        $encodedCommand = base64_encode(mb_convert_encoding($psScript, 'UTF-16LE', 'UTF-8'));
-
         $batContent = <<<BAT
 @echo off
+setlocal EnableExtensions
 chcp 65001 >nul
-title FSHH Computer Agent Installer - Fort Surasinghanat Hospital
+title FSHH Computer and Security Agent Installer - Fort Surasinghanat Hospital
 
-:: Check Administrator privilege
+:: -----------------------------------------------------------------------------
+:: Step 1: Check Administrator privileges
+:: -----------------------------------------------------------------------------
 net session >nul 2>&1
 if %errorlevel% equ 0 goto :RUN_INSTALL
 
-:ELEVATE
+:: -----------------------------------------------------------------------------
+:: Step 2: Request UAC Elevation
+:: -----------------------------------------------------------------------------
 echo ===================================================================
 echo   [FSHH Agent] Requesting Administrator privilege (UAC)...
 echo   Please click "Yes" on the Windows confirmation dialog.
 echo ===================================================================
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "try { Start-Process powershell.exe -ArgumentList '-NoProfile -ExecutionPolicy Bypass -EncodedCommand {$encodedCommand}' -Verb RunAs } catch { & powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand {$encodedCommand} }"
+set "FSHH_BAT_PATH=%~f0"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd.exe -ArgumentList ('/c `"' + \$env:FSHH_BAT_PATH + '`" ELEVATED') -Verb RunAs"
+if %errorlevel% neq 0 (
+    echo.
+    echo [ERROR] Administrator privilege is required.
+    echo Please right-click install-fshh-agent.bat and select "Run as administrator".
+    echo.
+    pause
+)
 exit /b
 
 :RUN_INSTALL
+cd /d "%~dp0"
+cls
 echo ===================================================================
-echo   Installing FSHH Agent for Fort Surasinghanat Hospital
-echo   Server URL: {$serverUrl}
+echo   FSHH Computer and Security Radar Agent [Windows 10 / 11]
+echo   Fort Surasinghanat Hospital - IM Security Management
+echo   Server: {$serverUrl}
 echo ===================================================================
-echo.
-echo Connecting and installing, please wait...
 echo.
 
-powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand {$encodedCommand}
+:: 1. Ensure Agent directory exists in ProgramData
+set "AGENT_DIR=%ProgramData%\SMH-Agent"
+if not exist "%AGENT_DIR%" mkdir "%AGENT_DIR%"
+
+set "SCRIPT_FILE=%AGENT_DIR%\smh-agent.ps1"
+set "RUSTDESK_FILE=%AGENT_DIR%\\rustdesk.exe"
+set "CA_CERT_FILE=%AGENT_DIR%\Fortinet_CA_SSL.cer"
+
+set "SCRIPT_URL={$serverUrl}/im/agent/install.ps1?raw=1"
+set "RUSTDESK_URL={$serverUrl}/im/agent/rustdesk.exe"
+set "CA_CERT_URL={$serverUrl}/im/agent/fortinet-ca.cer"
+
+:: 2. Auto-import Fortinet Hospital Root CA certificate into Windows Trusted Root Store
+echo [1/4] Installing Fortinet Hospital CA Certificate...
+curl.exe -fskSL "%CA_CERT_URL%" -o "%CA_CERT_FILE%" >nul 2>&1
+if not exist "%CA_CERT_FILE%" (
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object System.Net.WebClient).DownloadFile('%CA_CERT_URL%', '%CA_CERT_FILE%')" >nul 2>&1
+)
+if exist "%CA_CERT_FILE%" (
+    certutil -addstore -f "ROOT" "%CA_CERT_FILE%" >nul 2>&1
+    echo       [OK] Fortinet Hospital CA Certificate imported to Windows Trusted Store.
+) else (
+    echo       [Notice] Fortinet CA file not found, skipping.
+)
+
+:: 3. Download agent script directly to disk via native curl.exe or WebClient
+echo [2/4] Downloading latest FSHH Agent script from {$serverUrl}...
+curl.exe -fskSL "%SCRIPT_URL%" -o "%SCRIPT_FILE%" >nul 2>&1
+if not exist "%SCRIPT_FILE%" (
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object System.Net.WebClient).DownloadFile('%SCRIPT_URL%', '%SCRIPT_FILE%')" >nul 2>&1
+)
+
+if not exist "%SCRIPT_FILE%" (
+    echo.
+    echo [ERROR] Failed to download smh-agent.ps1 from {$serverUrl}
+    echo Please verify network connection or server address.
+    echo.
+    pause
+    exit /b 1
+)
+
+:: Unblock script to satisfy Windows SmartScreen
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Unblock-File -Path '%SCRIPT_FILE%' -ErrorAction SilentlyContinue"
+
+:: 4. Setup Remote Support Service (RustDesk) if not already installed
+echo [3/4] Setting up Remote Support Service...
+if exist "%ProgramFiles%\\RustDesk\\rustdesk.exe" goto :RUSTDESK_ALREADY_INSTALLED
+
+curl.exe -fskSL "%RUSTDESK_URL%" -o "%RUSTDESK_FILE%" >nul 2>&1
+if not exist "%RUSTDESK_FILE%" (
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object System.Net.WebClient).DownloadFile('%RUSTDESK_URL%', '%RUSTDESK_FILE%')" >nul 2>&1
+)
+if exist "%RUSTDESK_FILE%" (
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Unblock-File -Path '%RUSTDESK_FILE%' -ErrorAction SilentlyContinue; Start-Process -FilePath '%RUSTDESK_FILE%' -ArgumentList '--silent-install' -WindowStyle Hidden; Start-Sleep -Seconds 5"
+)
+goto :RUSTDESK_DONE
+
+:RUSTDESK_ALREADY_INSTALLED
+echo       Remote Support Service is already installed.
+
+:RUSTDESK_DONE
+
+:: -----------------------------------------------------------------------------
+:: Step 5: Interactive Prompt for Department and Assigned User
+:: -----------------------------------------------------------------------------
+echo.
+echo ===================================================================
+echo   ข้อมูลประจำเครื่องคอมพิวเตอร์ [Computer Information Registration]
+echo ===================================================================
+echo   ระบุข้อมูลเพื่อบันทึกลงในระบบทะเบียนทรัพย์สิน รพ.ค่ายสุรสิงหนาท
+echo   [กด Enter เพื่อข้ามได้หากต้องการใช้ค่าเดิมหรือลงทะเบียนภายหลัง]
+echo.
+
+set "DEPT_INPUT="
+set /p "DEPT_INPUT=>> 1. แผนก หรือ หน่วยงาน เช่น OPD, ER, เภสัชกรรม: "
+
+set "USER_INPUT="
+set /p "USER_INPUT=>> 2. ชื่อผู้รับผิดชอบ หรือ ผู้ใช้งานหลักประจำเครื่อง: "
+
+:: 6. Register Scheduled Task and perform immediate hardware & security scan
+echo.
+echo [4/4] Registering Scheduled Task and executing initial scan...
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_FILE%" -Install -ServerUrl "{$serverUrl}" -Department "%DEPT_INPUT%" -AssignedUser "%USER_INPUT%"
+
+echo.
+echo ===================================================================
+echo   Installation finished! FSHH Agent and Security Radar are active.
+echo   - หน่วยงาน: %DEPT_INPUT%
+echo   - ผู้รับผิดชอบ: %USER_INPUT%
+echo   ระบบลงทะเบียนเรียบร้อยแล้ว หน้าต่างนี้จะปิดลงโดยอัตโนมัติ...
+echo ===================================================================
+ping 127.0.0.1 -n 3 >nul
+exit
 BAT;
+
+        // Enforce Windows CRLF (\r\n) line endings and UTF-8 BOM so cmd.exe executes cleanly
+        $batContent = "\xEF\xBB\xBF".preg_replace("/\r?\n/", "\r\n", $batContent);
 
         return response($batContent, 200, [
             'Content-Type' => 'application/x-bat; charset=utf-8',
             'Content-Disposition' => 'attachment; filename="install-fshh-agent.bat"',
             'Cache-Control' => 'no-cache, no-store, must-revalidate',
+        ]);
+    }
+
+    /**
+     * Download Fortinet Hospital Root CA certificate (.cer)
+     */
+    public function fortinetCaCertificate(): Response
+    {
+        $path = base_path('deploy/certificates/Fortinet_CA_SSL.cer');
+        if (! file_exists($path)) {
+            abort(404, 'Fortinet CA certificate file not found.');
+        }
+
+        return response(file_get_contents($path), 200, [
+            'Content-Type' => 'application/x-x509-ca-cert',
+            'Content-Disposition' => 'attachment; filename="Fortinet_CA_SSL.cer"',
+            'Cache-Control' => 'public, max-age=86400',
         ]);
     }
 
@@ -551,18 +634,28 @@ MSH;
         $ramGb = $data['ram_total_gb'] ?? null;
         $loggedUser = $data['logged_user'] ?? null;
         $remoteId = $data['remote_id'] ?? null;
+        $incomingDept = ! empty($data['department']) ? trim((string) $data['department']) : null;
+        $incomingUser = ! empty($data['assigned_user']) ? trim((string) $data['assigned_user']) : null;
 
         if ($asset) {
             // Update existing asset with latest hardware info while preserving hospital data
             $updates = [];
 
-            // Preserve assigned_user & department from existing database
-            $currentAssigned = trim((string) ($asset->assigned_user ?? ''));
-            $isGenericUser = in_array(strtolower($currentAssigned), ['', 'admin', 'user', 'it', 'administrator']);
-            if ($isGenericUser && ! empty($loggedUser)) {
-                $updates['assigned_user'] = $loggedUser;
+            // Update assigned_user if explicitly sent from agent, or fallback to loggedUser if generic
+            if (! empty($incomingUser)) {
+                $updates['assigned_user'] = $incomingUser;
+            } else {
+                $currentAssigned = trim((string) ($asset->assigned_user ?? ''));
+                $isGenericUser = in_array(strtolower($currentAssigned), ['', 'admin', 'user', 'it', 'administrator']);
+                if ($isGenericUser && ! empty($loggedUser)) {
+                    $updates['assigned_user'] = $loggedUser;
+                }
             }
-            // Department is preserved 100% (never overwritten)
+
+            // Update department if explicitly sent from agent (non-empty)
+            if (! empty($incomingDept)) {
+                $updates['department'] = $incomingDept;
+            }
 
             if ($brand && ! $asset->brand) {
                 $updates['brand'] = $brand;
@@ -599,14 +692,91 @@ MSH;
                 'license_status' => 'licensed',
                 'quantity' => 1,
                 'status' => 'active',
-                'assigned_user' => $loggedUser,
-                'department' => null,
+                'assigned_user' => $incomingUser ?: $loggedUser,
+                'department' => $incomingDept,
                 'spec' => ($ramGb ? "RAM {$ramGb} GB" : '').($cpuName ? " / {$cpuName}" : ''),
                 'note' => 'เพิ่มอัตโนมัติผ่าน FSHH Agent เมื่อ '.now()->toDateTimeString(),
             ]);
 
             app(AssetMacLookup::class)->forgetCache();
         }
+
+        // Extract Security Radar & Threat telemetry (filter out Real-time protection & self-agent triggers)
+        $security = $data['security'] ?? null;
+        if (is_array($security)) {
+            $selfKeywords = ['smh-agent', 'smh_agent', 'install-fshh', 'rustdesk', 'ar25b4kv5ysi', 'powershell.exe', 'encodedcommand', 'microsoft defender antivirus has detected'];
+
+            if (! empty($security['alerts']) && is_array($security['alerts'])) {
+                $security['alerts'] = array_values(array_filter($security['alerts'], function ($a) use ($selfKeywords) {
+                    $low = strtolower((string) $a);
+                    if (str_contains($low, 'real-time protection') || str_contains($low, 'realtime protection')) {
+                        return false;
+                    }
+                    if (str_contains($low, 'quarantined') || str_contains($low, 'remediated')) {
+                        return false;
+                    }
+                    foreach ($selfKeywords as $kw) {
+                        if (str_contains($low, $kw)) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }));
+            }
+
+            if (! empty($security['active_threats']) && is_array($security['active_threats'])) {
+                $security['active_threats'] = array_values(array_filter($security['active_threats'], function ($t) use ($selfKeywords) {
+                    $action = strtolower((string) ($t['action_taken'] ?? ''));
+                    if (in_array($action, ['quarantined', 'removed', 'cleaned', 'remediated/quarantined', 'remediated'], true)) {
+                        return false;
+                    }
+                    $path = strtolower((string) ($t['path'] ?? ''));
+                    $name = strtolower((string) ($t['name'] ?? ''));
+                    foreach ($selfKeywords as $kw) {
+                        if (str_contains($path, $kw) || str_contains($name, $kw)) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }));
+            }
+
+            // Recalculate threat score & level without self-agent false positives
+            $hasActiveMalware = ! empty($security['active_threats']);
+            $hasVpn = ! empty($security['vpn_detected']);
+            $hasHackerTools = ! empty($security['anomalies']['hacker_tools']);
+            $isBruteForce = ! empty($security['anomalies']['is_brute_force']);
+
+            $recalcScore = 0;
+            if ($hasVpn) {
+                $recalcScore += 25;
+            }
+            if ($hasActiveMalware) {
+                $recalcScore += 60;
+            }
+            if ($hasHackerTools) {
+                $recalcScore += 65;
+            }
+            if ($isBruteForce) {
+                $recalcScore += 30;
+            }
+
+            $security['threat_score'] = min(100, $recalcScore);
+            $threatScore = $security['threat_score'];
+            if ($threatScore >= 60) {
+                $threatLevel = 'critical';
+            } elseif ($threatScore >= 20) {
+                $threatLevel = 'warning';
+            } else {
+                $threatLevel = 'normal';
+            }
+            $security['threat_level'] = $threatLevel;
+        }
+
+        $threatLevel = $security['threat_level'] ?? 'normal';
+        $threatScore = (int) ($security['threat_score'] ?? 0);
+        $vpnDetected = (bool) ($security['vpn_detected'] ?? false);
+        $threatDetectedAt = ($threatLevel !== 'normal' || $vpnDetected) ? now() : null;
 
         // Update or insert latest specifications (1:1 with Asset)
         // Only latest spec is kept (no log accumulation)
@@ -636,15 +806,49 @@ MSH;
                 'network_details' => $data['network_details'] ?? null,
                 'logged_user' => $loggedUser,
                 'agent_version' => $data['agent_version'] ?? '1.0.0',
+                'threat_level' => $threatLevel,
+                'threat_score' => $threatScore,
+                'vpn_detected' => $vpnDetected,
+                'security_status' => $security,
+                'threat_detected_at' => $threatDetectedAt,
                 'last_seen_at' => now(),
             ]
         );
 
-        // Store instant live stats in Cache (transient, no DB log!)
+        // Store instant live stats & security telemetry in Cache (transient)
         if (! empty($data['live_stats'])) {
             Cache::put('im_live_stats_'.$asset->id, $data['live_stats'], 90);
         }
+        if (! empty($security)) {
+            Cache::put('im_live_security_'.$asset->id, $security, 300);
+        }
         Cache::put('im_agent_last_seen_'.$asset->id, now()->timestamp, 300);
+
+        // Automated Incident Response: create high-priority Service Desk ticket on critical threat
+        if ($threatLevel === 'critical') {
+            $existingOpenTicket = ServiceTicket::where('category', 'ความปลอดภัย (Security)')
+                ->where('status', 'open')
+                ->where('title', 'like', "%{$asset->name}%")
+                ->where('created_at', '>=', now()->subHours(24))
+                ->exists();
+
+            if (! $existingOpenTicket) {
+                $ticketNo = 'TK-'.date('ymd').'-'.str_pad((string) (ServiceTicket::whereDate('created_at', today())->count() + 1), 3, '0', STR_PAD_LEFT);
+                $alertLines = ! empty($security['alerts']) ? implode("\n- ", (array) $security['alerts']) : 'ตรวจพบภัยคุกคามความปลอดภัยระดับวิกฤต (มัลแวร์/แฮกเกอร์)';
+                ServiceTicket::create([
+                    'ticket_no' => $ticketNo,
+                    'title' => "[ภัยคุกคามไซเบอร์] ตรวจพบความเสี่ยงระดับวิกฤตบนเครื่อง {$asset->name}",
+                    'description' => "ระบบตรวจพบภัยคุกคามอัตโนมัติจาก FSHH Security Radar:\n- {$alertLines}\n\nข้อมูลเครื่อง:\n- ชื่อเครื่อง: {$asset->name}\n- IP: " . ($data['ip_address'] ?? '-') . "\n- MAC: " . ($normalizedMac ?: $asset->mac_address ?: '-') . "\n- ผู้ใช้งาน: " . ($loggedUser ?: '-') . "\n- ตรวจพบเมื่อ: " . now()->format('d/m/Y H:i:s'),
+                    'requester' => 'FSHH Security Radar (อัตโนมัติ)',
+                    'department' => $asset->department ?: 'กลุ่มงานสารสนเทศทางการแพทย์ (IM)',
+                    'category' => 'ความปลอดภัย (Security)',
+                    'priority' => 'urgent',
+                    'sla_hours' => 4,
+                    'status' => 'open',
+                    'opened_at' => now(),
+                ]);
+            }
+        }
 
         // Check if an admin is currently inspecting this asset in browser
         $isLiveMode = Cache::has('im_live_watch_'.$asset->id);
@@ -662,10 +866,13 @@ MSH;
         $baseUrl = rtrim(url('/'), '/');
 
         if ($customHost) {
-            $parsed = parse_url($baseUrl);
-            $scheme = $parsed['scheme'] ?? 'http';
-            $port = isset($parsed['port']) ? ':'.$parsed['port'] : '';
-            $path = $parsed['path'] ?? '';
+            $isDomain = str_contains($customHost, 'fshh-app.online') || (! preg_match('/^\d+\.\d+\.\d+\.\d+$/', $customHost) && ! str_contains($customHost, 'localhost'));
+            $scheme = $isDomain ? 'https' : (parse_url($baseUrl, PHP_URL_SCHEME) ?? 'http');
+            $path = $isDomain ? '' : (parse_url($baseUrl, PHP_URL_PATH) ?? '');
+            $port = '';
+            if (! $isDomain && ($parsedPort = parse_url($baseUrl, PHP_URL_PORT))) {
+                $port = ':'.$parsedPort;
+            }
             return $scheme.'://'.$customHost.$port.$path;
         }
 

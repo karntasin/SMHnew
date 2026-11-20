@@ -412,6 +412,7 @@ class FinanceCgdClaimController extends Controller
             'filenamePrefix' => CgdClaimFilenameGuard::repPrefix('cgd'),
             'nhsoPortal' => [
                 'configured' => $this->nhsoPortal->isConfigured(),
+                'has_totp' => $this->nhsoPortal->isTotpConfigured(),
                 'session' => $this->nhsoPortal->currentSession(),
                 'validation_url' => $this->nhsoPortal->validationUrl(),
                 'username_hint' => $this->maskUsername((string) config('cgd_eclaim.username')),
@@ -426,10 +427,44 @@ class FinanceCgdClaimController extends Controller
         $data = $request->validate([
             'year' => ['required', 'integer', 'min:2000', 'max:2100'],
             'month' => ['required', 'integer', 'min:1', 'max:12'],
+            'username' => ['nullable', 'string', 'max:64'],
+            'password' => ['nullable', 'string', 'max:128'],
+            'totp_secret' => ['nullable', 'string', 'max:128'],
+            'remember' => ['nullable', 'boolean'],
+            'auto_otp' => ['nullable', 'boolean'],
         ]);
 
+        $username = filled($data['username'] ?? null) ? trim((string) $data['username']) : null;
+        $password = filled($data['password'] ?? null) ? (string) $data['password'] : null;
+        $totpSecret = filled($data['totp_secret'] ?? null) ? trim((string) $data['totp_secret']) : null;
+        $autoOtp = $request->boolean('auto_otp', true);
+
         try {
-            $result = $this->nhsoPortal->startLogin((int) $data['year'], (int) $data['month']);
+            $result = $this->nhsoPortal->startLogin(
+                (int) $data['year'],
+                (int) $data['month'],
+                $username,
+                $password,
+                $totpSecret,
+                $autoOtp
+            );
+
+            if (! empty($data['remember'])) {
+                $updates = [];
+                if (! empty($password)) {
+                    $updates['CGD_ECLAIM_PASSWORD'] = $password;
+                }
+                if (! empty($username)) {
+                    $updates['CGD_ECLAIM_USERNAME'] = $username;
+                }
+                if (! empty($totpSecret)) {
+                    $updates['CGD_ECLAIM_TOTP_SECRET'] = $totpSecret;
+                }
+                if (! empty($updates)) {
+                    \App\Support\EnvFile::set($updates);
+                    @\Illuminate\Support\Facades\Artisan::call('config:clear');
+                }
+            }
         } catch (\Throwable $e) {
             throw ValidationException::withMessages([
                 'nhso' => $e->getMessage(),
@@ -448,10 +483,20 @@ class FinanceCgdClaimController extends Controller
 
         $data = $request->validate([
             'otp' => ['required', 'string', 'regex:/^\d{6}$/'],
+            'remember_totp' => ['nullable', 'boolean'],
         ]);
 
         try {
             $result = $this->nhsoPortal->submitOtp($data['otp']);
+
+            if (! empty($data['remember_totp'])) {
+                $session = $this->nhsoPortal->currentSession();
+                $secret = $session['totp_secret'] ?? null;
+                if (! empty($secret)) {
+                    \App\Support\EnvFile::set(['CGD_ECLAIM_TOTP_SECRET' => $secret]);
+                    @\Illuminate\Support\Facades\Artisan::call('config:clear');
+                }
+            }
         } catch (\Throwable $e) {
             throw ValidationException::withMessages([
                 'otp' => $e->getMessage(),

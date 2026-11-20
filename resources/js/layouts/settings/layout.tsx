@@ -20,6 +20,16 @@ const sidebarNavItems: NavItem[] = [
         icon: null,
     },
     {
+        title: 'ยืนยันตัวตนด้วยเสียง',
+        url: '/settings/voice',
+        icon: null,
+    },
+    {
+        title: 'ยืนยันตัวตนด้วยใบหน้า / สแกนนิ้ว',
+        url: '/settings/face',
+        icon: null,
+    },
+    {
         title: 'ตำแหน่งงาน',
         url: '/settings/positions',
         icon: null,

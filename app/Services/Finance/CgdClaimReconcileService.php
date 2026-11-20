@@ -600,11 +600,111 @@ class CgdClaimReconcileService
         $usedHosxp = [];
         $usedStm = [];
 
+        // Tier 1: Exact match_key (hn|pid|seq_no)
         foreach ($stmMap as $key => $s) {
             if (isset($hosxpMap[$key])) {
                 $paired[] = [$hosxpMap[$key], $s, $key];
                 $usedHosxp[$key] = true;
                 $usedStm[$key] = true;
+            }
+        }
+
+        // Tier 2: HN + Minute-level SEQ match (e.g. 690928082800 vs 690928082804, or foreign PID mismatch)
+        $hosxpByHnMinute = [];
+        foreach ($hosxpMap as $hKey => $h) {
+            if (isset($usedHosxp[$hKey])) {
+                continue;
+            }
+            $hnNorm = CgdClaimMatchKey::normalizeHn($h['hn'] ?? '');
+            $seqPrefix = substr((string) ($h['seq_no'] ?? ''), 0, 10);
+            if ($hnNorm !== '' && strlen($seqPrefix) === 10) {
+                $hosxpByHnMinute[$hnNorm.'|'.$seqPrefix][$hKey] = $h;
+            }
+        }
+
+        foreach ($stmMap as $sKey => $s) {
+            if (isset($usedStm[$sKey])) {
+                continue;
+            }
+            $hnNorm = CgdClaimMatchKey::normalizeHn($s->hn ?? '');
+            $sSeq = (string) ($s->seq_no ?? '');
+            $sSeqPrefix = substr($sSeq, 0, 10);
+            if ($hnNorm !== '' && strlen($sSeqPrefix) === 10) {
+                $minKey = $hnNorm.'|'.$sSeqPrefix;
+                if (! empty($hosxpByHnMinute[$minKey])) {
+                    $bestHKey = null;
+                    if (count($hosxpByHnMinute[$minKey]) === 1) {
+                        $bestHKey = array_key_first($hosxpByHnMinute[$minKey]);
+                    } else {
+                        foreach ($hosxpByHnMinute[$minKey] as $candKey => $candH) {
+                            $candNet = $candH['uc_money'] ?? max(0, ($candH['total'] ?? 0) - ($candH['paid_money'] ?? 0));
+                            if (abs((float) $candNet - (float) $s->amount_claim) < 0.01) {
+                                $bestHKey = $candKey;
+                                break;
+                            }
+                        }
+                        if (! $bestHKey) {
+                            $bestHKey = array_key_first($hosxpByHnMinute[$minKey]);
+                        }
+                    }
+
+                    if ($bestHKey) {
+                        $matchedH = $hosxpByHnMinute[$minKey][$bestHKey];
+                        unset($hosxpByHnMinute[$minKey][$bestHKey]);
+                        $paired[] = [$matchedH, $s, $bestHKey];
+                        $usedHosxp[$bestHKey] = true;
+                        $usedStm[$sKey] = true;
+                    }
+                }
+            }
+        }
+
+        // Tier 3: HN + Visit Date + Amount / Single Visit Match (for blank SEQ in raw file)
+        $hosxpByHnDate = [];
+        foreach ($hosxpMap as $hKey => $h) {
+            if (isset($usedHosxp[$hKey])) {
+                continue;
+            }
+            $hnNorm = CgdClaimMatchKey::normalizeHn($h['hn'] ?? '');
+            $vDate = (string) ($h['visit_date'] ?? '');
+            if ($hnNorm !== '' && $vDate !== '') {
+                $hosxpByHnDate[$hnNorm.'|'.$vDate][$hKey] = $h;
+            }
+        }
+
+        foreach ($stmMap as $sKey => $s) {
+            if (isset($usedStm[$sKey])) {
+                continue;
+            }
+            $hnNorm = CgdClaimMatchKey::normalizeHn($s->hn ?? '');
+            $sDate = optional($s->visit_date)->toDateString();
+            if ($hnNorm !== '' && $sDate) {
+                $dateKey = $hnNorm.'|'.$sDate;
+                if (! empty($hosxpByHnDate[$dateKey])) {
+                    $bestHKey = null;
+                    if (count($hosxpByHnDate[$dateKey]) === 1) {
+                        $bestHKey = array_key_first($hosxpByHnDate[$dateKey]);
+                    } else {
+                        foreach ($hosxpByHnDate[$dateKey] as $candKey => $candH) {
+                            $candNet = $candH['uc_money'] ?? max(0, ($candH['total'] ?? 0) - ($candH['paid_money'] ?? 0));
+                            if (abs((float) $candNet - (float) $s->amount_claim) < 0.01) {
+                                $bestHKey = $candKey;
+                                break;
+                            }
+                        }
+                        if (! $bestHKey) {
+                            $bestHKey = array_key_first($hosxpByHnDate[$dateKey]);
+                        }
+                    }
+
+                    if ($bestHKey) {
+                        $matchedH = $hosxpByHnDate[$dateKey][$bestHKey];
+                        unset($hosxpByHnDate[$dateKey][$bestHKey]);
+                        $paired[] = [$matchedH, $s, $bestHKey];
+                        $usedHosxp[$bestHKey] = true;
+                        $usedStm[$sKey] = true;
+                    }
+                }
             }
         }
 
@@ -645,9 +745,10 @@ class CgdClaimReconcileService
         foreach ($paired as [$h, $s, $key]) {
             $hosxpGross = $h ? (float) $h['total'] : null;
             $hosxpPaid = $h ? round((float) ($h['paid_money'] ?? 0), 2) : null;
-            $hosxpNet = $hosxpGross !== null
-                ? round(max(0, $hosxpGross - ($hosxpPaid ?? 0)), 2)
-                : null;
+            $hosxpUc = $h && isset($h['uc_money']) ? round((float) $h['uc_money'], 2) : null;
+            $hosxpNet = $hosxpUc !== null
+                ? $hosxpUc
+                : ($hosxpGross !== null ? round(max(0, $hosxpGross - ($hosxpPaid ?? 0)), 2) : null);
 
             $stmClaim = $s ? (float) $s->amount_claim : null;
             $stmApproved = $s ? (float) $s->amount_approved : null;

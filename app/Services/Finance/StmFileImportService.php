@@ -294,7 +294,7 @@ class StmFileImportService
             $visitAt = $this->parseDateTime($this->cell($line, $map['visit_at'] ?? null));
             $seq = $this->cell($line, $map['seq'] ?? null);
             if ($seq === '' && $visitAt) {
-                $seq = $this->seqFromVisitAt($visitAt) ?: '';
+                $seq = $this->seqFromVisitAt($visitAt, $hn) ?: '';
             }
             if ($seq === '') {
                 continue;
@@ -417,16 +417,16 @@ class StmFileImportService
             if ($meta['reported_at'] === null && preg_match('/ออกรายงานวันที่\s*(\d{1,2}\/\d{1,2}\/\d{4})\s*เวลา\s*(\d{1,2}:\d{2})/u', $text, $m)) {
                 $meta['reported_at'] = $this->parseThaiReportDate($m[1], $m[2]);
             }
-            if (preg_match('/_OP(\d{6})_/i', $text.' '.$originalName, $m)) {
+            if (preg_match('/_OP(?:UCS)?(\d{6})_/i', $text.' '.$originalName, $m)) {
                 $meta['channel'] = 'OP';
                 $meta['period_label'] = $meta['period_label'] ?: $m[1];
-            } elseif (preg_match('/_IP(\d{6})_/i', $text.' '.$originalName, $m)) {
+            } elseif (preg_match('/_IP(?:UCS)?(\d{6})_/i', $text.' '.$originalName, $m)) {
                 $meta['channel'] = 'IP';
                 $meta['period_label'] = $meta['period_label'] ?: $m[1];
             }
         }
 
-        if ($meta['claim_submission_no'] === null && preg_match('/(\d{5}_[A-Z]{2}\d{6}_\d{2})/i', $originalName, $m)) {
+        if ($meta['claim_submission_no'] === null && preg_match('/(\d{5}_[A-Z]{2,5}\d{6}_\d{2})/i', $originalName, $m)) {
             $meta['claim_submission_no'] = $m[1];
         }
 
@@ -505,7 +505,7 @@ class StmFileImportService
                 $map['claim'] = $idx;
             } elseif (str_contains($token, 'พรบ') || $token === 'act') {
                 $map['act'] = $idx;
-            } elseif (str_contains($token, 'พึงรับทั้งหมด') || str_contains($token, 'approved')) {
+            } elseif (str_contains($token, 'ยอดชดเชยทั้งสิ้น') || str_contains($token, 'ชดเชยทั้งสิ้น') || str_contains($token, 'พึงรับทั้งหมด') || str_contains($token, 'approved')) {
                 $map['approved'] = $idx;
             } elseif (str_contains($token, 'seq')) {
                 $map['seq'] = $idx;
@@ -571,8 +571,35 @@ class StmFileImportService
      * สร้าง SEQ แบบ HOSxP จากวัน-เวลารักษา เมื่อไฟล์ STM ไม่มีคอลัมน์ SEQ
      * ตัวอย่าง 2025-11-15 10:56:00 → 681115105600
      */
-    private function seqFromVisitAt(Carbon $visitAt): ?string
+    private function seqFromVisitAt(Carbon $visitAt, ?string $hn = null): ?string
     {
+        if ($hn) {
+            try {
+                if (config('database.connections.hosxp')) {
+                    $vstdate = $visitAt->toDateString();
+                    $hnCandidates = [$hn, ltrim($hn, '0')];
+                    $found = DB::connection('hosxp')->table('ovst')
+                        ->where('vstdate', $vstdate)
+                        ->whereIn('hn', $hnCandidates)
+                        ->select('vn', 'vsttime')
+                        ->get();
+                    if ($found->count() === 1) {
+                        return (string) $found[0]->vn;
+                    } elseif ($found->count() > 1) {
+                        $targetHMin = $visitAt->format('H:i');
+                        foreach ($found as $f) {
+                            if (str_starts_with((string) $f->vsttime, $targetHMin)) {
+                                return (string) $f->vn;
+                            }
+                        }
+                        return (string) $found[0]->vn;
+                    }
+                }
+            } catch (\Throwable) {
+                // fallback to synthetic
+            }
+        }
+
         $beYear = $visitAt->year + 543;
         $raw = sprintf('%04d%s', $beYear, $visitAt->format('mdHis'));
         $seq = strlen($raw) > 2 ? substr($raw, 2) : $raw;

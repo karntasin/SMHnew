@@ -34,11 +34,20 @@ class AssetSpec extends Model
         'network_details',
         'logged_user',
         'agent_version',
+        'threat_level',
+        'threat_score',
+        'vpn_detected',
+        'security_status',
+        'threat_detected_at',
         'last_seen_at',
     ];
 
     protected $casts = [
         'ram_total_gb' => 'float',
+        'threat_score' => 'integer',
+        'vpn_detected' => 'boolean',
+        'security_status' => 'array',
+        'threat_detected_at' => 'datetime',
         'cpu_details' => 'array',
         'memory_details' => 'array',
         'motherboard_details' => 'array',

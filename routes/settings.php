@@ -25,6 +25,19 @@ Route::middleware('auth')->group(function () {
     // User Manuals in Settings
     Route::get('settings/manuals', [UserManualController::class, 'index'])->name('settings.manuals');
     Route::get('settings/manuals/profile/download', [UserManualController::class, 'downloadProfileManual'])->name('settings.manuals.profile.download');
+
+    // Voice Biometrics in Settings
+    Route::get('settings/voice', [\App\Http\Controllers\Settings\VoiceProfileController::class, 'index'])->name('settings.voice');
+    Route::get('settings/voice/challenge', [\App\Http\Controllers\Settings\VoiceProfileController::class, 'challenge'])->name('settings.voice.challenge');
+    Route::post('settings/voice/enroll', [\App\Http\Controllers\Settings\VoiceProfileController::class, 'enroll'])->name('settings.voice.enroll');
+    Route::post('settings/voice/test', [\App\Http\Controllers\Settings\VoiceProfileController::class, 'test'])->name('settings.voice.test');
+    Route::delete('settings/voice', [\App\Http\Controllers\Settings\VoiceProfileController::class, 'destroy'])->name('settings.voice.destroy');
+
+    // Face & Biometrics in Settings (Apple Face ID, Android Passkeys, AI Camera)
+    Route::get('settings/face', [\App\Http\Controllers\Auth\FaceAuthController::class, 'settings'])->name('settings.face');
+    Route::post('settings/face/enroll-camera', [\App\Http\Controllers\Auth\FaceAuthController::class, 'enrollCamera'])->name('settings.face.enroll-camera');
+    Route::post('settings/face/enroll-passkey', [\App\Http\Controllers\Auth\FaceAuthController::class, 'enrollPasskey'])->name('settings.face.enroll-passkey');
+    Route::delete('settings/face', [\App\Http\Controllers\Auth\FaceAuthController::class, 'destroy'])->name('settings.face.destroy');
 });
 
 // Download registration manual (accessible by guests and authenticated users)

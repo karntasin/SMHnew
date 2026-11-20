@@ -1,11 +1,15 @@
 import { Head, useForm } from '@inertiajs/react';
-import { LoaderCircle, Mail, Lock, Eye, EyeOff, Sparkles, LogIn } from 'lucide-react';
-import { FormEventHandler, useState } from 'react';
+import { LoaderCircle, Mail, Lock, Eye, EyeOff, Sparkles, LogIn, Mic, ScanFace, Fingerprint } from 'lucide-react';
+import { FormEventHandler, useState, useEffect } from 'react';
+import { isPlatformBiometricAvailable } from '@/lib/webauthn-client';
 
 import InputError from '@/components/input-error';
 import TextLink from '@/components/text-link';
 import LineLoginButton from '@/components/line-login-button';
 import LineQrLogin from '@/components/line-qr-login';
+import VoiceLoginModal from '@/components/voice/voice-login-modal';
+import FaceLoginModal from '@/components/face/face-login-modal';
+import { RunningMascotLoader } from '@/components/auth/running-mascot-loader';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -33,6 +37,23 @@ export default function Login({ status, canResetPassword, lineLoginEnabled, line
     });
     const [showPassword, setShowPassword] = useState(false);
     const [focusedField, setFocusedField] = useState<string | null>(null);
+    const [showVoiceModal, setShowVoiceModal] = useState(false);
+    const [showFaceModal, setShowFaceModal] = useState(false);
+    const [biometricBtnText, setBiometricBtnText] = useState('สแกนใบหน้า / ลายนิ้วมือ');
+
+    useEffect(() => {
+        isPlatformBiometricAvailable().then((res) => {
+            if (res.supported) {
+                if (res.deviceType === 'apple') {
+                    setBiometricBtnText('Apple Face ID / สแกนนิ้ว');
+                } else if (res.deviceType === 'android') {
+                    setBiometricBtnText('สแกนนิ้วมือ / ใบหน้า (Android)');
+                } else if (res.deviceType === 'windows') {
+                    setBiometricBtnText('Windows Hello / สแกนนิ้ว');
+                }
+            }
+        });
+    }, []);
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
@@ -174,7 +195,53 @@ export default function Login({ status, canResetPassword, lineLoginEnabled, line
                             </>
                         )}
                     </Button>
+
+                    {/* Biometric Logins: Face/Fingerprint Login & Voice Login */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setShowFaceModal(true)}
+                            className="h-11 rounded-xl border-2 border-blue-200 dark:border-blue-800/60 hover:bg-blue-50 dark:hover:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-semibold transition-all duration-300 transform hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2"
+                        >
+                            <div className="p-1 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-600 dark:text-blue-400">
+                                <Fingerprint className="w-4 h-4" />
+                            </div>
+                            {biometricBtnText}
+                        </Button>
+
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setShowVoiceModal(true)}
+                            className="h-11 rounded-xl border-2 border-purple-200 dark:border-purple-800/60 hover:bg-purple-50 dark:hover:bg-purple-950/40 text-purple-700 dark:text-purple-300 font-semibold transition-all duration-300 transform hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2"
+                        >
+                            <div className="p-1 rounded-full bg-purple-100 dark:bg-purple-900/60 text-purple-600 dark:text-purple-400">
+                                <Mic className="w-4 h-4" />
+                            </div>
+                            เข้าสู่ระบบด้วยเสียง
+                        </Button>
+                    </div>
                 </div>
+
+                <VoiceLoginModal
+                    open={showVoiceModal}
+                    onOpenChange={setShowVoiceModal}
+                    defaultIdentifier={data.email}
+                />
+
+                <FaceLoginModal
+                    open={showFaceModal}
+                    onOpenChange={setShowFaceModal}
+                    defaultIdentifier={data.email}
+                />
+
+                <RunningMascotLoader
+                    open={processing}
+                    title="กำลังเข้าสู่ระบบ..."
+                    subtitle="ระบบกำลังตรวจสอบบัญชีและเตรียมความพร้อม กรุณารอสักครู่"
+                    status="loading"
+                />
 
                 {/* Sign up Link */}
                 <div className="text-center text-sm text-gray-500 dark:text-gray-400 mt-2">

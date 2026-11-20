@@ -112,6 +112,9 @@ interface DashboardProps {
       costs_yearly_last5?: Array<{
         y: number;
         total: number;
+        opd?: number;
+        ipd?: number;
+        label?: string;
       }>;
       department_visits_this_month?: Array<{
         department: string;
@@ -1167,12 +1170,12 @@ export default function Dashboard({ filter, stats, hosxp_error }: DashboardProps
 
               {stats.charts?.costs_yearly_last5 && stats.charts.costs_yearly_last5.length > 0 && (
                 <Card className="shadow-lg border-t-4 border-t-emerald-500">
-                  <CardHeader className="bg-gradient-to-r from-emerald-50 to-green-50">
+                  <CardHeader className="bg-gradient-to-r from-emerald-50 to-green-50 dark:from-emerald-950/40 dark:to-green-950/20">
                     <div className="flex items-center gap-2">
                       <DollarSign className="h-5 w-5 text-emerald-600" />
-                      <CardTitle>ค่าใช้จ่ายรายปี (5 ปีล่าสุด)</CardTitle>
+                      <CardTitle>มูลค่าค่ารักษาพยาบาลรายปี (5 ปีงบประมาณล่าสุด)</CardTitle>
                     </div>
-                    <CardDescription>ยอดรวมต่อปี พร้อมแนวโน้ม</CardDescription>
+                    <CardDescription>ยอดรวมตามปีงบประมาณ (1 ต.ค. - 30 ก.ย.) รวมผู้ป่วยนอกและผู้ป่วยใน</CardDescription>
                   </CardHeader>
                   <CardContent className="pt-6">
                     <div className="space-y-3">
@@ -1185,9 +1188,16 @@ export default function Dashboard({ filter, stats, hosxp_error }: DashboardProps
                             <div className="flex items-center justify-between text-sm">
                               <span className="font-medium flex items-center gap-2 dark:text-gray-200">
                                 <Calendar className="h-4 w-4 text-emerald-600" />
-                                ปี {Number(cost.y) + 543}
+                                {cost.label || `ปีงบ ${Number(cost.y) + 543}`}
                               </span>
-                              <span className="text-emerald-700 dark:text-emerald-400 font-bold">{formatCurrency(cost.total)}</span>
+                              <div className="text-right">
+                                <span className="text-emerald-700 dark:text-emerald-400 font-bold block">{formatCurrency(cost.total)}</span>
+                                {cost.opd !== undefined && cost.ipd !== undefined && (
+                                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-normal">
+                                    OPD: {formatCurrency(cost.opd)} | IPD: {formatCurrency(cost.ipd)}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                             <div className="h-3 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                               <div 

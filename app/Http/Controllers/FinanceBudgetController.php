@@ -85,7 +85,7 @@ class FinanceBudgetController extends Controller
                 $writer->addRow(WriterEntityFactory::createRowFromArray(['งานงบประมาณ ค่ารักษาพยาบาล HOSxP'], $titleStyle));
                 $writer->addRow(WriterEntityFactory::createRowFromArray(['ปีงบประมาณ', (string) $fiscalYear], $metaStyle));
                 $writer->addRow(WriterEntityFactory::createRowFromArray(['ช่วงวันที่', $startDate.' ถึง '.$endDate], $metaStyle));
-                $writer->addRow(WriterEntityFactory::createRowFromArray(['แหล่งข้อมูล', 'opitemrece.sum_price ตาม vstdate ทั้ง OPD และ IPD'], $metaStyle));
+                $writer->addRow(WriterEntityFactory::createRowFromArray(['แหล่งข้อมูล', 'vn_stat (ผู้ป่วยนอก) และ an_stat (ผู้ป่วยใน) ตามปีงบประมาณ'], $metaStyle));
                 $writer->addRow(WriterEntityFactory::createRowFromArray(['ออกรายงานเมื่อ', now()->timezone('Asia/Bangkok')->format('Y-m-d H:i:s')], $metaStyle));
                 $writer->addRow(WriterEntityFactory::createRowFromArray(['']));
                 $writer->addRow(WriterEntityFactory::createRowFromArray(['รายการ', 'จำนวนเงิน'], $headerStyle));

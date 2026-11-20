@@ -1,6 +1,7 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, router, useForm, usePage } from '@inertiajs/react';
-import { FileSpreadsheet, Upload, RefreshCw, AlertTriangle, Info, X, KeyRound, CloudDownload, Shield, CheckCircle2, FileCheck, Layers, ChevronDown, ChevronUp } from 'lucide-react';
+import QRCode from 'qrcode';
+import { FileSpreadsheet, Upload, RefreshCw, AlertTriangle, Info, X, KeyRound, CloudDownload, Shield, CheckCircle2, FileCheck, Layers, ChevronDown, ChevronUp, Banknote, Eye, EyeOff, QrCode as QrIcon, Copy, Check } from 'lucide-react';
 import { QualityPage, Panel, StatusPill } from '@/components/quality/quality-ui';
 import DataHubSubNav, { dataHubBreadcrumbs } from '../DataHub/DataHubSubNav';
 import ClaimModuleSubNav from '../DataHub/ClaimModuleSubNav';
@@ -59,12 +60,17 @@ export interface ScanSummary {
 
 interface NhsoPortal {
     configured: boolean;
+    has_totp?: boolean;
     session: {
         phase?: string;
         year?: number;
         month?: number;
         started_at?: string;
         totp_secret?: string | null;
+        totp_qr?: string | null;
+        has_totp_secret?: boolean;
+        current_otp?: string | null;
+        totp_remaining?: number;
         pending_downloads?: number;
         download_done?: number;
         download_total?: number;
@@ -83,6 +89,16 @@ interface Props {
         links: { url: string | null; label: string; active: boolean }[];
     };
     module?: ClaimModuleMeta;
+    smtSummary?: {
+        total_all: number;
+        total_lgo: number;
+        total_uc: number;
+        total_ckd: number;
+        count_all: number;
+        count_lgo: number;
+        count_uc: number;
+        count_ckd: number;
+    } | null;
 }
 
 const MONTHS = [
@@ -140,7 +156,7 @@ function mergeFiles(current: File[], incoming: FileList | File[], prefix: string
     return { files: Array.from(map.values()).slice(0, MAX_FILES), rejected };
 }
 
-export default function CgdClaimImport({ hosxpReady, batches, nhsoPortal, filenamePrefix, module }: Props) {
+export default function CgdClaimImport({ hosxpReady, batches, nhsoPortal, filenamePrefix, module, smtSummary }: Props) {
     const mod = resolveClaimModule(module);
     const repPrefix = filenamePrefix || mod.rep_prefix || DEFAULT_REP_PREFIX;
     const allowedPrefixHint = prefixHint(repPrefix);
@@ -164,8 +180,49 @@ export default function CgdClaimImport({ hosxpReady, batches, nhsoPortal, filena
         notes: '',
         auto_reconcile: false,
     });
-    const startForm = useForm({ year: Number(year), month: Number(month) });
-    const otpForm = useForm({ otp: '' });
+    const [customCreds, setCustomCreds] = useState(Boolean(errors?.nhso));
+    const [showPassword, setShowPassword] = useState(false);
+    const [qrFallback, setQrFallback] = useState('');
+    const [copiedSecret, setCopiedSecret] = useState(false);
+
+    useEffect(() => {
+        if (nhsoPortal?.session?.phase === 'configure_totp' && nhsoPortal?.session?.totp_secret && !nhsoPortal?.session?.totp_qr) {
+            QRCode.toDataURL(`otpauth://totp/NHSO%20e-Claim?secret=${nhsoPortal.session.totp_secret}&issuer=NHSO`, { width: 220, margin: 1 })
+                .then(setQrFallback)
+                .catch(() => setQrFallback(''));
+        }
+    }, [nhsoPortal?.session?.phase, nhsoPortal?.session?.totp_secret, nhsoPortal?.session?.totp_qr]);
+    const [countdown, setCountdown] = useState<number>(30);
+
+    useEffect(() => {
+        const updateTimer = () => {
+            const sec = Math.floor(Date.now() / 1000);
+            setCountdown(30 - (sec % 30));
+        };
+        updateTimer();
+        const interval = setInterval(updateTimer, 1000);
+        return () => clearInterval(interval);
+    }, []);
+
+    const startForm = useForm({
+        year: Number(year),
+        month: Number(month),
+        username: '',
+        password: '',
+        totp_secret: '',
+        remember: true,
+        auto_otp: true,
+    });
+    const otpForm = useForm({
+        otp: '',
+        remember_totp: true,
+    });
+
+    useEffect(() => {
+        if (nhsoPortal?.session?.current_otp && !otpForm.data.otp) {
+            otpForm.setData('otp', nhsoPortal.session.current_otp);
+        }
+    }, [nhsoPortal?.session?.current_otp]);
     const scanForm = useForm({});
     const [showFileList, setShowFileList] = useState(false);
     const downloadForm = useForm<{
@@ -288,6 +345,65 @@ export default function CgdClaimImport({ hosxpReady, batches, nhsoPortal, filena
                 </div>
             )}
 
+            {mod.key === 'lgo' && (
+                <div className="mb-6 rounded-3xl border border-sky-200 bg-gradient-to-br from-sky-50 via-white to-blue-50/60 p-5 shadow-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-600 text-white shadow-md shadow-sky-600/20">
+                                <Banknote className="h-6 w-6" />
+                            </div>
+                            <div>
+                                <h3 className="text-base font-bold text-slate-900">
+                                    ใช้ข้อมูลเงินโอนจริงจากระบบ สปสช. SMT แทนการดาวน์โหลด e-Claim
+                                </h3>
+                                <p className="text-xs text-slate-500">
+                                    ไม่ต้องเข้าสู่ระบบด้วย OTP หรือรอไฟล์จาก e-Claim — ดึงยอดเงินโอนจริงจากเว็บ smt.nhso.go.th ได้ทันที
+                                </p>
+                            </div>
+                        </div>
+
+                        <Button asChild className="rounded-xl bg-sky-600 hover:bg-sky-700 shadow-sm">
+                            <Link href={route('finance.smt.index', { budget_source: 'lgo' })}>
+                                เปิดระบบดึงข้อมูล SMT
+                            </Link>
+                        </Button>
+                    </div>
+
+                    {smtSummary && (
+                        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                            <div className="rounded-2xl border border-sky-100 bg-white p-3">
+                                <div className="text-[11px] font-semibold text-sky-700">อปท. รับเงินโอนแล้ว</div>
+                                <div className="mt-1 text-lg font-bold text-sky-950">
+                                    ฿{Number(smtSummary.total_lgo || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                                </div>
+                                <div className="text-[11px] text-slate-500">{smtSummary.count_lgo} งวดโอน</div>
+                            </div>
+                            <div className="rounded-2xl border border-emerald-100 bg-white p-3">
+                                <div className="text-[11px] font-semibold text-emerald-700">บัตรทอง (UC)</div>
+                                <div className="mt-1 text-lg font-bold text-emerald-950">
+                                    ฿{Number(smtSummary.total_uc || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                                </div>
+                                <div className="text-[11px] text-slate-500">{smtSummary.count_uc} งวดโอน</div>
+                            </div>
+                            <div className="rounded-2xl border border-purple-100 bg-white p-3">
+                                <div className="text-[11px] font-semibold text-purple-700">กองทุนไตวาย (CKD)</div>
+                                <div className="mt-1 text-lg font-bold text-purple-950">
+                                    ฿{Number(smtSummary.total_ckd || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                                </div>
+                                <div className="text-[11px] text-purple-600 font-medium">{smtSummary.count_ckd} งวดโอน (แยกเด็ดขาด)</div>
+                            </div>
+                            <div className="rounded-2xl border border-slate-100 bg-white p-3">
+                                <div className="text-[11px] font-semibold text-slate-500">รวมทั้งหมดในระบบ</div>
+                                <div className="mt-1 text-lg font-bold text-slate-900">
+                                    ฿{Number(smtSummary.total_all || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                                </div>
+                                <div className="text-[11px] text-slate-400">{smtSummary.count_all} งวดโอน</div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
             <Panel
                 title="ดาวน์โหลด REP จาก e-Claim NHSO (OFC)"
                 description="หลัง login จะไปที่หน้า Validation OFC แล้วดาวน์โหลดทั้งเดือนนำเข้า (ซ้ำแล้วอัปเดต)"
@@ -349,6 +465,11 @@ export default function CgdClaimImport({ hosxpReady, batches, nhsoPortal, filena
                                           : 'border-slate-200 bg-slate-50 text-slate-600'
                                 }
                             />
+                            {nhsoPortal.has_totp && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800">
+                                    ⚡ ผูก OTP อัตโนมัติแล้ว
+                                </span>
+                            )}
                             {nhsoPortal.username_hint && <span>บัญชี: {nhsoPortal.username_hint}</span>}
                             {nhsoPortal.session?.year && nhsoPortal.session?.month && (
                                 <span>
@@ -359,8 +480,14 @@ export default function CgdClaimImport({ hosxpReady, batches, nhsoPortal, filena
                         </div>
 
                         {(errors?.nhso || errors?.otp) && (
-                            <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-                                {errors.nhso || errors.otp}
+                            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 space-y-1">
+                                <div className="font-semibold flex items-center gap-2">
+                                    <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
+                                    <span>แจ้งเตือนจากระบบยืนยันตัวตน e-Claim / NHSO IAM</span>
+                                </div>
+                                <p className="text-xs text-rose-700 leading-relaxed">
+                                    {errors.nhso || errors.otp}
+                                </p>
                             </div>
                         )}
 
@@ -412,9 +539,17 @@ export default function CgdClaimImport({ hosxpReady, batches, nhsoPortal, filena
                             <Button
                                 type="button"
                                 className="rounded-xl bg-emerald-600 hover:bg-emerald-700"
-                                disabled={startForm.processing || !nhsoPortal.configured}
+                                disabled={startForm.processing || (!nhsoPortal.configured && !startForm.data.password)}
                                 onClick={() => {
-                                    startForm.setData({ year: Number(year), month: Number(month) });
+                                    startForm.setData({
+                                        year: Number(year),
+                                        month: Number(month),
+                                        username: startForm.data.username,
+                                        password: startForm.data.password,
+                                        totp_secret: startForm.data.totp_secret,
+                                        remember: startForm.data.remember,
+                                        auto_otp: startForm.data.auto_otp,
+                                    });
                                     startForm.post(claimRoute(mod, 'nhso_start'));
                                 }}
                             >
@@ -423,49 +558,249 @@ export default function CgdClaimImport({ hosxpReady, batches, nhsoPortal, filena
                             </Button>
                         </div>
 
-                        {(phase === 'awaiting_otp' || phase === 'configure_totp') && (
-                            <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
-                                <div className="text-sm font-semibold text-amber-950">
-                                    {phase === 'configure_totp'
-                                        ? '2) ตั้งค่า Google Authenticator (ครั้งแรกของบัญชี SSO)'
-                                        : '2) กรอกรหัส Google Authenticator (6 หลัก)'}
+                        {/* กล่องตั้งค่า / เปลี่ยนรหัสผ่าน e-Claim ในกรณีรหัสผ่านหมดอายุ 90 วัน หรือเพิ่งเปลี่ยนใหม่ */}
+                        {(phase === 'idle' || phase === 'unknown') && (
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5 transition-all">
+                                <div className="flex items-center justify-between">
+                                    <button
+                                        type="button"
+                                        onClick={() => setCustomCreds(!customCreds)}
+                                        className="flex items-center gap-2 text-xs font-semibold text-slate-700 hover:text-slate-900 transition-colors"
+                                    >
+                                        <KeyRound className="h-3.5 w-3.5 text-amber-600" />
+                                        <span>ระบุรหัสผ่าน e-Claim / รหัสลับ Authenticator (OTP) สำหรับเข้าสู่ระบบอัตโนมัติ</span>
+                                        {customCreds ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                                    </button>
+                                    <span className="text-[11px] text-slate-400">สปสช. บังคับเปลี่ยนรหัสผ่านทุก 90 วัน</span>
                                 </div>
-                                <div className="mt-1 text-xs text-amber-900/80">
-                                    {phase === 'configure_totp'
-                                        ? 'e-Claim ใช้ NHSO IAM แล้ว — ถ้ายังไม่เคยผูก Authenticator กับบัญชีนี้ ให้เพิ่มรหัสลับด้านล่างในแอป แล้วกรอกรหัส 6 หลัก'
-                                        : 'เปิดแอป Authenticator แล้วกรอกรหัสปัจจุบัน ระบบจะส่งกลับไปยังหน้าเว็บ e-Claim ให้'}
-                                </div>
-                                {phase === 'configure_totp' && nhsoPortal.session?.totp_secret && (
-                                    <div className="mt-3 rounded-xl border border-amber-300 bg-white px-3 py-2">
-                                        <div className="text-xs text-slate-500">รหัสลับ (เพิ่มใน Google Authenticator แบบ manual)</div>
-                                        <div className="mt-1 break-all font-mono text-base font-semibold tracking-wider text-slate-900">
-                                            {nhsoPortal.session.totp_secret}
+
+                                {customCreds && (
+                                    <div className="mt-3 space-y-3 pt-3 border-t border-slate-200/80">
+                                        <div className="grid gap-3 sm:grid-cols-2">
+                                            <div className="space-y-1">
+                                                <Label className="text-xs text-slate-600">ชื่อผู้ใช้งาน (Citizen ID 13 หลัก)</Label>
+                                                <Input
+                                                    placeholder="5710430101150 (เว้นว่างเพื่อใช้ค่าเดิม)"
+                                                    value={startForm.data.username}
+                                                    onChange={(e) => startForm.setData('username', e.target.value)}
+                                                    className="rounded-xl text-xs bg-white"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs text-slate-600">รหัสผ่านใหม่ (e-Claim Password)</Label>
+                                                <div className="relative">
+                                                    <Input
+                                                        type={showPassword ? 'text' : 'password'}
+                                                        placeholder="กรอกรหัสผ่าน e-Claim ล่าสุด"
+                                                        value={startForm.data.password}
+                                                        onChange={(e) => startForm.setData('password', e.target.value)}
+                                                        className="rounded-xl text-xs bg-white pr-9"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setShowPassword(!showPassword)}
+                                                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                                    >
+                                                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div className="space-y-1 sm:col-span-2">
+                                                <div className="flex items-center justify-between">
+                                                    <Label className="text-xs text-slate-600">รหัสลับ Google Authenticator (TOTP Secret Key) — สำหรับกรอก OTP อัตโนมัติ</Label>
+                                                    <span className="text-[11px] text-emerald-700 font-medium">แนะนำ: กรอกครั้งเดียว One-Click Login ตลอดไป</span>
+                                                </div>
+                                                <Input
+                                                    placeholder="เช่น JBSWY3DPEHPK3PXP (เว้นว่างเพื่อใช้ค่าเดิมใน .env)"
+                                                    value={startForm.data.totp_secret}
+                                                    onChange={(e) => startForm.setData('totp_secret', e.target.value)}
+                                                    className="rounded-xl text-xs bg-white font-mono"
+                                                />
+                                                <p className="text-[11px] text-slate-500">
+                                                    หากระบุ Secret Key ไว้ ระบบจะคำนวณรหัส OTP 6 หลักและยืนยันให้อัตโนมัติทันที ไม่ต้องเปิดโทรศัพท์ดูรหัส
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-1.5 pt-1">
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="checkbox"
+                                                    id="auto_otp_check"
+                                                    checked={startForm.data.auto_otp}
+                                                    onChange={(e) => startForm.setData('auto_otp', e.target.checked)}
+                                                    className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                                />
+                                                <label htmlFor="auto_otp_check" className="text-xs text-slate-700 font-medium cursor-pointer">
+                                                    ยืนยัน OTP อัตโนมัติทันทีเมื่อเข้าสู่ระบบ (One-Click Auto-Submit OTP)
+                                                </label>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="checkbox"
+                                                    id="remember_nhso_pwd"
+                                                    checked={startForm.data.remember}
+                                                    onChange={(e) => startForm.setData('remember', e.target.checked)}
+                                                    className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                                />
+                                                <label htmlFor="remember_nhso_pwd" className="text-xs text-slate-600 cursor-pointer">
+                                                    บันทึกรหัสผ่านและ Secret Key นี้ลงในระบบ (.env) เพื่อไม่ต้องกรอกใหม่ในครั้งถัดไป
+                                                </label>
+                                            </div>
                                         </div>
                                     </div>
                                 )}
-                                <div className="mt-3 flex flex-wrap items-end gap-3">
-                                    <div className="space-y-1">
-                                        <Label htmlFor="nhso-otp">รหัส OTP</Label>
-                                        <Input
-                                            id="nhso-otp"
-                                            inputMode="numeric"
-                                            maxLength={6}
-                                            placeholder="000000"
-                                            className="w-40 rounded-xl font-mono text-lg tracking-[0.3em]"
-                                            value={otpForm.data.otp}
-                                            onChange={(e) =>
-                                                otpForm.setData('otp', e.target.value.replace(/\D/g, '').slice(0, 6))
-                                            }
-                                        />
+                            </div>
+                        )}
+
+                        {(phase === 'awaiting_otp' || phase === 'configure_totp') && (
+                            <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-5 shadow-sm space-y-4">
+                                <div>
+                                    <div className="flex items-center gap-2 text-sm font-bold text-amber-950">
+                                        <KeyRound className="h-4 w-4 text-amber-600" />
+                                        {phase === 'configure_totp'
+                                            ? '2) ตั้งค่าผูก Google Authenticator ใหม่ (ครั้งแรกของบัญชีนี้)'
+                                            : '2) กรอกรหัสยืนยันตัวตน Google Authenticator (6 หลัก)'}
                                     </div>
-                                    <Button
-                                        type="button"
-                                        className="rounded-xl"
-                                        disabled={otpForm.processing || otpForm.data.otp.length !== 6}
-                                        onClick={() => otpForm.post(claimRoute(mod, 'nhso_otp'))}
-                                    >
-                                        ยืนยัน OTP
-                                    </Button>
+                                    <div className="mt-1 text-xs text-amber-900/90 leading-relaxed">
+                                        {phase === 'configure_totp'
+                                            ? 'บัญชี e-Claim ของท่านอยู่ในขั้นตอนตั้งค่าความปลอดภัยครั้งแรก โปรดสแกน QR Code ด้านล่างนี้เพื่อเพิ่มบัญชีลงในแอป แล้วนำรหัส 6 หลักจากรายการที่เพิ่งเพิ่มใหม่มากรอก'
+                                            : 'เปิดแอป Google Authenticator หรือ Microsoft Authenticator บนโทรศัพท์ แล้วกรอกรหัส 6 หลักปัจจุบัน'}
+                                    </div>
+                                </div>
+
+                                {phase === 'configure_totp' && (
+                                    <div className="rounded-2xl border border-amber-300 bg-white p-4 shadow-sm space-y-3">
+                                        <div className="text-center">
+                                            <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900">
+                                                <QrIcon className="h-3.5 w-3.5" />
+                                                <span>ขั้นตอนที่ 1: สแกน QR Code เพื่อเพิ่มบัญชีลงในแอป</span>
+                                            </div>
+
+                                            <div className="mt-3 flex justify-center">
+                                                {nhsoPortal.session?.totp_qr ? (
+                                                    <div className="rounded-2xl border-2 border-amber-200 bg-white p-2 shadow-sm">
+                                                        <img
+                                                            src={nhsoPortal.session.totp_qr}
+                                                            alt="QR Code สำหรับผูก Authenticator"
+                                                            className="h-48 w-48 object-contain"
+                                                        />
+                                                    </div>
+                                                ) : qrFallback ? (
+                                                    <div className="rounded-2xl border-2 border-amber-200 bg-white p-2 shadow-sm">
+                                                        <img
+                                                            src={qrFallback}
+                                                            alt="QR Code สำหรับผูก Authenticator"
+                                                            className="h-48 w-48 object-contain"
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex h-48 w-48 items-center justify-center rounded-2xl border border-dashed border-slate-300 text-xs text-slate-400">
+                                                        กำลังโหลด QR Code...
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <p className="mt-2 text-xs text-slate-500">
+                                                เปิดแอป <span className="font-semibold text-slate-700">Google Authenticator</span> ในโทรศัพท์ → กดปุ่ม <span className="font-semibold text-slate-700">+ (เพิ่ม)</span> → เลือก <span className="font-semibold text-slate-700">สแกน QR โค้ด</span>
+                                            </p>
+                                        </div>
+
+                                        {nhsoPortal.session?.totp_secret && (
+                                            <div className="rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-center">
+                                                <div className="text-[11px] text-slate-500">หากกล้องสแกนไม่ได้ ให้เพิ่มแบบคีย์ด้วยตนเอง (Manual Key):</div>
+                                                <div className="mt-1 flex items-center justify-center gap-2">
+                                                    <code className="rounded bg-white px-2 py-0.5 font-mono text-xs font-bold text-slate-800 border border-slate-200">
+                                                        {nhsoPortal.session.totp_secret}
+                                                    </code>
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="h-7 text-xs rounded-lg"
+                                                        onClick={() => {
+                                                            navigator.clipboard.writeText(nhsoPortal.session?.totp_secret || '');
+                                                            setCopiedSecret(true);
+                                                            setTimeout(() => setCopiedSecret(false), 2000);
+                                                        }}
+                                                    >
+                                                        {copiedSecret ? <Check className="h-3 w-3 text-emerald-600 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
+                                                        {copiedSecret ? 'คัดลอกแล้ว' : 'คัดลอกรหัสลับ'}
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900 leading-relaxed flex items-start gap-2">
+                                            <Info className="h-4 w-4 text-sky-600 shrink-0 mt-0.5" />
+                                            <div>
+                                                <span className="font-bold">⚠️ สำคัญมาก:</span> รหัสตัวเลข 6 หลักที่จะกรอกด้านล่างนี้ <strong>ต้องมาจากรายการ e-Claim ที่เพิ่งสแกน QR Code นี้เท่านั้น</strong> หากใช้รหัสจาก e-Claim เดิมที่เคยมีอยู่ในโทรศัพท์ ระบบจะแจ้งว่ารหัสไม่ถูกต้อง (เพราะรหัสลับคนละชุดกัน)
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div>
+                                    <div className="flex items-center justify-between text-xs font-semibold text-amber-950 mb-1.5">
+                                        <span>
+                                            {phase === 'configure_totp'
+                                                ? 'ขั้นตอนที่ 2: กรอกรหัส 6 หลักจากรายการที่เพิ่งสแกน'
+                                                : 'กรอกรหัส 6 หลักจากแอป Authenticator'}
+                                        </span>
+                                        <span className="flex items-center gap-1.5 font-normal text-amber-800">
+                                            <span className="inline-block h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                                            รอบรหัสปัจจุบันเหลืออีก: <strong className="font-mono font-bold text-amber-950">{countdown}</strong> วินาที
+                                        </span>
+                                    </div>
+                                    <div className="flex flex-wrap items-end gap-3">
+                                        <div className="space-y-1">
+                                            <Input
+                                                id="nhso-otp"
+                                                inputMode="numeric"
+                                                maxLength={6}
+                                                placeholder="000000"
+                                                className="w-44 rounded-xl font-mono text-xl tracking-[0.3em] bg-white text-center font-bold text-slate-900 shadow-sm"
+                                                value={otpForm.data.otp}
+                                                onChange={(e) =>
+                                                    otpForm.setData('otp', e.target.value.replace(/\D/g, '').slice(0, 6))
+                                                }
+                                            />
+                                        </div>
+                                        <Button
+                                            type="button"
+                                            className="rounded-xl bg-amber-600 hover:bg-amber-700 shadow-sm font-semibold"
+                                            disabled={otpForm.processing || otpForm.data.otp.length !== 6}
+                                            onClick={() => otpForm.post(claimRoute(mod, 'nhso_otp'))}
+                                        >
+                                            {otpForm.processing ? 'กำลังตรวจสอบ...' : 'ยืนยันรหัส OTP'}
+                                        </Button>
+
+                                        {nhsoPortal.session?.current_otp && (
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                className="rounded-xl border-amber-300 bg-amber-100/70 hover:bg-amber-200 text-amber-950 text-xs font-semibold"
+                                                onClick={() => {
+                                                    otpForm.setData('otp', nhsoPortal.session?.current_otp || '');
+                                                }}
+                                            >
+                                                ⚡ ใส่รหัสอัตโนมัติ ({nhsoPortal.session.current_otp})
+                                            </Button>
+                                        )}
+                                    </div>
+
+                                    {phase === 'configure_totp' && (
+                                        <div className="pt-2">
+                                            <label className="flex items-center gap-2 text-xs text-amber-900 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={otpForm.data.remember_totp}
+                                                    onChange={(e) => otpForm.setData('remember_totp', e.target.checked)}
+                                                    className="h-3.5 w-3.5 rounded border-amber-400 text-amber-600 focus:ring-amber-500"
+                                                />
+                                                บันทึกรหัสลับ (Secret Key) นี้ลงระบบอัตโนมัติ (.env) เพื่อเข้าสู่ระบบครั้งถัดไปโดยไม่ต้องกรอก OTP อีก
+                                            </label>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}

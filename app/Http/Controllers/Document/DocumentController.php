@@ -222,8 +222,8 @@ class DocumentController extends Controller
 
     public function archive(Document $document)
     {
-        if (! in_array($document->status, ['completed', 'approved', 'rejected', 'distributed'], true)) {
-            return back()->with('error', 'เก็บเข้าคลังได้เมื่อหนังสือเสร็จสิ้น อนุมัติแล้ว ส่งกลับ หรือเวียนทราบแล้วเท่านั้น');
+        if (! in_array($document->status, ['completed', 'approved', 'rejected', 'distributed', 'registered'], true)) {
+            return back()->with('error', 'เก็บเข้าคลังได้เมื่อหนังสือเสร็จสิ้น อนุมัติแล้ว ส่งกลับ หรือรับเข้าแล้วเท่านั้น');
         }
 
         $document->update([
@@ -235,11 +235,36 @@ class DocumentController extends Controller
             'document_id' => $document->id,
             'sender_id' => Auth::id(),
             'action_type' => 'archive',
-            'comment' => 'เก็บเข้าคลัง',
+            'comment' => 'เก็บเข้าคลังหนังสือราชการ',
             'status' => 'completed',
         ]);
 
         return back()->with('success', 'เก็บหนังสือเข้าคลังเรียบร้อยแล้ว');
+    }
+
+    public function unarchive(Document $document)
+    {
+        if ($document->status !== 'archived') {
+            return back()->with('error', 'หนังสือไม่ได้อยู่ในคลัง');
+        }
+
+        $hasForwards = $document->actions()->where('action_type', 'forward')->exists();
+        $newStatus = $hasForwards ? 'completed' : ($document->director_signed_at ? 'approved' : 'registered');
+
+        $document->update([
+            'status' => $newStatus,
+            'archived_at' => null,
+        ]);
+
+        DocumentAction::create([
+            'document_id' => $document->id,
+            'sender_id' => Auth::id(),
+            'action_type' => 'unarchive',
+            'comment' => 'นำหนังสือออกจากคลังกลับมาใช้งาน',
+            'status' => 'completed',
+        ]);
+
+        return back()->with('success', 'นำหนังสือออกจากคลังเรียบร้อยแล้ว');
     }
 
     public function pendingReview(Request $request)
@@ -342,6 +367,7 @@ class DocumentController extends Controller
         return Inertia::render('documents/DirectorReview', [
             'document' => $document,
             'pendingAction' => $pendingAction,
+            'departments' => Department::orderBy('name')->get(['id', 'name']),
             'userSignatures' => [
                 'signature_path' => $user->signature_path,
                 'stamp_path' => $user->stamp_path,
@@ -351,8 +377,15 @@ class DocumentController extends Controller
 
     public function create()
     {
+        $directors = User::role(['boss', 'Boss', 'admin', 'Admin'])->get();
+        if ($directors->isEmpty()) {
+            $directors = User::orderBy('name')->limit(20)->get();
+        }
+
         return Inertia::render('documents/Create', [
             'departments' => Department::orderBy('name')->get(),
+            'directors' => $directors,
+            'users' => User::orderBy('name')->get(['id', 'name', 'department_id']),
         ]);
     }
 
@@ -404,7 +437,7 @@ class DocumentController extends Controller
     public function summarizeAi(Request $request)
     {
         $request->validate([
-            'file' => 'required|file|mimes:pdf,jpeg,png,jpg|max:10240',
+            'file' => 'required|file|mimes:pdf,jpeg,png,jpg,doc,docx|max:15360',
         ]);
 
         $apiKey = config('services.gemini.api_key');
@@ -413,32 +446,125 @@ class DocumentController extends Controller
         }
 
         $file = $request->file('file');
+        $ext = strtolower($file->getClientOriginalExtension());
         $mimeType = $file->getMimeType();
-        $base64Data = base64_encode(file_get_contents($file->path()));
 
-        $response = \Illuminate\Support\Facades\Http::post("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={$apiKey}", [
-            'contents' => [
-                [
-                    'parts' => [
-                        ['text' => 'คุณเป็นผู้ช่วยงานธุรการของโรงพยาบาล หน้าที่ของคุณคือการสรุปเอกสารฉบับนี้ เพื่อนำไปกรอกในช่อง "สรุปเนื้อหาสำหรับผู้อำนวยการ" กรุณาสรุปให้กระชับ ได้ใจความ ครอบคลุม: เรื่องอะไร, ใครส่งถึงใคร, และต้องการให้ทำอะไร (Action Required) โดยสรุปไม่เกิน 3-5 บรรทัด'],
-                        [
-                            'inline_data' => [
-                                'mime_type' => $mimeType,
-                                'data' => $base64Data
-                            ]
-                        ]
+        $departments = Department::orderBy('name')->get(['id', 'name']);
+        $deptListStr = $departments->map(fn($d) => "ID {$d->id}: {$d->name}")->implode(', ');
+
+        $prompt = <<<EOT
+คุณเป็นผู้ช่วยงานสารบรรณและธุรการของโรงพยาบาล หน้าที่ของคุณคือการอ่านเอกสารหนังสือราชการฉบับนี้ แล้วสกัดข้อมูลสำคัญออกมาเป็นรูปแบบ JSON Object เท่านั้น โดยไม่มีคำอธิบายเพิ่มเติม นอกเหนือจาก JSON:
+{
+  "document_number": "เลขที่หนังสือ เช่น ศธ 0400/123 หรือเว้นว่างหากไม่พบ",
+  "document_date": "วันที่ของหนังสือในรูปแบบ YYYY-MM-DD เช่น 2026-11-17 หรือเว้นว่างหากไม่พบ",
+  "due_date": "กำหนดส่งหรือวันที่ต้องดำเนินการในรูปแบบ YYYY-MM-DD หรือเว้นว่างหากไม่มี",
+  "title": "ชื่อเรื่องของหนังสือแบบเต็มและกระชับ",
+  "sender_name": "ชื่อหน่วยงานหรือองค์กรต้นทางที่ออกหนังสือ",
+  "summary": "สรุปสาระสำคัญของหนังสือสำหรับนำเรียนผู้อำนวยการ 3-5 บรรทัด (เรื่องอะไร, ใครส่งถึงใคร, วัตถุประสงค์, ข้อเสนอ/สั่งการ)",
+  "urgency": "normal หรือ urgent หรือ very_urgent หรือ most_urgent (ดูจากคำว่า ด่วน ด่วนมาก ด่วนที่สุด บนหัวหนังสือ หากไม่ระบุให้เป็น normal)",
+  "suggested_action": "ข้อเสนอแนะ เช่น นำเรียน ผอ. เพื่อโปรดพิจารณาลงนาม หรือ แจกจ่ายเพื่อทราบและถือปฏิบัติ",
+  "suggested_department_ids": [ตัวเลข ID แผนกที่คาดว่าเกี่ยวข้อง จากรายชื่อนี้: {$deptListStr}]
+}
+EOT;
+
+        // เตรียม Contents สำหรับ Gemini API
+        $parts = [['text' => $prompt]];
+
+        if (in_array($ext, ['docx', 'doc'])) {
+            // สกัดข้อความจาก docx
+            $extractedText = '';
+            if ($ext === 'docx' && class_exists('\ZipArchive')) {
+                $zip = new \ZipArchive();
+                if ($zip->open($file->path()) === true) {
+                    $xml = $zip->getFromName('word/document.xml');
+                    $zip->close();
+                    if ($xml) {
+                        $extractedText = trim(strip_tags($xml));
+                    }
+                }
+            }
+            if (!empty($extractedText)) {
+                $parts[] = ['text' => "เนื้อหาในไฟล์เอกสาร:\n" . substr($extractedText, 0, 30000)];
+            } else {
+                $base64Data = base64_encode(file_get_contents($file->path()));
+                $parts[] = [
+                    'inline_data' => [
+                        'mime_type' => 'application/pdf',
+                        'data' => $base64Data,
                     ]
+                ];
+            }
+        } else {
+            // PDF และรูปภาพ (JPEG, PNG)
+            $base64Data = base64_encode(file_get_contents($file->path()));
+            $parts[] = [
+                'inline_data' => [
+                    'mime_type' => $mimeType,
+                    'data' => $base64Data,
                 ]
-            ]
-        ]);
-
-        if ($response->successful()) {
-            $summary = $response->json('candidates.0.content.parts.0.text');
-            return response()->json(['summary' => trim($summary ?? '')]);
+            ];
         }
 
-        file_put_contents(storage_path('logs/gemini_error.txt'), $response->body());
-        return response()->json(['error' => 'ไม่สามารถสรุปเนื้อหาได้จาก AI: ' . $response->body()], 500);
+        // รายชื่อโมเดลสำรองเพื่อป้องกันปัญหา 503 Service Unavailable / High Demand
+        $candidateModels = ['gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-3-flash-preview'];
+        $lastError = 'ไม่สามารถประมวลผลได้';
+
+        foreach ($candidateModels as $model) {
+            try {
+                $response = \Illuminate\Support\Facades\Http::timeout(35)->post(
+                    "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}",
+                    [
+                        'contents' => [
+                            ['parts' => $parts]
+                        ],
+                        'generationConfig' => [
+                            'responseMimeType' => 'application/json',
+                        ]
+                    ]
+                );
+
+                if ($response->successful()) {
+                    $rawText = $response->json('candidates.0.content.parts.0.text');
+                    $decoded = json_decode(trim($rawText ?? ''), true);
+
+                    if (is_array($decoded)) {
+                        return response()->json([
+                            'success' => true,
+                            'summary' => $decoded['summary'] ?? '',
+                            'data' => $decoded,
+                            'model_used' => $model,
+                        ]);
+                    }
+
+                    return response()->json([
+                        'success' => true,
+                        'summary' => trim($rawText ?? ''),
+                        'data' => [
+                            'summary' => trim($rawText ?? ''),
+                        ],
+                        'model_used' => $model,
+                    ]);
+                }
+
+                $status = $response->status();
+                $lastError = $response->body();
+                \Log::warning("Gemini model {$model} returned status {$status}: {$lastError}");
+
+                // หากเป็น 503 (High demand) หรือ 429 (Rate limit) ให้ลองโมเดลถัดไป
+                if (in_array($status, [429, 503, 500])) {
+                    continue;
+                }
+            } catch (\Throwable $e) {
+                \Log::error("Gemini model {$model} request exception: " . $e->getMessage());
+                $lastError = $e->getMessage();
+                continue;
+            }
+        }
+
+        file_put_contents(storage_path('logs/gemini_error.txt'), $lastError);
+        return response()->json([
+            'error' => 'ระบบ AI กำลังมีผู้ใช้งานจำนวนมาก กรุณาลองกดวิเคราะห์ใหม่อีกครั้งในอีกสักครู่ (Server Busy)'
+        ], 503);
     }
 
     public function store(Request $request)
@@ -455,9 +581,25 @@ class DocumentController extends Controller
             'summary_for_director' => 'nullable|string',
             'file' => 'required|file|mimes:pdf,doc,docx,jpg,jpeg,png|max:10240',
             'type' => 'required|in:normal,circular',
+            'urgency' => 'nullable|in:normal,urgent,very_urgent,most_urgent',
+            'next_action' => 'nullable|in:save,submit_boss,forward',
+            'boss_id' => 'nullable|required_if:next_action,submit_boss|exists:users,id',
+            'department_ids' => 'nullable|array',
+            'department_ids.*' => 'exists:departments,id',
+            'user_ids' => 'nullable|array',
+            'user_ids.*' => 'exists:users,id',
+            'forward_comment' => 'nullable|string',
         ]);
 
         $path = $request->file('file')->store('documents', 'public');
+        $nextAction = $validated['next_action'] ?? 'save';
+
+        // กำหนดสถานะเริ่มต้นตาม next_action
+        $initialStatus = match ($nextAction) {
+            'submit_boss' => 'pending_director',
+            'forward' => 'in_progress',
+            default => 'registered',
+        };
 
         $document = Document::create([
             'title' => $validated['title'],
@@ -471,10 +613,12 @@ class DocumentController extends Controller
             'summary_for_director' => $validated['summary_for_director'] ?? null,
             'file_path' => $path,
             'type' => $validated['type'],
-            'status' => 'registered',
+            'urgency' => $validated['urgency'] ?? 'normal',
+            'status' => $initialStatus,
             'user_id' => Auth::id(),
         ]);
 
+        // 1. บันทึก Action การรับเข้า
         DocumentAction::create([
             'document_id' => $document->id,
             'sender_id' => Auth::id(),
@@ -482,6 +626,76 @@ class DocumentController extends Controller
             'comment' => 'ลงทะเบียนรับหนังสือและอัปโหลดไฟล์',
             'status' => 'completed',
         ]);
+
+        // 2. หากเลือกนำเรียน ผอ. ทันที
+        if ($nextAction === 'submit_boss' && !empty($validated['boss_id'])) {
+            DocumentAction::create([
+                'document_id' => $document->id,
+                'sender_id' => Auth::id(),
+                'receiver_user_id' => $validated['boss_id'],
+                'action_type' => 'submit_boss',
+                'comment' => $validated['summary_for_director'] ?: 'นำเรียนผู้อำนวยการเพื่อพิจารณา',
+                'status' => 'pending',
+            ]);
+
+            $boss = User::find($validated['boss_id']);
+            if ($boss) {
+                $boss->notify(new DocumentNotification($document, 'submit_boss', Auth::user()->name));
+            }
+
+            return redirect()->route('documents.show', $document->id)
+                ->with('success', 'ลงทะเบียนและนำเรียนผู้อำนวยการเรียบร้อยแล้ว');
+        }
+
+        // 3. หากเลือกแจกจ่าย/ส่งต่อทันที
+        if ($nextAction === 'forward') {
+            $departmentIds = $validated['department_ids'] ?? [];
+            $userIds = $validated['user_ids'] ?? [];
+            $senderName = Auth::user()?->name ?? 'ระบบ';
+
+            foreach ($departmentIds as $deptId) {
+                DocumentAction::create([
+                    'document_id' => $document->id,
+                    'sender_id' => Auth::id(),
+                    'receiver_department_id' => $deptId,
+                    'action_type' => 'forward',
+                    'comment' => $validated['forward_comment'] ?? 'ส่งต่อเพื่อทราบและดำเนินการ',
+                    'status' => 'pending',
+                    'is_current' => true,
+                ]);
+
+                $deptUsers = User::where('department_id', $deptId)->get();
+                if ($deptUsers->isNotEmpty()) {
+                    Notification::send($deptUsers, new DocumentNotification($document, 'forward', $senderName, false));
+                }
+
+                $department = Department::find($deptId);
+                if ($department) {
+                    app(AdminHubChatNotifier::class)->documentToDepartment($document, $department, 'forward', $senderName);
+                }
+            }
+
+            foreach ($userIds as $userId) {
+                DocumentAction::create([
+                    'document_id' => $document->id,
+                    'sender_id' => Auth::id(),
+                    'receiver_user_id' => $userId,
+                    'action_type' => 'forward',
+                    'comment' => $validated['forward_comment'] ?? 'ส่งต่อเพื่อทราบและดำเนินการ',
+                    'status' => 'pending',
+                    'is_current' => true,
+                ]);
+
+                $targetUser = User::find($userId);
+                if ($targetUser) {
+                    $targetUser->notify(new DocumentNotification($document, 'forward', $senderName, false));
+                }
+            }
+
+            $count = count($departmentIds) + count($userIds);
+            return redirect()->route('documents.show', $document->id)
+                ->with('success', "ลงทะเบียนและส่งต่อหนังสือเรียบร้อยแล้ว ({$count} รายการ)");
+        }
 
         return redirect()->route('documents.show', $document->id)
             ->with('success', 'ลงทะเบียนรับหนังสือเรียบร้อยแล้ว');
@@ -544,8 +758,12 @@ class DocumentController extends Controller
     public function submitBoss(Request $request, Document $document)
     {
         $user = Auth::user();
-        if (!$user->hasAnyRole(['header', 'Header', 'admin', 'Admin', 'superUser'])) {
-            return back()->with('error', 'เฉพาะหัวหน้าแผนก (บทบาท header) เท่านั้นที่สามารถนำเรียนผู้อำนวยการได้');
+        $canSubmit = $document->user_id === $user->id
+            || $document->department_id === $user->department_id
+            || $user->hasAnyRole(['header', 'Header', 'admin', 'Admin', 'superUser', 'boss', 'Boss']);
+
+        if (!$canSubmit) {
+            return back()->with('error', 'เฉพาะผู้สร้างหนังสือ แผนกต้นเรื่อง หรือหัวหน้าแผนกเท่านั้นที่สามารถนำเรียนผู้อำนวยการได้');
         }
 
         if (! in_array($document->status, ['registered', 'pending', 'rejected'])) {
@@ -597,11 +815,15 @@ class DocumentController extends Controller
             'stamp' => 'nullable|image|max:2048',
             'use_saved_signature' => 'nullable|boolean',
             'use_saved_stamp' => 'nullable|boolean',
+            'assigned_department_ids' => 'nullable|array',
+            'assigned_department_ids.*' => 'exists:departments,id',
+            'auto_forward' => 'nullable|boolean',
         ]);
 
         $user = Auth::user();
         $signaturePath = $document->director_signature_path;
         $stampPath = $document->stamp_path;
+        $assignedDeptIds = $validated['assigned_department_ids'] ?? [];
 
         if ($validated['status'] === 'approved') {
             if ($request->boolean('use_saved_signature') && $user->signature_path) {
@@ -631,13 +853,43 @@ class DocumentController extends Controller
         ]);
 
         if ($validated['status'] === 'approved') {
+            $isAutoForward = $request->boolean('auto_forward') && count($assignedDeptIds) > 0;
+            $newStatus = $isAutoForward ? 'in_progress' : 'approved';
+
             $document->update([
-                'status' => 'approved',
+                'status' => $newStatus,
                 'director_comment' => $validated['comment'],
+                'director_assigned_departments' => $assignedDeptIds,
                 'director_signature_path' => $signaturePath,
                 'stamp_path' => $stampPath,
                 'director_signed_at' => now(),
             ]);
+
+            // หากเลือกส่งต่อไปยังแผนกที่สั่งการมอบหมายโดยอัตโนมัติ
+            if ($isAutoForward) {
+                $senderName = "ผู้อำนวยการ ({$user->name})";
+                foreach ($assignedDeptIds as $deptId) {
+                    DocumentAction::create([
+                        'document_id' => $document->id,
+                        'sender_id' => Auth::id(),
+                        'receiver_department_id' => $deptId,
+                        'action_type' => 'forward',
+                        'comment' => $validated['comment'] ? "คำสั่งการ ผอ.: {$validated['comment']}" : 'คำสั่งการผู้อำนวยการเพื่อดำเนินการ',
+                        'status' => 'pending',
+                        'is_current' => true,
+                    ]);
+
+                    $deptUsers = User::where('department_id', $deptId)->get();
+                    if ($deptUsers->isNotEmpty()) {
+                        Notification::send($deptUsers, new DocumentNotification($document, 'forward', $senderName, false));
+                    }
+
+                    $department = Department::find($deptId);
+                    if ($department) {
+                        app(AdminHubChatNotifier::class)->documentToDepartment($document, $department, 'forward', $senderName);
+                    }
+                }
+            }
         } else {
             $document->update([
                 'status' => 'rejected',
@@ -648,15 +900,19 @@ class DocumentController extends Controller
         $this->notifyOriginDepartment($document, $validated['status'] === 'approved' ? 'approve' : 'reject', Auth::user()->name);
 
         return back()->with('success', $validated['status'] === 'approved'
-            ? 'ลงนามอนุมัติเรียบร้อยแล้ว'
+            ? 'ลงนามอนุมัติและบันทึกคำสั่งการเรียบร้อยแล้ว'
             : 'ส่งกลับต้นทางเรียบร้อยแล้ว');
     }
 
     public function forward(Request $request, Document $document)
     {
         $user = Auth::user();
-        if (!$user->hasAnyRole(['header', 'Header', 'admin', 'Admin', 'superUser'])) {
-            return back()->with('error', 'เฉพาะหัวหน้าแผนก (บทบาท header) เท่านั้นที่สามารถอนุมัติส่งหนังสือได้');
+        $canForward = $document->user_id === $user->id
+            || $document->department_id === $user->department_id
+            || $user->hasAnyRole(['header', 'Header', 'admin', 'Admin', 'superUser', 'boss', 'Boss']);
+
+        if (!$canForward) {
+            return back()->with('error', 'เฉพาะผู้สร้างหนังสือ แผนกต้นเรื่อง หรือหัวหน้าแผนกเท่านั้นที่สามารถส่งต่อหนังสือได้');
         }
 
         if ($document->status === 'cancelled') {
@@ -810,11 +1066,18 @@ class DocumentController extends Controller
         $validated = $request->validate([
             'implementation_status' => 'required|in:in_progress,completed,not_relevant',
             'implementation_comment' => 'nullable|string',
+            'attachment' => 'nullable|file|mimes:pdf,doc,docx,jpg,jpeg,png|max:10240',
         ]);
+
+        $attachmentPath = null;
+        if ($request->hasFile('attachment')) {
+            $attachmentPath = $request->file('attachment')->store('documents/responses', 'public');
+        }
 
         $action->update([
             'implementation_status' => $validated['implementation_status'],
             'implementation_comment' => $validated['implementation_comment'],
+            'attachment_path' => $attachmentPath ?: $action->attachment_path,
             'implementation_updated_at' => now(),
         ]);
 
@@ -831,6 +1094,7 @@ class DocumentController extends Controller
             'action_type' => 'implementation_update',
             'comment' => ($statusLabels[$validated['implementation_status']] ?? '')
                 .($validated['implementation_comment'] ? ': '.$validated['implementation_comment'] : ''),
+            'attachment_path' => $attachmentPath,
             'status' => 'completed',
         ]);
 
@@ -843,6 +1107,47 @@ class DocumentController extends Controller
         $this->checkDocumentCompletion($document);
 
         return back()->with('success', 'อัปเดตสถานะการปฏิบัติเรียบร้อยแล้ว');
+    }
+
+    public function remindAction(Request $request, DocumentAction $action)
+    {
+        $user = Auth::user();
+
+        if ($action->action_type !== 'forward') {
+            return back()->with('error', 'สามารถส่งแจ้งเตือนซ้ำได้เฉพาะหนังสือที่ส่งต่อเท่านั้น');
+        }
+
+        if ($action->acknowledged_at) {
+            return back()->with('info', 'แผนก/ผู้รับได้ลงนามรับหนังสือแล้ว');
+        }
+
+        $action->update(['reminder_sent_at' => now()]);
+
+        $document = $action->document;
+        $senderName = $user->name;
+
+        if ($action->receiver_department_id) {
+            $deptUsers = User::where('department_id', $action->receiver_department_id)->get();
+            if ($deptUsers->isNotEmpty()) {
+                Notification::send($deptUsers, new DocumentNotification($document, 'forward', "{$senderName} (แจ้งเตือนเร่งรัด)", true));
+            }
+            $department = Department::find($action->receiver_department_id);
+            if ($department) {
+                app(AdminHubChatNotifier::class)->documentToDepartment(
+                    $document,
+                    $department,
+                    'forward',
+                    "{$senderName} (แจ้งเตือนเร่งรัด)"
+                );
+            }
+        } elseif ($action->receiver_user_id) {
+            $targetUser = User::find($action->receiver_user_id);
+            if ($targetUser) {
+                $targetUser->notify(new DocumentNotification($document, 'forward', "{$senderName} (แจ้งเตือนเร่งรัด)", true));
+            }
+        }
+
+        return back()->with('success', 'ส่งข้อความแจ้งเตือนเร่งรัดเรียบร้อยแล้ว');
     }
 
     public function uploadSignatures(Request $request)

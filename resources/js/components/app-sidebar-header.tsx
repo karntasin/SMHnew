@@ -73,7 +73,8 @@ export function AppSidebarHeader({ breadcrumbs = [] }: { breadcrumbs?: Breadcrum
       current.startsWith('/maintenance') ||
       current.startsWith('/vehicles') ||
       current.startsWith('/equipment-borrowing') ||
-      current.startsWith('/documents')
+      current.startsWith('/documents') ||
+      current.startsWith('/admin-docs')
     ) {
       if (current !== '/admin-hub') {
         router.visit(resolveAppUrl('/admin-hub'), { replace: true });

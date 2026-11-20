@@ -66,6 +66,16 @@ class User extends Authenticatable implements HasMedia
         return $this->hasMany(DepartmentLeader::class);
     }
 
+    public function voiceBiometric()
+    {
+        return $this->hasOne(UserVoiceBiometric::class);
+    }
+
+    public function faceBiometric()
+    {
+        return $this->hasOne(UserFaceBiometric::class);
+    }
+
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable, HasRoles, InteractsWithMedia;
 
@@ -192,17 +202,51 @@ class User extends Authenticatable implements HasMedia
 
     public static function findForLogin(string $identifier): ?self
     {
-        $login = strtolower(trim($identifier));
+        $raw = trim($identifier);
+        $login = strtolower($raw);
         if ($login === '') {
             return null;
         }
 
-        return static::query()
+        // 1. Exact match on email, username, or name (with or without prefix)
+        $user = static::query()
             ->where(function ($query) use ($login) {
                 $query->whereRaw('LOWER(email) = ?', [$login])
-                    ->orWhereRaw('LOWER(username) = ?', [$login]);
+                    ->orWhereRaw('LOWER(username) = ?', [$login])
+                    ->orWhereRaw('TRIM(LOWER(name)) = ?', [$login])
+                    ->orWhereRaw('TRIM(LOWER(CONCAT(COALESCE(prefix, ""), " ", name))) = ?', [$login])
+                    ->orWhereRaw('TRIM(LOWER(CONCAT(COALESCE(prefix, ""), name))) = ?', [$login]);
             })
             ->first();
+
+        if ($user) {
+            return $user;
+        }
+
+        // 2. Partial match on name / first name / last name
+        if (mb_strlen($raw) >= 2) {
+            $matches = static::query()
+                ->where(function ($query) use ($raw) {
+                    $query->where('name', 'LIKE', "%{$raw}%")
+                        ->orWhereRaw('CONCAT(COALESCE(prefix, ""), " ", name) LIKE ?', ["%{$raw}%"]);
+                })
+                ->get();
+
+            if ($matches->count() === 1) {
+                return $matches->first();
+            }
+
+            if ($matches->count() > 1) {
+                // If multiple staff match, prioritize staff with enrolled voice biometric
+                $withVoice = $matches->filter(fn($u) => $u->voiceBiometric && $u->voiceBiometric->is_active);
+                if ($withVoice->count() === 1) {
+                    return $withVoice->first();
+                }
+                return $matches->first();
+            }
+        }
+
+        return null;
     }
 
     /** @return array<int, string|\Illuminate\Validation\Rules\Unique> */

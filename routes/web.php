@@ -17,6 +17,7 @@ use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\SettingAppController;
 use App\Http\Controllers\MediaFolderController;
 use App\Http\Controllers\QualityDocumentController;
+use App\Http\Controllers\QualityDocumentSettingsController;
 use App\Http\Controllers\RoomBookingController;
 use App\Http\Controllers\MeetingRoomController;
 use App\Http\Controllers\LanguageController;
@@ -44,6 +45,10 @@ Route::redirect('/app/calendar', '/calendar', 301);
 
 // Public Calendar iCal subscription feed (Secured by HMAC user token)
 Route::get('/calendar/feed/{userId}/{token}.ics', [App\Http\Controllers\CalendarController::class, 'feed'])->name('calendar.feed');
+
+// Smart Hospital Infographic & Presentation Showcase
+Route::get('/infographic', [App\Http\Controllers\InfographicController::class, 'index'])->name('infographic');
+
 
 Route::middleware(['auth'])->group(function () {
     Route::get('/fshh-chat/open', [App\Http\Controllers\FshhChatController::class, 'open'])->name('fshh-chat.open');
@@ -207,13 +212,27 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
 
     // Quality Document Repository
     Route::prefix('quality-docs')->name('quality-docs.')->group(function () {
+        // Taxonomy Settings (admin, superuser, header, boss)
+        Route::get('/settings', [QualityDocumentSettingsController::class, 'index'])->name('settings');
+        Route::post('/settings/taxonomies', [QualityDocumentSettingsController::class, 'store'])->name('settings.taxonomies.store');
+        Route::put('/settings/taxonomies/{id}', [QualityDocumentSettingsController::class, 'update'])->name('settings.taxonomies.update');
+        Route::delete('/settings/taxonomies/{id}', [QualityDocumentSettingsController::class, 'destroy'])->name('settings.taxonomies.destroy');
+        Route::patch('/settings/taxonomies/{id}/toggle', [QualityDocumentSettingsController::class, 'toggleActive'])->name('settings.taxonomies.toggle');
+
         Route::get('/', [QualityDocumentController::class, 'index'])->name('index');
         Route::get('/create', [QualityDocumentController::class, 'create'])->name('create');
         Route::post('/store', [QualityDocumentController::class, 'store'])->name('store');
         Route::get('/{qualityDoc}', [QualityDocumentController::class, 'show'])->name('show');
+        Route::get('/{qualityDoc}/edit', [QualityDocumentController::class, 'edit'])->name('edit');
+        Route::put('/{qualityDoc}', [QualityDocumentController::class, 'update'])->name('update');
+        Route::delete('/{qualityDoc}', [QualityDocumentController::class, 'destroy'])->name('destroy');
         Route::get('/{qualityDoc}/download', [QualityDocumentController::class, 'download'])->name('download');
-            Route::post('/{qualityDoc}/versions', [QualityDocumentController::class, 'uploadVersion'])->name('versions.upload');
-                Route::get('/{qualityDoc}/versions/{version}/download', [QualityDocumentController::class, 'downloadVersion'])->name('versions.download');
+        Route::get('/{qualityDoc}/download-all', [QualityDocumentController::class, 'downloadAllAttachments'])->name('download-all');
+        Route::get('/{qualityDoc}/attachments/{attachment}/download', [QualityDocumentController::class, 'downloadAttachment'])->name('attachments.download');
+        Route::post('/{qualityDoc}/attachments', [QualityDocumentController::class, 'uploadAttachments'])->name('attachments.upload');
+        Route::delete('/{qualityDoc}/attachments/{attachment}', [QualityDocumentController::class, 'deleteAttachment'])->name('attachments.delete');
+        Route::post('/{qualityDoc}/versions', [QualityDocumentController::class, 'uploadVersion'])->name('versions.upload');
+        Route::get('/{qualityDoc}/versions/{version}/download', [QualityDocumentController::class, 'downloadVersion'])->name('versions.download');
 
         // Approval/workflow actions
         Route::post('/{qualityDoc}/submit', [QualityDocumentController::class, 'submitForReview'])->name('submit');
@@ -245,6 +264,7 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
 
         Route::get('/{indicator}/export-pdf', [App\Http\Controllers\QualityIndicatorController::class, 'exportIndicatorPdf'])->name('export-indicator-pdf');
         Route::post('/{indicator}/restore', [App\Http\Controllers\QualityIndicatorController::class, 'restore'])->name('restore')->withTrashed();
+        Route::post('/{indicator}/sync-rcm', [App\Http\Controllers\QualityIndicatorController::class, 'syncFromRcm'])->name('sync-rcm');
         Route::get('/{indicator}', [App\Http\Controllers\QualityIndicatorController::class, 'show'])->name('show');
         Route::put('/{indicator}', [App\Http\Controllers\QualityIndicatorController::class, 'update'])->name('update');
         Route::delete('/{indicator}', [App\Http\Controllers\QualityIndicatorController::class, 'destroy'])->name('destroy');
@@ -352,6 +372,8 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         // Acknowledgment for forwarded documents
         Route::post('/action/{action}/acknowledge', [App\Http\Controllers\Document\DocumentController::class, 'acknowledgeDocument'])->name('acknowledgeDocument');
         Route::post('/action/{action}/implementation', [App\Http\Controllers\Document\DocumentController::class, 'updateImplementation'])->name('updateImplementation');
+        Route::post('/action/{action}/remind', [App\Http\Controllers\Document\DocumentController::class, 'remindAction'])->name('remindAction');
+        Route::post('/{document}/unarchive', [App\Http\Controllers\Document\DocumentController::class, 'unarchive'])->name('unarchive');
     });
 
     Route::prefix('admin-docs')->name('admin-docs.')->group(function () {
@@ -375,6 +397,20 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
             Route::put('/{memo}', [App\Http\Controllers\AdminDocs\OfficialMemoController::class, 'update'])->name('update');
             Route::delete('/{memo}', [App\Http\Controllers\AdminDocs\OfficialMemoController::class, 'destroy'])->name('destroy');
             Route::post('/{memo}/docx', [App\Http\Controllers\AdminDocs\OfficialMemoController::class, 'docx'])->name('docx');
+        });
+
+        // รายงาน AmedStat (กรมแพทย์ทหารบก)
+        Route::prefix('amedstat')->name('amedstat.')->group(function () {
+            Route::get('/', [App\Http\Controllers\AdminDocs\AmedStatController::class, 'index'])->name('index');
+            Route::get('/report/{formId}', [App\Http\Controllers\AdminDocs\AmedStatController::class, 'show'])->name('show');
+            Route::post('/calculate/{formId}', [App\Http\Controllers\AdminDocs\AmedStatController::class, 'calculate'])->name('calculate');
+            Route::post('/save/{formId}', [App\Http\Controllers\AdminDocs\AmedStatController::class, 'save'])->name('save');
+            Route::get('/export/{formId}', [App\Http\Controllers\AdminDocs\AmedStatController::class, 'export'])->name('export');
+            Route::get('/export-all', [App\Http\Controllers\AdminDocs\AmedStatController::class, 'exportAllZip'])->name('export_all');
+            Route::get('/export-all-zip', [App\Http\Controllers\AdminDocs\AmedStatController::class, 'exportAllZip'])->name('export-all');
+            Route::get('/units', [App\Http\Controllers\AdminDocs\AmedStatController::class, 'units'])->name('units');
+            Route::post('/units', [App\Http\Controllers\AdminDocs\AmedStatController::class, 'saveUnit'])->name('units.save');
+            Route::delete('/units/{id}', [App\Http\Controllers\AdminDocs\AmedStatController::class, 'deleteUnit'])->name('units.delete');
         });
     });
 
@@ -448,6 +484,12 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
     Route::get('/finance/revenue/export-pdf', [App\Http\Controllers\FinanceRevenueController::class, 'exportPdf'])->name('finance.revenue.export-pdf');
     Route::get('/finance/revenue/export-pttype-pdf', [App\Http\Controllers\FinanceRevenueController::class, 'exportPttypePdf'])->name('finance.revenue.export-pttype-pdf');
     Route::get('/finance/revenue/export-pttype-excel', [App\Http\Controllers\FinanceRevenueController::class, 'exportPttypeExcel'])->name('finance.revenue.export-pttype-excel');
+
+    // สรุปมูลค่ารักษาพยาบาล (แยกผู้ป่วยนอกและใน ตาม 14 หมวดค่ารักษา)
+    Route::get('/finance/treatment-value', [App\Http\Controllers\FinanceTreatmentValueController::class, 'index'])->name('finance.treatment-value');
+    Route::get('/finance/treatment-value/export', [App\Http\Controllers\FinanceTreatmentValueController::class, 'exportExcel'])->name('finance.treatment-value.export');
+    Route::get('/finance/treatment-value/export-pdf', [App\Http\Controllers\FinanceTreatmentValueController::class, 'exportPdf'])->name('finance.treatment-value.export-pdf');
+
     Route::get('/finance/budget', [App\Http\Controllers\FinanceBudgetController::class, 'index'])->name('finance.budget');
     Route::get('/finance/budget/export', [App\Http\Controllers\FinanceBudgetController::class, 'exportExcel'])->name('finance.budget.export');
     Route::get('/finance/budget/export-pdf', [App\Http\Controllers\FinanceBudgetController::class, 'exportPdf'])->name('finance.budget.export-pdf');
@@ -457,6 +499,8 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
 
     // Financial Data Hub — ศูนย์ข้อมูลการเงิน
     Route::get('/finance/data-hub', [App\Http\Controllers\FinanceDataHubController::class, 'index'])->name('finance.data-hub');
+    Route::post('/finance/data-hub/auto-sync-now', [App\Http\Controllers\FinanceDataHubController::class, 'autoSyncNow'])->name('finance.data-hub.auto-sync-now');
+    Route::get('/finance/data-hub/auto-sync-status', [App\Http\Controllers\FinanceDataHubController::class, 'autoSyncStatus'])->name('finance.data-hub.auto-sync-status');
 
     // จ่ายตรง กรมบัญชีกลาง (พร้อมใช้งาน)
     Route::prefix('finance/data-hub/cgd-claim')->name('finance.cgd.')->group(function () {
@@ -482,6 +526,7 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::get('/summary/export-pdf', [App\Http\Controllers\FinanceCgdClaimController::class, 'exportSummaryPdf'])->name('summary.export-pdf');
         Route::get('/stm', [App\Http\Controllers\FinanceStmImportController::class, 'index'])->name('stm.index');
         Route::post('/stm', [App\Http\Controllers\FinanceStmImportController::class, 'store'])->name('stm.store');
+        Route::post('/stm/auto-fetch', [App\Http\Controllers\FinanceStmImportController::class, 'autoFetch'])->name('stm.auto-fetch');
         Route::get('/stm/{stm}/compare', [App\Http\Controllers\FinanceCgdClaimController::class, 'showStmCompare'])->name('stm.compare');
         Route::post('/stm/{stm}/reconcile', [App\Http\Controllers\FinanceCgdClaimController::class, 'reconcileStm'])->name('stm.reconcile');
         Route::get('/stm/{stm}/compare/export', [App\Http\Controllers\FinanceCgdClaimController::class, 'exportStmCompareExcel'])->name('stm.compare.export');
@@ -517,6 +562,16 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::delete('/{batch}', [App\Http\Controllers\FinanceLgoClaimController::class, 'destroy'])->name('destroy')->whereNumber('batch');
         Route::get('/{batch}/export', [App\Http\Controllers\FinanceLgoClaimController::class, 'exportExcel'])->name('export')->whereNumber('batch');
         Route::get('/{batch}/export-pdf', [App\Http\Controllers\FinanceLgoClaimController::class, 'exportPdf'])->name('export-pdf')->whereNumber('batch');
+        Route::get('/smt', fn () => redirect()->route('finance.smt.index', ['budget_source' => 'lgo']))->name('smt');
+    });
+
+    // สปสช. SMT (Smart Money Transfer) — ข้อมูลการจ่ายเงินจริง อปท. / บัตรทอง / ไตวายเรื้อรัง
+    Route::prefix('finance/data-hub/smt')->name('finance.smt.')->group(function () {
+        Route::get('/', [App\Http\Controllers\Finance\FinanceNhsoSmtController::class, 'index'])->name('index');
+        Route::post('/sync', [App\Http\Controllers\Finance\FinanceNhsoSmtController::class, 'sync'])->name('sync');
+        Route::get('/export', [App\Http\Controllers\Finance\FinanceNhsoSmtController::class, 'exportExcel'])->name('export');
+        Route::get('/detail', [App\Http\Controllers\Finance\FinanceNhsoSmtController::class, 'showDetail'])->name('detail');
+        Route::get('/rep-cases', [App\Http\Controllers\Finance\FinanceNhsoSmtController::class, 'getRepCases'])->name('rep-cases');
     });
 
     // โมดูลย่อยเตรียมรองรับ — ประกันสังคม / บัตรทอง (นำเข้าแยกหน้า)
@@ -543,6 +598,13 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
     Route::get('/pharmacy', [App\Http\Controllers\Pharmacy\PharmacyController::class, 'index'])->name('pharmacy.index');
     Route::get('/pharmacy/drug-alerts', [App\Http\Controllers\Pharmacy\PharmacyController::class, 'drugAlerts'])->name('pharmacy.drug-alerts');
     Route::post('/pharmacy/drug-alerts/send-telegram', [App\Http\Controllers\Pharmacy\PharmacyController::class, 'sendEgfrTelegramAlerts'])->name('pharmacy.drug-alerts.send-telegram');
+
+    // วิเคราะห์ราคายา เกณฑ์ ว.111 และประมาณการรายได้
+    Route::get('/pharmacy/pricing', [App\Http\Controllers\Pharmacy\PharmacyDrugPricingController::class, 'index'])->name('pharmacy.pricing.index');
+    Route::get('/pharmacy/pricing/drug-detail', [App\Http\Controllers\Pharmacy\PharmacyDrugPricingController::class, 'drugDetail'])->name('pharmacy.pricing.drug-detail');
+    Route::post('/pharmacy/pricing/tiers', [App\Http\Controllers\Pharmacy\PharmacyDrugPricingController::class, 'saveTiers'])->name('pharmacy.pricing.tiers.save');
+    Route::post('/pharmacy/pricing/tiers/reset', [App\Http\Controllers\Pharmacy\PharmacyDrugPricingController::class, 'resetTiers'])->name('pharmacy.pricing.tiers.reset');
+    Route::get('/pharmacy/pricing/export', [App\Http\Controllers\Pharmacy\PharmacyDrugPricingController::class, 'exportExcel'])->name('pharmacy.pricing.export');
 
     $registerPharmacyWarehouse = function (bool $drugOnly) {
         Route::get('/', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'index'])->name('index');
@@ -586,6 +648,15 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
 
         Route::get('/sync-dispense/history', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'dispenseSyncHistory'])->name('sync-dispense.history');
         Route::post('/sync-dispense/retry', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'retryDispenseSync'])->name('sync-dispense.retry');
+        Route::post('/sync-dispense/preview', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'previewDispense'])->name('sync-dispense.preview');
+        Route::post('/sync-dispense/commit', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'commitDispense'])->name('sync-dispense.commit');
+        Route::post('/pending-dispense/fulfill-ready', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'fulfillReadyPendingDispense'])->name('pending-dispense.fulfill-ready');
+        Route::post('/pending-dispense/{id}/fulfill', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'fulfillPendingDispense'])->name('pending-dispense.fulfill');
+        Route::post('/pending-dispense/{id}/cancel', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'cancelPendingDispense'])->name('pending-dispense.cancel');
+        Route::post('/sync-dispense/{id}/rollback', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'rollbackDispense'])->name('sync-dispense.rollback');
+        Route::post('/sync-dispense/rollback-all', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'rollbackAllDispense'])->name('sync-dispense.rollback-all');
+        Route::get('/reports/stock-summary', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'stockSummaryReport'])->name('reports.stock-summary');
+        Route::get('/reports/stock-summary/export', [App\Http\Controllers\Pharmacy\PharmacyInventoryController::class, 'exportStockSummaryReport'])->name('reports.stock-summary.export');
 
         Route::get('/settings', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'settings'])->name('settings');
         Route::post('/settings/batch', [App\Http\Controllers\Pharmacy\PharmacyInventoryAdminController::class, 'saveBatchSettings'])->name('settings.values.batch');
@@ -714,6 +785,7 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
 
         // หมวด 7: IT Resource, Competency & Change
         Route::get('/resource', [App\Http\Controllers\Im\ResourceController::class, 'index'])->name('resource');
+        Route::get('/resource/computers-pdf', [App\Http\Controllers\Im\ResourceController::class, 'exportComputersPdf'])->name('resource.computers-pdf');
         Route::post('/resource/assets', [App\Http\Controllers\Im\ResourceController::class, 'storeAsset'])->name('resource.assets.store');
         Route::put('/resource/assets/{asset}', [App\Http\Controllers\Im\ResourceController::class, 'updateAsset'])->name('resource.assets.update');
         Route::delete('/resource/assets/{asset}', [App\Http\Controllers\Im\ResourceController::class, 'destroyAsset'])->name('resource.assets.destroy');
@@ -727,6 +799,7 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::put('/resource/changes/{change}/status', [App\Http\Controllers\Im\ResourceController::class, 'updateChangeStatus'])->name('resource.changes.status');
         Route::delete('/resource/changes/{change}', [App\Http\Controllers\Im\ResourceController::class, 'destroyChange'])->name('resource.changes.destroy');
         Route::get('/resource/assets/{asset}/live', [App\Http\Controllers\Im\ResourceController::class, 'liveStatus'])->name('resource.assets.live');
+        Route::post('/resource/assets/{asset}/report-threat-ticket', [App\Http\Controllers\Im\ResourceController::class, 'reportThreatTicket'])->name('resource.assets.report-threat-ticket');
     });
 
     // Quality Assurance System (ระบบติดตามการทบทวน)
@@ -1047,6 +1120,26 @@ Route::middleware(['auth', 'menu.permission'])->group(function () {
         Route::post('/settings', [IcController::class, 'updateSettings'])->name('settings.update');
     });
 
+    // ระบบผู้ป่วยใน (IPD)
+    Route::prefix('ipd')->name('ipd.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Ipd\IpdDashboardController::class, 'index'])->name('index');
+        
+        // Admission Notes
+        Route::get('/admission-notes', [\App\Http\Controllers\Ipd\AdmissionNoteController::class, 'index'])->name('admission-notes.index');
+        Route::get('/admission-notes/create', [\App\Http\Controllers\Ipd\AdmissionNoteController::class, 'create'])->name('admission-notes.create');
+        Route::post('/admission-notes', [\App\Http\Controllers\Ipd\AdmissionNoteController::class, 'store'])->name('admission-notes.store');
+        Route::get('/admission-notes/{admission_note}/edit', [\App\Http\Controllers\Ipd\AdmissionNoteController::class, 'edit'])->name('admission-notes.edit');
+        Route::put('/admission-notes/{admission_note}', [\App\Http\Controllers\Ipd\AdmissionNoteController::class, 'update'])->name('admission-notes.update');
+        Route::delete('/admission-notes/{admission_note}', [\App\Http\Controllers\Ipd\AdmissionNoteController::class, 'destroy'])->name('admission-notes.destroy');
+        Route::get('/admission-notes/{admission_note}/print', [\App\Http\Controllers\Ipd\AdmissionNoteController::class, 'print'])->name('admission-notes.print');
+
+        // HOSxP APIs
+        Route::get('/api/admissions/search', [\App\Http\Controllers\Ipd\AdmissionNoteController::class, 'apiSearchPatients'])->name('api.admissions.search');
+        Route::get('/api/admissions/{identifier}/prefill', [\App\Http\Controllers\Ipd\AdmissionNoteController::class, 'apiGetPrefill'])->name('api.admissions.prefill');
+        Route::get('/api/patients/{hn}/visits', [\App\Http\Controllers\Ipd\AdmissionNoteController::class, 'apiGetPatientVisits'])->name('api.patients.visits');
+        Route::get('/api/doctors', [\App\Http\Controllers\Ipd\AdmissionNoteController::class, 'apiGetDoctors'])->name('api.doctors');
+    });
+
     // Administrative Hub
     Route::get('/admin-hub', [App\Http\Controllers\AdminHubController::class, 'index'])->name('admin.hub');
 
@@ -1213,6 +1306,78 @@ Route::get('/dev/config-cache', function () {
     return response('Config cache cleared & cached successfully.');
 });
 
+Route::get('/dev/sync-rcm-im11', function (\App\Services\Rcm\RcmQualityIndicatorSyncService $syncService) {
+    $result = $syncService->syncIm11();
+    return response()->json($result);
+});
+
+Route::get('/dev/run-rcm-file-patch-migration', function () {
+    \Illuminate\Support\Facades\Artisan::call('migrate', [
+        '--path' => 'database/migrations/2026_11_09_100000_create_rcm_file_patch_tables.php',
+        '--force' => true,
+    ]);
+
+    // Add to menus table if not exists
+    $mainMenu = \Illuminate\Support\Facades\DB::table('menus')->where('route', 'rcm.dashboard')->first();
+    $existing = \Illuminate\Support\Facades\DB::table('menus')->where('route', 'rcm.file-patch.index')->first();
+    if (!$existing) {
+        \Illuminate\Support\Facades\DB::table('menus')->insert([
+            'title' => 'ปรับปรุงแฟ้ม (New E-Claim)',
+            'icon' => 'FileEdit',
+            'route' => 'rcm.file-patch.index',
+            'permission_name' => null,
+            'parent_id' => $mainMenu?->id,
+            'order' => 6,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    return response('RCM File Patch migration & menu setup completed successfully.');
+});
+
+Route::get('/dev/setup-rcm-dialysis-menu', function () {
+    $mainMenu = \Illuminate\Support\Facades\DB::table('menus')->where('route', 'rcm.dashboard')->first();
+    $existing = \Illuminate\Support\Facades\DB::table('menus')->where('route', 'rcm.dialysis.index')->first();
+    if (!$existing) {
+        \Illuminate\Support\Facades\DB::table('menus')->insert([
+            'title' => 'ไตเทียม (HD / SMT)',
+            'icon' => 'Activity',
+            'route' => 'rcm.dialysis.index',
+            'permission_name' => null,
+            'parent_id' => $mainMenu?->id,
+            'order' => 7,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    return response('RCM Dialysis menu setup completed successfully.');
+});
+
+Route::get('/dev/setup-rcm-uc-menu', function () {
+    $mainMenu = \Illuminate\Support\Facades\DB::table('menus')->where('route', 'rcm.dashboard')->first();
+    $existing = \Illuminate\Support\Facades\DB::table('menus')->where('route', 'rcm.uc.index')->first();
+    if (!$existing) {
+        \Illuminate\Support\Facades\DB::table('menus')->insert([
+            'title' => 'บัตรทอง (UC / สปสช.)',
+            'icon' => 'Heart',
+            'route' => 'rcm.uc.index',
+            'permission_name' => null,
+            'parent_id' => $mainMenu?->id,
+            'order' => 8,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+    return response('RCM UC menu setup completed successfully.');
+});
+
+Route::get('/dev/update-rcm-scrubber-menu', function () {
+    \Illuminate\Support\Facades\DB::table('menus')->where('route', 'rcm.scrubber')->update(['title' => 'ตรวจก่อนเบิก']);
+    return response('Updated menu title to ตรวจก่อนเบิก successfully.');
+});
+
 Route::get('/dev/run-calendar-migrations', function () {
     \Illuminate\Support\Facades\Artisan::call('migrate', [
         '--path' => 'database/migrations/2026_10_27_083000_create_app_calendar_events_table.php',
@@ -1261,14 +1426,143 @@ Route::get('/dev/run-calendar-migrations', function () {
     ]);
 });
 
+
 // Windows Agent Endpoints (Public/Agent access, CSRF exempt)
 Route::get('/im/agent/install.ps1', [App\Http\Controllers\Im\AgentController::class, 'installScript'])->name('im.agent.install');
 Route::get('/im/agent/download-bat', [App\Http\Controllers\Im\AgentController::class, 'downloadBat'])->name('im.agent.download-bat');
+Route::get('/im/agent/fortinet-ca.cer', [App\Http\Controllers\Im\AgentController::class, 'fortinetCaCertificate'])->name('im.agent.fortinet-ca');
 Route::get('/im/agent/rustdesk.exe', [App\Http\Controllers\Im\AgentController::class, 'rustDeskBinary'])->name('im.agent.rustdesk');
 Route::get('/im/agent/meshagent.exe', [App\Http\Controllers\Im\AgentController::class, 'meshAgentBinary'])->name('im.agent.meshagent');
 Route::get('/im/agent/meshagent.msh', [App\Http\Controllers\Im\AgentController::class, 'meshAgentSettings'])->name('im.agent.meshsettings');
 Route::get('/im/remote/{asset}/connect', [App\Http\Controllers\Im\AgentController::class, 'remoteConnect'])->name('im.remote.connect');
 Route::post('/api/im/agent/report', [App\Http\Controllers\Im\AgentController::class, 'report'])->name('im.agent.report');
+
+// ==========================================
+// RCM (Revenue Cycle Management) - CSOP & CIPN
+// ==========================================
+Route::middleware(['auth'])->group(function () {
+    Route::get('/reconcile/c-deny/{code}/cases', [App\Http\Controllers\Rcm\RcmReconcileController::class, 'cDenyCases']);
+});
+
+Route::prefix('rcm')->name('rcm.')->middleware(['auth'])->group(function () {
+    Route::get('/', [App\Http\Controllers\Rcm\RcmDashboardController::class, 'index'])->name('dashboard');
+
+    // ตรวจก่อนเบิก (Pre-Claim Scrubber & NED Audit)
+    Route::get('/scrubber', [App\Http\Controllers\Rcm\RcmScrubberController::class, 'index'])->name('scrubber');
+    Route::get('/scrubber/export-excel', [App\Http\Controllers\Rcm\RcmScrubberController::class, 'exportExcel'])->name('scrubber.export-excel');
+    Route::get('/scrubber/export-pdf', [App\Http\Controllers\Rcm\RcmScrubberController::class, 'exportPdf'])->name('scrubber.export-pdf');
+    Route::get('/scrubber/ned/export-excel', [App\Http\Controllers\Rcm\RcmScrubberController::class, 'exportNedExcel'])->name('scrubber.ned.export-excel');
+    Route::get('/scrubber/ned/export-pdf', [App\Http\Controllers\Rcm\RcmScrubberController::class, 'exportNedPdf'])->name('scrubber.ned.export-pdf');
+
+    // CSOP (OPD Claim)
+    Route::get('/csop', [App\Http\Controllers\Rcm\RcmCsopController::class, 'index'])->name('csop.index');
+    Route::get('/csop/{vn}', [App\Http\Controllers\Rcm\RcmCsopController::class, 'show'])->name('csop.show');
+    Route::post('/csop/export-data', [App\Http\Controllers\Rcm\RcmCsopController::class, 'exportBatch'])->name('csop.export-data');
+    Route::get('/csop-report/summary-excel', [App\Http\Controllers\Rcm\RcmCsopController::class, 'exportSummaryExcel'])->name('csop.summary-excel');
+    Route::get('/csop-report/summary-pdf', [App\Http\Controllers\Rcm\RcmCsopController::class, 'exportSummaryPdf'])->name('csop.summary-pdf');
+
+    // CIPN (IPD Claim)
+    Route::get('/cipn', [App\Http\Controllers\Rcm\RcmCipnController::class, 'index'])->name('cipn.index');
+    Route::post('/cipn/export-data', [App\Http\Controllers\Rcm\RcmCipnController::class, 'exportBatch'])->name('cipn.export-data');
+    Route::get('/cipn-report/summary-excel', [App\Http\Controllers\Rcm\RcmCipnController::class, 'exportSummaryExcel'])->name('cipn.summary-excel');
+    Route::get('/cipn-report/summary-pdf', [App\Http\Controllers\Rcm\RcmCipnController::class, 'exportSummaryPdf'])->name('cipn.summary-pdf');
+
+    // Auto Sync (REP & STM)
+    Route::post('/auto-sync/one-click-sync', [App\Http\Controllers\Rcm\RcmAutoSyncController::class, 'oneClickSync'])->name('auto-sync.one-click-sync');
+    Route::post('/auto-sync/save-totp', [App\Http\Controllers\Rcm\RcmAutoSyncController::class, 'saveTotp'])->name('auto-sync.save-totp');
+    Route::post('/auto-sync/decode-migration', [App\Http\Controllers\Rcm\RcmAutoSyncController::class, 'decodeMigration'])->name('auto-sync.decode-migration');
+    Route::post('/auto-sync/download', [App\Http\Controllers\Rcm\RcmAutoSyncController::class, 'triggerDownload'])->name('auto-sync.download');
+    Route::post('/auto-sync/scan-folder', [App\Http\Controllers\Rcm\RcmAutoSyncController::class, 'scanFolder'])->name('auto-sync.scan-folder');
+    Route::post('/auto-sync/historical/verify', [App\Http\Controllers\Rcm\RcmAutoSyncController::class, 'verifyHistorical'])->name('auto-sync.historical-verify');
+    Route::post('/auto-sync/historical/start', [App\Http\Controllers\Rcm\RcmAutoSyncController::class, 'startHistoricalSync'])->name('auto-sync.historical-start');
+    Route::post('/auto-sync/historical/step', [App\Http\Controllers\Rcm\RcmAutoSyncController::class, 'stepHistoricalSync'])->name('auto-sync.historical-step');
+    Route::get('/auto-sync/historical/status', [App\Http\Controllers\Rcm\RcmAutoSyncController::class, 'getHistoricalStatus'])->name('auto-sync.historical-status');
+    Route::post('/auto-sync/historical/pause', [App\Http\Controllers\Rcm\RcmAutoSyncController::class, 'pauseHistoricalSync'])->name('auto-sync.historical-pause');
+    Route::post('/auto-sync/historical/reset', [App\Http\Controllers\Rcm\RcmAutoSyncController::class, 'resetHistoricalSync'])->name('auto-sync.historical-reset');
+
+    // Reconciliation & Appeals
+    Route::get('/reconcile', [App\Http\Controllers\Rcm\RcmReconcileController::class, 'index'])->name('reconcile.index');
+    Route::post('/reconcile/upload-stm', [App\Http\Controllers\Rcm\RcmReconcileController::class, 'uploadStm'])->name('reconcile.upload');
+    Route::post('/reconcile/auto-settle', [App\Http\Controllers\Rcm\RcmReconcileController::class, 'autoSettle'])->name('reconcile.auto-settle');
+    Route::get('/reconcile/c-deny/{code}/cases', [App\Http\Controllers\Rcm\RcmReconcileController::class, 'cDenyCases'])->name('reconcile.c-deny-cases');
+    Route::post('/reconcile/appeal/{id}', [App\Http\Controllers\Rcm\RcmReconcileController::class, 'createAppeal'])->name('reconcile.appeal');
+    Route::get('/reconcile-report/excel', [App\Http\Controllers\Rcm\RcmReconcileController::class, 'exportExcel'])->name('reconcile.export-excel');
+    Route::get('/reconcile-report/pdf', [App\Http\Controllers\Rcm\RcmReconcileController::class, 'exportPdf'])->name('reconcile.export-pdf');
+
+    // SMT (Smart Money Transfer) — การจ่ายเงิน สปสช. (อปท. / บัตรทอง UC / กองทุนไตวายเรื้อรัง CKD)
+    Route::prefix('smt')->name('smt.')->group(function () {
+        Route::get('/', [App\Http\Controllers\Rcm\RcmSmtController::class, 'index'])->name('index');
+        Route::post('/sync', [App\Http\Controllers\Rcm\RcmSmtController::class, 'sync'])->name('sync');
+        Route::post('/sync-pdfs', [App\Http\Controllers\Rcm\RcmSmtController::class, 'syncPdfs'])->name('sync-pdfs');
+        Route::get('/export', [App\Http\Controllers\Rcm\RcmSmtController::class, 'exportExcel'])->name('export');
+        Route::get('/detail', [App\Http\Controllers\Rcm\RcmSmtController::class, 'showDetail'])->name('detail');
+        Route::get('/rep-cases', [App\Http\Controllers\Rcm\RcmSmtController::class, 'getRepCases'])->name('rep-cases');
+        Route::get('/{id}/pdf/view', [App\Http\Controllers\Rcm\RcmSmtController::class, 'viewPdf'])->name('pdf.view');
+        Route::get('/{id}/pdf/download', [App\Http\Controllers\Rcm\RcmSmtController::class, 'downloadPdf'])->name('pdf.download');
+    });
+
+    // เปรียบเทียบข้อมูลรายเดือน 3 ฝ่าย (HOSxP vs REP vs STM)
+    Route::prefix('monthly-reconcile')->name('monthly.')->group(function () {
+        Route::get('/', [App\Http\Controllers\Rcm\RcmMonthlyComparisonController::class, 'index'])->name('index');
+        Route::get('/drill-down', [App\Http\Controllers\Rcm\RcmMonthlyComparisonController::class, 'drillDown'])->name('drill-down');
+        Route::get('/export-excel', [App\Http\Controllers\Rcm\RcmMonthlyComparisonController::class, 'exportExcel'])->name('export-excel');
+        Route::get('/export-pdf', [App\Http\Controllers\Rcm\RcmMonthlyComparisonController::class, 'exportPdf'])->name('export-pdf');
+    });
+
+    // เปรียบเทียบข้อมูลไตเทียม 3 ฝ่าย (HOSxP 021 vs e-Claim REP vs NHSO SMT เงินโอนจริง)
+    Route::prefix('dialysis')->name('dialysis.')->group(function () {
+        Route::get('/', [App\Http\Controllers\Rcm\RcmDialysisController::class, 'index'])->name('index');
+        Route::get('/drill-down', [App\Http\Controllers\Rcm\RcmDialysisController::class, 'drillDown'])->name('drill-down');
+        Route::get('/export-excel', [App\Http\Controllers\Rcm\RcmDialysisController::class, 'exportExcel'])->name('export-excel');
+        Route::get('/export-pdf', [App\Http\Controllers\Rcm\RcmDialysisController::class, 'exportPdf'])->name('export-pdf');
+    });
+
+    // เปรียบเทียบข้อมูลสิทธิบัตรทอง (UC) 3 ฝ่าย (HOSxP vs e-Claim REP vs e-Claim STM อนุมัติจ่าย)
+    Route::prefix('uc')->name('uc.')->group(function () {
+        Route::get('/', [App\Http\Controllers\Rcm\RcmUcController::class, 'index'])->name('index');
+        Route::get('/drill-down', [App\Http\Controllers\Rcm\RcmUcController::class, 'drillDown'])->name('drill-down');
+        Route::post('/sync-stm', [App\Http\Controllers\Rcm\RcmUcController::class, 'syncStm'])->name('sync-stm');
+        Route::post('/sync-smt', [App\Http\Controllers\Rcm\RcmUcController::class, 'syncSmt'])->name('sync-smt');
+        Route::post('/sync-portal', [App\Http\Controllers\Rcm\RcmUcController::class, 'syncPortal'])->name('sync-portal');
+        Route::post('/import-rep', [App\Http\Controllers\Rcm\RcmUcController::class, 'importRep'])->name('import-rep');
+        Route::get('/export-excel', [App\Http\Controllers\Rcm\RcmUcController::class, 'exportExcel'])->name('export-excel');
+        Route::get('/export-pdf', [App\Http\Controllers\Rcm\RcmUcController::class, 'exportPdf'])->name('export-pdf');
+    });
+
+    // เปรียบเทียบข้อมูลสิทธิบัตรทอง รพ.ค่าย (03) 3 ฝ่าย (HOSxP vs e-Claim REP vs e-Claim STM)
+    Route::prefix('uc-hospital')->name('uc-hospital.')->group(function () {
+        Route::get('/', [App\Http\Controllers\Rcm\RcmUcHospitalController::class, 'index'])->name('index');
+        Route::get('/drill-down', [App\Http\Controllers\Rcm\RcmUcHospitalController::class, 'drillDown'])->name('drill-down');
+        Route::post('/sync-stm', [App\Http\Controllers\Rcm\RcmUcHospitalController::class, 'syncStm'])->name('sync-stm');
+        Route::post('/sync-portal', [App\Http\Controllers\Rcm\RcmUcHospitalController::class, 'syncPortal'])->name('sync-portal');
+        Route::get('/export-excel', [App\Http\Controllers\Rcm\RcmUcHospitalController::class, 'exportExcel'])->name('export-excel');
+        Route::get('/export-pdf', [App\Http\Controllers\Rcm\RcmUcHospitalController::class, 'exportPdf'])->name('export-pdf');
+    });
+
+    // File Patch (ปรับปรุงแฟ้ม New E-Claim)
+    Route::prefix('file-patch')->name('file-patch.')->group(function () {
+        Route::get('/', [App\Http\Controllers\Rcm\RcmFilePatchController::class, 'index'])->name('index');
+        Route::post('/scan', [App\Http\Controllers\Rcm\RcmFilePatchController::class, 'scan'])->name('scan');
+        Route::post('/execute', [App\Http\Controllers\Rcm\RcmFilePatchController::class, 'execute'])->name('execute');
+        Route::post('/log-client-batch', [App\Http\Controllers\Rcm\RcmFilePatchController::class, 'logClientBatch'])->name('log-client-batch');
+        Route::get('/batch/{batchId}', [App\Http\Controllers\Rcm\RcmFilePatchController::class, 'getBatchItems'])->name('batch-items');
+        Route::get('/export/{batchId}', [App\Http\Controllers\Rcm\RcmFilePatchController::class, 'exportCsv'])->name('export');
+    });
+
+    // ศูนย์รวมนำเข้าข้อมูลและดึงข้อมูลอัตโนมัติ (Centralized Import & Auto-Sync Center)
+    Route::prefix('import')->name('import.')->group(function () {
+        Route::get('/', [App\Http\Controllers\Rcm\RcmImportController::class, 'index'])->name('index');
+        Route::post('/sync-all', [App\Http\Controllers\Rcm\RcmImportController::class, 'oneClickSyncAll'])->name('sync-all');
+        Route::post('/sync-scheme', [App\Http\Controllers\Rcm\RcmImportController::class, 'syncScheme'])->name('sync-scheme');
+        Route::post('/upload', [App\Http\Controllers\Rcm\RcmImportController::class, 'uploadFiles'])->name('upload');
+        Route::get('/batch/{id}/items', [App\Http\Controllers\Rcm\RcmImportController::class, 'batchItems'])->name('batch-items');
+        Route::get('/export-excel', [App\Http\Controllers\Rcm\RcmImportController::class, 'exportExcel'])->name('export-excel');
+        Route::get('/export-pdf', [App\Http\Controllers\Rcm\RcmImportController::class, 'exportPdf'])->name('export-pdf');
+    });
+});
+
+
+
 
 
 

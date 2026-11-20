@@ -65,6 +65,11 @@ class CgdStmBatch extends Model
         return $this->belongsTo(User::class, 'imported_by');
     }
 
+    public function importedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'imported_by');
+    }
+
     /**
      * กรองตาม scheme + ชื่อไฟล์ที่อนุญาต (CGD = rep_eclaim_14689_OPCS…)
      *

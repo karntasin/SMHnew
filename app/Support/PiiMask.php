@@ -17,6 +17,35 @@ class PiiMask
     }
 
     /**
+     * ชื่อ-นามสกุลแบบแยกฟิลด์ หรือชื่อเต็ม (คำนำหน้า + ชื่อ + เว้นวรรค + นามสกุล)
+     */
+    public static function name(?string $pname = null, ?string $fname = null, ?string $lname = null): ?string
+    {
+        if ($fname === null && $lname === null) {
+            return self::patientName($pname);
+        }
+
+        $full = trim(($pname ?? '').' '.($fname ?? ''));
+        if (! empty($lname)) {
+            $full .= ' '.self::surname($lname);
+        }
+
+        return trim($full) ?: null;
+    }
+
+    /**
+     * คืนค่า HN (ตามกฎไม่ mask เพื่อให้ค้นหา/อ้างอิงได้ ป้องกัน undefined method)
+     */
+    public static function hn(?string $hn): ?string
+    {
+        if ($hn === null) {
+            return null;
+        }
+
+        return trim((string) $hn);
+    }
+
+    /**
      * เลขบัตร 13 หลัก → 1-****-*****-**-3 (คงหลักแรกและหลักท้าย)
      */
     public static function cid(?string $cid): ?string

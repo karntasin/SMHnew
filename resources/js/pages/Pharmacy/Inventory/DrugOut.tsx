@@ -225,7 +225,7 @@ export default function DrugOut({
         const timer = setTimeout(async () => {
             try {
                 const res = await axios.get(wh('drugs.search'), { params: { q: searchQ } });
-                setSearchHits(res.data || []);
+                setSearchHits(res.data?.data ?? []);
             } catch (e) {
                 console.error(e);
             }

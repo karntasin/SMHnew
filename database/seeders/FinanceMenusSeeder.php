@@ -59,10 +59,17 @@ class FinanceMenusSeeder extends Seeder
                 'permission_name' => 'finance.revenue',
             ],
             [
+                'title' => 'สรุปมูลค่ารักษาพยาบาล',
+                'icon' => 'Receipt',
+                'route' => 'finance.treatment-value',
+                'order' => 3,
+                'permission_name' => 'finance.treatment-value',
+            ],
+            [
                 'title' => 'งานงบประมาณ',
                 'icon' => 'PieChart',
                 'route' => 'finance.budget',
-                'order' => 3,
+                'order' => 4,
                 'permission_name' => 'finance.budget',
             ],
         ];

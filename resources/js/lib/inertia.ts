@@ -29,7 +29,48 @@ function unlockPageAfterOverlay(): void {
     document.body.style.removeProperty('overflow');
 }
 
+/**
+ * Patch History.prototype.state to prevent Inertia.js from crashing with:
+ * "TypeError: Cannot read properties of null (reading 'page')"
+ * when scrolling before Inertia's initial state is written to history.
+ */
+function patchHistoryState(): void {
+    if (typeof window === 'undefined' || typeof History === 'undefined') {
+        return;
+    }
+
+    try {
+        const descriptor = Object.getOwnPropertyDescriptor(History.prototype, 'state');
+        if (descriptor && descriptor.get) {
+            const originalGet = descriptor.get;
+            Object.defineProperty(History.prototype, 'state', {
+                get() {
+                    const state = originalGet.call(this);
+                    if (!state) {
+                        return { page: null, scrollRegions: [], documentScrollPosition: { top: 0, left: 0 } };
+                    }
+                    if (typeof state === 'object' && !('page' in state)) {
+                        return {
+                            ...state,
+                            page: null,
+                            scrollRegions: (state as { scrollRegions?: unknown[] }).scrollRegions || [],
+                            documentScrollPosition: (state as { documentScrollPosition?: unknown }).documentScrollPosition || { top: 0, left: 0 },
+                        };
+                    }
+                    return state;
+                },
+                set: descriptor.set,
+                configurable: true,
+                enumerable: true,
+            });
+        }
+    } catch {
+        // Ignore environment restrictions
+    }
+}
+
 export function configureInertiaBasePath(): void {
+    patchHistoryState();
     patchRouterMethod('visit');
     patchRouterMethod('get');
     patchRouterMethod('post');

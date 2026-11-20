@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, router, usePage } from '@inertiajs/react';
 import {
     AlertTriangle,
+    Banknote,
     CheckCircle2,
     Download,
     FileCheck2,
@@ -100,6 +101,31 @@ interface Props {
         appeal_denied: number;
     } | null;
     module?: ClaimModuleMeta;
+    smtSummary?: {
+        total_all: number;
+        total_lgo: number;
+        total_uc: number;
+        total_ckd: number;
+        total_dss: number;
+        total_covid: number;
+        count_all: number;
+        count_lgo: number;
+        count_uc: number;
+        count_ckd: number;
+        count_dss: number;
+        count_covid: number;
+        last_synced_at: string | null;
+    } | null;
+    smtTransfers?: Array<{
+        id: number;
+        transfer_date: string;
+        batch_no: string;
+        ref_doc_no: string;
+        fund_name: string;
+        total: number;
+        budget_source: string;
+        is_ckd: boolean;
+    }>;
 }
 
 const money = (n: number | null | undefined) =>
@@ -116,6 +142,8 @@ export default function CgdClaimDashboard({
     kpis,
     caseTracking = null,
     module,
+    smtSummary = null,
+    smtTransfers = [],
 }: Props) {
     const safeKpis = {
         import_count: Number(kpis?.import_count) || 0,
@@ -194,6 +222,7 @@ export default function CgdClaimDashboard({
                 compareUrl={claimRoute(mod, 'compare_page')}
                 importUrl={claimRoute(mod, 'import')}
                 stmUrl={mod.has_stm ? claimRoute(mod, 'stm_index') : undefined}
+                smtUrl={route('finance.smt.index', { budget_source: mod.key === 'lgo' ? 'lgo' : 'all' })}
                 precheckUrl={mod.key === 'cgd' ? claimRoute(mod, 'precheck') : undefined}
                 importLabel={mod.labels.import_rep}
                 active="dashboard"
@@ -228,6 +257,121 @@ export default function CgdClaimDashboard({
                     <Button asChild className="rounded-xl bg-rose-600 hover:bg-rose-700">
                         <Link href={claimRoute(mod, 'precheck')}>เปิดแดชบอร์ดวันนี้</Link>
                     </Button>
+                </div>
+            )}
+
+            {mod.key === 'lgo' && (
+                <div className="mb-6 rounded-3xl border border-sky-200 bg-gradient-to-br from-sky-50/70 via-white to-blue-50/50 p-5 shadow-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-500 text-white shadow-md shadow-sky-500/20">
+                                <Banknote className="h-6 w-6" />
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <h3 className="text-base font-bold text-slate-900">
+                                        ข้อมูลการจ่ายเงินจริง สปสช. (Smart Money Transfer - SMT)
+                                    </h3>
+                                    <span className="rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-semibold text-sky-800">
+                                        เขต 6 ระยอง · สระแก้ว (14689)
+                                    </span>
+                                </div>
+                                <p className="text-xs text-slate-500">
+                                    ดึงข้อมูลเงินโอนตรงจากเว็บไซต์ smt.nhso.go.th โดยแยกกองทุน อปท., บัตรทอง (UC) และกองทุนไตวายเรื้อรัง (CKD) เด็ดขาด
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            <Button asChild className="rounded-xl bg-sky-600 hover:bg-sky-700 shadow-sm">
+                                <Link href={route('finance.smt.index', { budget_source: 'lgo' })}>
+                                    เปิดระบบ SMT เต็มรูปแบบ
+                                </Link>
+                            </Button>
+                        </div>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                        <div className="rounded-2xl border border-sky-100 bg-white p-3.5 shadow-xs">
+                            <div className="text-[11px] font-semibold uppercase text-sky-700">อปท. (LGO) รับโอนแล้ว</div>
+                            <div className="mt-1 text-xl font-bold text-sky-950">
+                                ฿{money(smtSummary?.total_lgo)}
+                            </div>
+                            <div className="text-[11px] text-slate-500">
+                                {num(smtSummary?.count_lgo)} งวดโอน
+                            </div>
+                        </div>
+
+                        <div className="rounded-2xl border border-emerald-100 bg-white p-3.5 shadow-xs">
+                            <div className="text-[11px] font-semibold uppercase text-emerald-700">บัตรทอง (UC ทั่วไป)</div>
+                            <div className="mt-1 text-xl font-bold text-emerald-950">
+                                ฿{money(smtSummary?.total_uc)}
+                            </div>
+                            <div className="text-[11px] text-slate-500">
+                                {num(smtSummary?.count_uc)} งวดโอน (ไม่รวมไต)
+                            </div>
+                        </div>
+
+                        <div className="rounded-2xl border border-purple-100 bg-white p-3.5 shadow-xs">
+                            <div className="text-[11px] font-semibold uppercase text-purple-700">กองทุนไตวายเรื้อรัง (CKD)</div>
+                            <div className="mt-1 text-xl font-bold text-purple-950">
+                                ฿{money(smtSummary?.total_ckd)}
+                            </div>
+                            <div className="text-[11px] text-purple-600 font-medium">
+                                {num(smtSummary?.count_ckd)} งวดโอน (แยกต่างหาก)
+                            </div>
+                        </div>
+
+                        <div className="rounded-2xl border border-slate-100 bg-white p-3.5 shadow-xs">
+                            <div className="text-[11px] font-semibold uppercase text-slate-500">ยอดเงินโอนรวมทุกกองทุน</div>
+                            <div className="mt-1 text-xl font-bold text-slate-900">
+                                ฿{money(smtSummary?.total_all)}
+                            </div>
+                            <div className="text-[11px] text-slate-400">
+                                {num(smtSummary?.count_all)} งวดโอน
+                            </div>
+                        </div>
+                    </div>
+
+                    {smtTransfers && smtTransfers.length > 0 && (
+                        <div className="mt-4 border-t border-sky-100/80 pt-3">
+                            <div className="mb-2 flex items-center justify-between">
+                                <span className="text-xs font-semibold text-slate-700">
+                                    รายการโอนเงิน อปท. ล่าสุดจาก SMT ({smtTransfers.length} งวดล่าสุด)
+                                </span>
+                                <Link
+                                    href={route('finance.smt.index', { budget_source: 'lgo' })}
+                                    className="text-xs text-sky-600 hover:underline font-medium"
+                                >
+                                    ดูทั้งหมด &rarr;
+                                </Link>
+                            </div>
+                            <div className="overflow-x-auto rounded-xl border border-slate-100 bg-white">
+                                <table className="w-full text-left text-xs">
+                                    <thead className="bg-slate-50/70 text-slate-500 border-b border-slate-100">
+                                        <tr>
+                                            <th className="py-2 px-3">วันที่โอน</th>
+                                            <th className="py-2 px-3">รอบโอน</th>
+                                            <th className="py-2 px-3">เลขอ้างอิง (REP)</th>
+                                            <th className="py-2 px-3">กองทุน</th>
+                                            <th className="py-2 px-3 text-right">ยอดเงินโอน (บาท)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {smtTransfers.slice(0, 5).map((row) => (
+                                            <tr key={row.id} className="hover:bg-slate-50/50">
+                                                <td className="py-2 px-3 font-medium text-slate-800">{row.transfer_date}</td>
+                                                <td className="py-2 px-3 text-slate-600">{row.batch_no}</td>
+                                                <td className="py-2 px-3 font-mono text-slate-700">{row.ref_doc_no}</td>
+                                                <td className="py-2 px-3 text-slate-600 truncate max-w-[200px]">{row.fund_name}</td>
+                                                <td className="py-2 px-3 text-right font-bold text-sky-700">฿{money(row.total)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 
