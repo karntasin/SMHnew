@@ -17,6 +17,21 @@ class QualityDocumentVersion extends Model
         'uploaded_by',
     ];
 
+    protected $appends = [
+        'url',
+        'file_extension',
+    ];
+
+    public function getUrlAttribute(): ?string
+    {
+        return $this->file_path ? asset('storage/' . ltrim($this->file_path, '/')) : null;
+    }
+
+    public function getFileExtensionAttribute(): string
+    {
+        return strtolower(pathinfo($this->file_path ?? '', PATHINFO_EXTENSION));
+    }
+
     public function document()
     {
         return $this->belongsTo(QualityDocument::class);

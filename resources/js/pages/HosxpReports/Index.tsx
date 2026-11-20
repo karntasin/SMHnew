@@ -26,7 +26,7 @@ import {
 import { useTranslation } from '@/hooks/use-translation';
 import axios from '@/lib/axios';
 import { isAxiosError } from 'axios';
-import { ThaiDatePicker, formatThaiDateFromIso } from '@/components/ui/thai-date-picker';
+import { ThaiDatePicker, formatThaiDateFromIso, toIsoDate } from '@/components/ui/thai-date-picker';
 
 interface Report {
     id: string;
@@ -104,11 +104,11 @@ function datePreset(days: number): { start: string; end: string } {
     const end = new Date();
     const start = new Date();
     if (days === 0) {
-        const iso = end.toISOString().slice(0, 10);
+        const iso = toIsoDate(end);
         return { start: iso, end: iso };
     }
     start.setDate(start.getDate() - days);
-    return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
+    return { start: toIsoDate(start), end: toIsoDate(end) };
 }
 
 const DATE_FIELD_PATTERN = /date|birthday|birthdate|vstdate|nextdate/i;

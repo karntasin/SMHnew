@@ -127,6 +127,14 @@ export default function CalendarIndex({
         }
     };
 
+    const handleDateChange = (date: Date) => {
+        const api = calendarRef.current?.getApi();
+        if (api) {
+            api.gotoDate(date);
+            setCurrentDate(date);
+        }
+    };
+
     const handleViewChange = (newView: 'dayGridMonth' | 'timeGridWeek' | 'timeGridDay') => {
         setViewMode(newView);
         const api = calendarRef.current?.getApi();
@@ -254,6 +262,7 @@ export default function CalendarIndex({
                         onPrev={handlePrev}
                         onNext={handleNext}
                         onToday={handleToday}
+                        onDateChange={handleDateChange}
                         onViewChange={handleViewChange}
                         onScopeChange={setActiveScope}
                         onOpenCreateModal={() => handleOpenCreateModal(selectedDate || new Date())}

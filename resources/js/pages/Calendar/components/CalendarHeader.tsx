@@ -5,6 +5,7 @@ import {
     Calendar as CalendarIcon,
     ChevronLeft,
     ChevronRight,
+    ChevronDown,
     Plus,
     Volume2,
     VolumeX,
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 import { CalendarScope } from '@/types/calendar';
 import { isSoundMuted, setSoundMuted, playChimeSound } from '@/lib/notification-sound';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 interface CalendarHeaderProps {
     currentDate: Date;
@@ -27,6 +29,7 @@ interface CalendarHeaderProps {
     onPrev: () => void;
     onNext: () => void;
     onToday: () => void;
+    onDateChange?: (date: Date) => void;
     onViewChange: (view: 'dayGridMonth' | 'timeGridWeek' | 'timeGridDay') => void;
     onScopeChange: (scope: CalendarScope | 'all') => void;
     onOpenCreateModal: () => void;
@@ -50,6 +53,7 @@ export default function CalendarHeader({
     onPrev,
     onNext,
     onToday,
+    onDateChange,
     onViewChange,
     onScopeChange,
     onOpenCreateModal,
@@ -211,9 +215,65 @@ export default function CalendarHeader({
                         วันนี้
                     </Button>
 
-                    <div className="ml-2 text-lg font-bold text-slate-800 dark:text-white">
-                        {thaiMonth} {thaiYear}
-                    </div>
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <button
+                                type="button"
+                                className="ml-1 inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1 text-base sm:text-lg font-bold text-slate-800 hover:bg-slate-100 hover:text-sky-700 transition dark:text-white dark:hover:bg-slate-800 cursor-pointer"
+                                title="คลิกเพื่อเลือกเดือน/ปี พ.ศ."
+                            >
+                                <span>{thaiMonth} พ.ศ. {thaiYear}</span>
+                                <ChevronDown className="h-4 w-4 text-slate-400" />
+                            </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-80 p-3 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 z-50">
+                            {/* Year Selector */}
+                            <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100 dark:border-slate-800">
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 rounded-lg"
+                                    onClick={() => onDateChange?.(new Date(currentDate.getFullYear() - 1, currentDate.getMonth(), 1))}
+                                >
+                                    <ChevronLeft className="h-4 w-4" />
+                                </Button>
+                                <span className="text-sm font-bold text-sky-700 dark:text-sky-400">
+                                    พุทธศักราช {thaiYear}
+                                </span>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 rounded-lg"
+                                    onClick={() => onDateChange?.(new Date(currentDate.getFullYear() + 1, currentDate.getMonth(), 1))}
+                                >
+                                    <ChevronRight className="h-4 w-4" />
+                                </Button>
+                            </div>
+
+                            {/* 12 Thai Months Grid */}
+                            <div className="grid grid-cols-3 gap-1.5">
+                                {THAI_MONTHS.map((mName, idx) => {
+                                    const isCurrent = currentDate.getMonth() === idx;
+                                    return (
+                                        <button
+                                            key={mName}
+                                            type="button"
+                                            onClick={() => onDateChange?.(new Date(currentDate.getFullYear(), idx, 1))}
+                                            className={`rounded-xl py-2 px-1 text-xs font-semibold transition-all ${
+                                                isCurrent
+                                                    ? 'bg-sky-600 text-white shadow-sm'
+                                                    : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700 dark:text-slate-300 dark:hover:bg-slate-800'
+                                            }`}
+                                        >
+                                            {mName}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </PopoverContent>
+                    </Popover>
                 </div>
 
                 {/* Scope Filters (3 ระบบ) */}

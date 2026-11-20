@@ -3,6 +3,8 @@
 namespace App\Services\Finance;
 
 use App\Models\Finance\CgdStmBatch;
+use App\Models\Finance\StmImport;
+use App\Support\Auth\Totp;
 use GuzzleHttp\Client;
 use GuzzleHttp\Cookie\CookieJar;
 use GuzzleHttp\Cookie\SetCookie;
@@ -32,10 +34,49 @@ class CgdEclaimNhsoPortalService
         return $clone;
     }
 
-    public function isConfigured(): bool
+    public function isConfigured(?string $overrideUsername = null, ?string $overridePassword = null): bool
     {
-        return filled(config('cgd_eclaim.username')) && filled(config('cgd_eclaim.password'));
+        $u = filled($overrideUsername) ? $overrideUsername : config('cgd_eclaim.username');
+        $p = filled($overridePassword) ? $overridePassword : config('cgd_eclaim.password');
+
+        return filled($u) && filled($p);
     }
+
+    public function configuredTotpSecret(?string $overrideSecret = null): ?string
+    {
+        if (filled($overrideSecret)) {
+            return trim($overrideSecret);
+        }
+
+        $schemeSecret = config("claim_schemes.{$this->scheme}.totp_secret");
+        if (filled($schemeSecret)) {
+            return trim($schemeSecret);
+        }
+
+        $globalSecret = config('cgd_eclaim.totp_secret');
+        if (filled($globalSecret)) {
+            return trim($globalSecret);
+        }
+
+        return null;
+    }
+
+    public function isTotpConfigured(?string $overrideSecret = null): bool
+    {
+        return filled($this->configuredTotpSecret($overrideSecret));
+    }
+
+    public function isAuthenticated(): bool
+    {
+        try {
+            $state = $this->loadSession();
+            return ($state['phase'] ?? '') === 'authenticated' && ! empty($state['cookies']);
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+
 
     private function maininscl(): string
     {
@@ -47,9 +88,16 @@ class CgdEclaimNhsoPortalService
     /**
      * @return array{status:string,message:string,session?:array<string,mixed>}
      */
-    public function startLogin(int $year, int $month): array
+    public function startLogin(
+        int $year,
+        int $month,
+        ?string $overrideUsername = null,
+        ?string $overridePassword = null,
+        ?string $overrideTotpSecret = null,
+        bool $autoSubmitOtp = true,
+    ): array
     {
-        $this->assertConfigured();
+        $this->assertConfigured($overrideUsername, $overridePassword);
         $this->assertPeriod($year, $month);
 
         $jar = new CookieJar();
@@ -74,8 +122,11 @@ class CgdEclaimNhsoPortalService
             throw new RuntimeException('ไม่พบช่อง username/password ในหน้า NHSO IAM');
         }
 
-        $payload[$userKey] = (string) config('cgd_eclaim.username');
-        $payload[$passKey] = (string) config('cgd_eclaim.password');
+        $username = filled($overrideUsername) ? trim($overrideUsername) : (string) config('cgd_eclaim.username');
+        $password = filled($overridePassword) ? (string) $overridePassword : (string) config('cgd_eclaim.password');
+
+        $payload[$userKey] = $username;
+        $payload[$passKey] = $password;
         $payload['login'] = $payload['login'] ?? 'เข้าสู่ระบบ';
         $payload['credentialId'] = $payload['credentialId'] ?? '';
 
@@ -85,6 +136,8 @@ class CgdEclaimNhsoPortalService
             'headers' => ['Referer' => $loginPage['url']],
         ]);
 
+        $effectiveSecret = $this->configuredTotpSecret($overrideTotpSecret);
+
         $state = [
             'year' => $year,
             'month' => $month,
@@ -92,10 +145,49 @@ class CgdEclaimNhsoPortalService
             'started_at' => now()->toIso8601String(),
             'last_url' => $loginRes['url'],
         ];
+        if (filled($effectiveSecret)) {
+            $state['totp_secret'] = $effectiveSecret;
+        }
+
         // เริ่ม login ใหม่ = เคลียร์คิวดาวน์โหลดชุดเก่า
         unset($state['pending_excel_links'], $state['download_dir'], $state['download_done'], $state['download_total']);
 
-        return $this->resolveAuthStep($client, $jar, $state, $loginRes);
+        $res = $this->resolveAuthStep($client, $jar, $state, $loginRes);
+
+        // Auto-submit OTP ทันทีหากระบบมี TOTP Secret Key อยู่แล้ว (Zero-click authentication)
+        if ($autoSubmitOtp && ($res['status'] ?? '') === 'awaiting_otp' && filled($effectiveSecret)) {
+            $otp = Totp::generate($effectiveSecret);
+            if (strlen($otp) === 6) {
+                try {
+                    $otpRes = $this->submitOtp($otp);
+                    $otpRes['message'] = 'เข้าสู่ระบบสำเร็จ (ยืนยัน OTP อัตโนมัติด้วย Secret Key เรียบร้อยแล้ว)';
+
+                    return $otpRes;
+                } catch (\Throwable $autoOtpErr) {
+                    Log::warning("NHSO Auto-OTP submission failed, attempting retry on fresh time window: {$autoOtpErr->getMessage()}");
+
+                    // หากชนรอบ TOTP เดิมหรือถูกปฏิเสธ ให้รอให้เข้าสู่รอบวินาทีใหม่แล้วลองอีกครั้ง
+                    $remain = Totp::timeRemaining();
+                    if ($remain <= 8 || str_contains($autoOtpErr->getMessage(), 'ไม่ถูกต้อง')) {
+                        $sleepSeconds = max(1, min(6, $remain + 1));
+                        sleep($sleepSeconds);
+                        $freshOtp = Totp::generate($effectiveSecret);
+                        if (strlen($freshOtp) === 6) {
+                            try {
+                                $otpRes = $this->submitOtp($freshOtp);
+                                $otpRes['message'] = 'เข้าสู่ระบบสำเร็จ (ยืนยัน OTP อัตโนมัติด้วย Secret Key เรียบร้อยแล้ว - Retry)';
+
+                                return $otpRes;
+                            } catch (\Throwable $retryErr) {
+                                Log::warning("NHSO Auto-OTP retry failed, falling back to manual entry: {$retryErr->getMessage()}");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return $res;
     }
 
     /**
@@ -197,7 +289,12 @@ class CgdEclaimNhsoPortalService
         if ($this->looksLikeOtpChallenge($res['body'], $res['url'])) {
             $this->captureOtpFormState($state, $res);
             $state['phase'] = 'awaiting_otp';
-            unset($state['totp_secret']);
+            if (empty($state['totp_secret'])) {
+                $configured = $this->configuredTotpSecret();
+                if ($configured) {
+                    $state['totp_secret'] = $configured;
+                }
+            }
             $this->storeSession($state);
 
             if ($fromOtpSubmit) {
@@ -218,23 +315,24 @@ class CgdEclaimNhsoPortalService
             // ยืนยันอีกครั้งว่าเข้าหน้า Validation OFC ได้จริงหลัง login
             $year = isset($state['year']) ? (int) $state['year'] : null;
             $month = isset($state['month']) ? (int) $state['month'] : null;
+            $validationPage = null;
 
             try {
                 $validationPage = $this->openValidationOfcPage($client, $year, $month);
                 $state['validation_url'] = $validationPage['url'];
                 $state['cookies'] = $this->exportCookies($jar);
             } catch (RuntimeException $e) {
-                throw new RuntimeException(
-                    'Login ผ่านแล้ว แต่ยังเปิดหน้า Validation OFC ไม่ได้: '.$e->getMessage()
-                );
+                Log::warning('Login e-Claim SSO ผ่านแล้ว แต่เปิดหน้า Validation OFC ไม่ได้: '.$e->getMessage());
+                $state['validation_error'] = $e->getMessage();
             }
 
             $state['phase'] = 'authenticated';
             unset($state['otp_action'], $state['otp_fields'], $state['totp_secret']);
 
             // Auto-scan ไฟล์ของเดือนเป้าหมายเพื่อเช็คไฟล์ที่เคยดาวน์โหลดแล้ว
-            try {
-                $allLinks = $this->extractExcelExportLinks($validationPage['body'], $validationPage['url']);
+            if ($validationPage && ! empty($validationPage['body'])) {
+                try {
+                    $allLinks = $this->extractExcelExportLinks($validationPage['body'], $validationPage['url']);
                 [$allowedLinks, $skippedWrongName] = $this->partitionAllowedRepLinks($allLinks);
                 $lookup = $this->loadExistingBatchLookup();
                 $files = [];
@@ -279,6 +377,7 @@ class CgdEclaimNhsoPortalService
             } catch (\Throwable $scanErr) {
                 Log::warning('CGD NHSO auto-scan after login failed: '.$scanErr->getMessage());
             }
+            }
 
             $this->storeSession($state);
 
@@ -295,8 +394,21 @@ class CgdEclaimNhsoPortalService
             ];
         }
 
-        $hint = $this->extractErrorHint($res['body'])
-            ?: 'เข้าสู่ระบบไม่สำเร็จ — ตรวจ username/password หรือ OTP';
+        $hint = $this->extractErrorHint($res['body']);
+        if ($hint && (str_contains($hint, 'ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง') || str_contains(strtolower($hint), 'invalid user'))) {
+            throw new RuntimeException(
+                'ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง (รหัสผ่านเดิมอาจหมดอายุตามรอบ 90 วันของ สปสช. หรือมีการเปลี่ยนรหัสผ่านบนเว็บ e-Claim) — โปรดระบุรหัสผ่านใหม่ในช่องด้านล่างแล้วลองอีกครั้ง'
+            );
+        }
+
+        if ($hint && (str_contains($hint, 'หมดเวลา') || str_contains(strtolower($hint), 'expired') || str_contains($hint, 'เริ่มต้นใหม่'))) {
+            $this->clearSession();
+            throw new RuntimeException(
+                'เซสชันการเข้าสู่ระบบ NHSO IAM หมดเวลาแล้ว (Server Timeout) — ระบบได้รีเซ็ตสถานะเรียบร้อยแล้ว กรุณากดปุ่ม "1) เริ่มเข้าสู่ระบบ" ใหม่อีกครั้งเพื่อรับ QR Code ชุดใหม่'
+            );
+        }
+
+        $hint = $hint ?: 'เข้าสู่ระบบไม่สำเร็จ — ตรวจ username/password หรือ OTP';
         throw new RuntimeException($hint);
     }
 
@@ -317,6 +429,11 @@ class CgdEclaimNhsoPortalService
         } elseif ($secret = $this->extractTotpSecretFromHtml($res['body'])) {
             $state['totp_secret'] = $secret;
             $state['otp_fields']['totpSecret'] = $secret;
+        }
+
+        if (preg_match('/<img\b[^>]*\bid=["\']kc-totp-secret-qr-code["\'][^>]*\bsrc=["\']([^"\']+)["\']/i', $res['body'], $qrM)
+            || preg_match('/<img\b[^>]*\bsrc=["\'](data:image\/[^"\']+)["\']/i', $res['body'], $qrM)) {
+            $state['totp_qr'] = html_entity_decode($qrM[1], ENT_QUOTES | ENT_HTML5, 'UTF-8');
         }
     }
 
@@ -599,6 +716,436 @@ class CgdEclaimNhsoPortalService
             'message' => $msg,
         ];
     }
+
+    /**
+     * ดาวน์โหลดและนำเข้าไฟล์เดี่ยวจาก URL ลิงก์ตรงของ e-Claim (ใช้สำหรับระบบทยอยดาวน์โหลด 6 เดือนย้อนหลัง)
+     *
+     * @param array{url: string, filename: string} $link
+     */
+    public function downloadSingleFile(
+        array $link,
+        CgdStmImportService $importer,
+        ?string $notes = null
+    ): array {
+        $state = $this->loadSession();
+        if (($state['phase'] ?? null) !== 'authenticated') {
+            throw new \RuntimeException('ยังไม่ได้ login สำเร็จ — เริ่มเข้าสู่ระบบและกรอก OTP ก่อน');
+        }
+
+        $jar = $this->importCookies($state['cookies'] ?? []);
+        $client = $this->client($jar);
+        $baseUrl = (string) ($state['validation_url'] ?? $this->validationUrl());
+        $filename = $link['filename'];
+
+        if (! CgdClaimFilenameGuard::isAllowedRep($filename, $this->scheme)) {
+            throw new \RuntimeException("ชื่อไฟล์ {$filename} ไม่ตรงตามรูปแบบที่กำหนด");
+        }
+
+        $storageBase = \App\Support\Finance\ClaimScheme::storageDir($this->scheme);
+        $dir = $storageBase.'/nhso/historical/'.now()->format('Ym');
+        \Illuminate\Support\Facades\Storage::disk('local')->makeDirectory($dir);
+
+        $bin = $this->request($client, 'GET', $link['url'], [
+            'raw' => true,
+            'headers' => ['Referer' => $baseUrl],
+        ]);
+        $body = $bin['body'];
+        if ($body === '' || ! $this->looksLikeSpreadsheetBinary($body)) {
+            throw new \RuntimeException("ดาวน์โหลด {$filename} ล้มเหลว (ได้หน้าเว็บแทนไฟล์ Excel)");
+        }
+
+        if (! preg_match('/\.(xls|xlsx|csv)$/i', $filename)) {
+            $filename = preg_replace('/\.ecd$/i', '', $filename).'.xls';
+        }
+
+        $storedRel = $dir.'/'.$filename;
+        \Illuminate\Support\Facades\Storage::disk('local')->put($storedRel, $body);
+        $absolute = \Illuminate\Support\Facades\Storage::disk('local')->path($storedRel);
+
+        $result = $importer->importFromAbsolutePath(
+            $absolute,
+            $filename,
+            $storedRel,
+            $notes ?: 'RCM Historical Sync 6 Months',
+            $this->scheme
+        );
+
+        $state['cookies'] = $this->exportCookies($jar);
+        $this->storeSession($state);
+
+        return [
+            'filename' => $filename,
+            'document_no' => $result['batch']->document_no,
+            'updated' => (bool) $result['updated'],
+            'batch_id' => (int) $result['batch']->id,
+            'row_count' => (int) $result['batch']->row_count,
+            'total_approved' => (float) $result['batch']->total_approved,
+        ];
+    }
+
+    public function statementUrl(): string
+    {
+        if (\App\Support\Finance\ClaimScheme::exists($this->scheme)) {
+            return $this->url(\App\Support\Finance\ClaimScheme::statementPath($this->scheme));
+        }
+
+        return $this->url('/webComponent/nch/StatementReportWebAction.do');
+    }
+
+    public function statementListUrl(): string
+    {
+        if ($this->scheme === 'ucs') {
+            return $this->url('/webComponent/ucs/statementUCSViewAction.do');
+        }
+
+        return $this->url('/webComponent/nch/StatementReportWebActionList.do');
+    }
+
+    public function statementDownloadUrl(): string
+    {
+        if ($this->scheme === 'ucs') {
+            return $this->url('/webComponent/ucs/statementUCSDownloadAction.do');
+        }
+
+        return $this->url('/webComponent/nch/RepStatementOFCReportExcelWebAction.do');
+    }
+
+    /**
+     * สแกนรายการไฟล์ Statement (STM) จากหน้า Statement Report (/webComponent/nch/StatementReportWebAction.do)
+     *
+     * @param  list<string>  $serviceTypes  (OP, IP)
+     * @return array{
+     *   total_files: int,
+     *   new_files: int,
+     *   existing_files: int,
+     *   files: list<array{
+     *     hcode: string,
+     *     maininscl: string,
+     *     person_type: string,
+     *     gyear: string,
+     *     gmonth: string,
+     *     revision: string,
+     *     documentno: string,
+     *     filename: string,
+     *     claim_submission_no: string,
+     *     already_imported: bool
+     *   }>
+     * }
+     */
+    public function scanStmFiles(?int $year = null, ?int $month = null, array $serviceTypes = ['OP', 'IP']): array
+    {
+        $state = $this->loadSession();
+        if (($state['phase'] ?? null) !== 'authenticated') {
+            throw new RuntimeException('ยังไม่ได้ login สำเร็จ — เริ่มเข้าสู่ระบบและกรอก OTP ก่อน');
+        }
+
+        $year = $year ?: (int) ($state['year'] ?? now()->year);
+        $month = $month ?: (int) ($state['month'] ?? now()->month);
+        $buddhistYear = $year < 2400 ? ($year + 543) : $year;
+
+        $jar = $this->importCookies($state['cookies'] ?? []);
+        $client = $this->client($jar);
+
+        $stmFiles = [];
+        $maininscl = strtoupper($this->maininscl() === 'lgo' ? 'LGO' : ($this->maininscl() === 'ucs' ? 'UCS' : 'OFC'));
+        $hcode = (string) config('cgd_eclaim.hcode', '14689');
+
+        if ($this->scheme === 'ucs') {
+            $ceYear = $buddhistYear > 2400 ? ($buddhistYear - 543) : $buddhistYear;
+            try {
+                $res = $this->request($client, 'POST', $this->statementListUrl(), [
+                    'form_params' => [
+                        'year' => (string) $ceYear,
+                        'month' => sprintf('%02d', $month),
+                        'hcode' => $hcode,
+                        'person_type' => '',
+                        'period_no' => '',
+                    ],
+                    'headers' => [
+                        'Referer' => $this->statementUrl(),
+                    ],
+                ]);
+
+                $html = $res['body'];
+                if (preg_match_all(
+                    "/downloadBill\(\s*'([^']+)'\s*,\s*'([^']+)'\s*,\s*'([^']+)'\s*,\s*'([^']+)'\s*,\s*'([^']+)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*\)/",
+                    $html,
+                    $matches,
+                    PREG_SET_ORDER
+                )) {
+                    foreach ($matches as $m) {
+                        $docNo = $m[1];
+                        $personTypeNum = $m[2];
+                        $itemHcode = $m[3] ?: $hcode;
+                        $hname = $m[4];
+                        $provinceName = $m[5];
+                        $dateFrom = $m[6];
+                        $dateTo = $m[7];
+
+                        $personType = ($personTypeNum === '2') ? 'IP' : 'OP';
+                        $filename = "{$docNo}.xls";
+                        $submissionNo = $docNo;
+
+                        $alreadyImported = StmImport::query()
+                            ->where('claim_submission_no', $submissionNo)
+                            ->orWhere('filename', $filename)
+                            ->exists();
+
+                        $stmFiles[$submissionNo] = [
+                            'hcode' => $itemHcode,
+                            'maininscl' => 'UCS',
+                            'person_type' => $personType,
+                            'person_type_num' => $personTypeNum,
+                            'gyear' => (string) $buddhistYear,
+                            'gmonth' => sprintf('%02d', $month),
+                            'revision' => '',
+                            'documentno' => $docNo,
+                            'filename' => $filename,
+                            'claim_submission_no' => $submissionNo,
+                            'hname' => $hname,
+                            'province_name' => $provinceName,
+                            'datesend_from' => $dateFrom,
+                            'datesend_to' => $dateTo,
+                            'already_imported' => $alreadyImported,
+                        ];
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::warning("Scan STM for UCS failed: ".$e->getMessage());
+            }
+
+            $fileList = array_values($stmFiles);
+            $existingCount = collect($fileList)->where('already_imported', true)->count();
+            $newCount = count($fileList) - $existingCount;
+
+            return [
+                'total_files' => count($fileList),
+                'new_files' => $newCount,
+                'existing_files' => $existingCount,
+                'files' => $fileList,
+            ];
+        }
+
+        foreach ($serviceTypes as $serviceType) {
+            $serviceType = strtoupper($serviceType);
+            try {
+                $res = $this->request($client, 'POST', $this->statementListUrl(), [
+                    'form_params' => [
+                        'zone' => '06',
+                        'province_id' => '2700',
+                        'hcode' => $hcode,
+                        'maininscl' => $maininscl,
+                        'gyear' => (string) $buddhistYear,
+                        'gmonth' => sprintf('%02d', $month),
+                        'ddlPerson_type' => $serviceType,
+                    ],
+                    'headers' => [
+                        'Referer' => $this->statementUrl(),
+                    ],
+                ]);
+
+                $html = $res['body'];
+                if (preg_match_all(
+                    '/getReportNCHReportRepOFC\s*\(\s*[\'"]([^\'"]*)[\'"]\s*,\s*[\'"]([^\'"]*)[\'"]\s*,\s*[\'"]([^\'"]*)[\'"]\s*,\s*[\'"]([^\'"]*)[\'"]\s*,\s*[\'"]([^\'"]*)[\'"]\s*,\s*[\'"]([^\'"]*)[\'"]\s*,\s*[\'"]([^\'"]*)[\'"]\s*\)/i',
+                    $html,
+                    $matches,
+                    PREG_SET_ORDER
+                )) {
+                    foreach ($matches as $m) {
+                        $itemHcode = $m[1] ?: $hcode;
+                        $itemInscl = $m[2] ?: $maininscl;
+                        $itemType = $m[3] ?: $serviceType;
+                        $itemGyear = $m[4] ?: (string) $buddhistYear;
+                        $itemGmonth = $m[5] ?: sprintf('%02d', $month);
+                        $itemRev = $m[6];
+                        $itemDocNo = $m[7];
+
+                        $ceYearNum = ((int) $itemGyear > 2400) ? ((int) $itemGyear - 543) : (int) $itemGyear;
+                        $cleanMonth = sprintf('%02d', (int) $itemGmonth);
+                        $cleanRev = sprintf('%02d', (int) $itemRev);
+
+                        if ($this->scheme === 'ucs') {
+                            $filename = "{$itemHcode}_{$itemType}UCS{$itemGyear}{$cleanMonth}_{$cleanRev}.xls";
+                            $submissionNo = "{$itemHcode}_{$itemType}UCS{$itemGyear}{$cleanMonth}_{$cleanRev}";
+                        } else {
+                            $filename = "STM_{$itemHcode}_{$itemType}{$ceYearNum}{$cleanMonth}_{$cleanRev}.xls";
+                            $submissionNo = "{$itemHcode}_{$itemType}{$ceYearNum}{$cleanMonth}_{$cleanRev}";
+                        }
+
+                        $alreadyImported = StmImport::query()
+                            ->where('claim_submission_no', $submissionNo)
+                            ->orWhere('filename', $filename)
+                            ->exists();
+
+                        $stmFiles[$submissionNo] = [
+                            'hcode' => $itemHcode,
+                            'maininscl' => $itemInscl,
+                            'person_type' => $itemType,
+                            'gyear' => $itemGyear,
+                            'gmonth' => $itemGmonth,
+                            'revision' => $itemRev,
+                            'documentno' => $itemDocNo,
+                            'filename' => $filename,
+                            'claim_submission_no' => $submissionNo,
+                            'already_imported' => $alreadyImported,
+                        ];
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::warning("Scan STM for {$maininscl} {$serviceType} failed: ".$e->getMessage());
+            }
+        }
+
+        $fileList = array_values($stmFiles);
+        $existingCount = collect($fileList)->where('already_imported', true)->count();
+        $newCount = count($fileList) - $existingCount;
+
+        return [
+            'total_files' => count($fileList),
+            'new_files' => $newCount,
+            'existing_files' => $existingCount,
+            'files' => $fileList,
+        ];
+    }
+
+    /**
+     * ดาวน์โหลดและนำเข้าไฟล์ Statement (STM) รายการเดี่ยว
+     *
+     * @param  array{hcode?:string,maininscl?:string,person_type?:string,gyear?:string,gmonth?:string,revision?:string,documentno?:string,filename?:string}  $item
+     */
+    public function downloadAndImportStmFile(
+        array $item,
+        StmFileImportService $importer,
+        ?string $notes = null
+    ): array {
+        $state = $this->loadSession();
+        if (($state['phase'] ?? null) !== 'authenticated') {
+            throw new RuntimeException('ยังไม่ได้ login สำเร็จ — เริ่มเข้าสู่ระบบและกรอก OTP ก่อน');
+        }
+
+        $jar = $this->importCookies($state['cookies'] ?? []);
+        $client = $this->client($jar);
+
+        $hcode = $item['hcode'] ?? '14689';
+        $maininscl = $item['maininscl'] ?? 'OFC';
+        $personType = $item['person_type'] ?? 'OP';
+        $gyear = $item['gyear'] ?? '';
+        $gmonth = $item['gmonth'] ?? '';
+        $revision = $item['revision'] ?? '01';
+        $documentno = $item['documentno'] ?? '';
+        $filename = $item['filename'] ?? "STM_{$hcode}_{$personType}{$gyear}{$gmonth}_{$revision}.xls";
+
+        $postUrl = $this->statementDownloadUrl();
+
+        if ($this->scheme === 'ucs') {
+            $personTypeNum = ($item['person_type_num'] ?? null)
+                ?: (($item['person_type'] ?? '') === 'IP' ? '2' : '1');
+            $formParams = [
+                'document_no' => $item['documentno'] ?? $item['claim_submission_no'] ?? '',
+                'person_type' => (string) $personTypeNum,
+                'hcode' => $hcode,
+                'hname' => $item['hname'] ?? '14689 รพ.ค่ายสุรสิงหนาท',
+                'province_name' => $item['province_name'] ?? '2700 สระแก้ว',
+                'datesend_from' => $item['datesend_from'] ?? '',
+                'datesend_to' => $item['datesend_to'] ?? '',
+            ];
+        } else {
+            $formParams = [
+                'hcode' => $hcode,
+                'maininscl' => $maininscl,
+                'person_type' => $personType,
+                'gyear' => $gyear,
+                'gmonth' => $gmonth,
+                'revision' => $revision,
+                'documentno' => $documentno,
+            ];
+        }
+
+        $res = $this->request($client, 'POST', $postUrl, [
+            'raw' => true,
+            'form_params' => $formParams,
+            'headers' => [
+                'Referer' => $this->statementUrl(),
+            ],
+        ]);
+
+        $body = $res['body'];
+        if ($body === '' || ! $this->looksLikeSpreadsheetBinary($body)) {
+            throw new RuntimeException("ดาวน์โหลด Statement {$filename} ล้มเหลว (ได้หน้าเว็บเปล่าหรือ session หลุด)");
+        }
+
+        $dir = 'finance/stm';
+        Storage::disk('local')->makeDirectory($dir);
+        $storedName = 'stm_'.now()->format('Ymd_His').'_'.uniqid().'.xls';
+        $storedRel = $dir.'/'.$storedName;
+        Storage::disk('local')->put($storedRel, $body);
+        $absolute = Storage::disk('local')->path($storedRel);
+
+        $importResult = $importer->importFromAbsolutePath(
+            $absolute,
+            $filename,
+            $storedRel,
+            $notes ?: 'e-Claim Auto Statement Sync'
+        );
+
+        $state['cookies'] = $this->exportCookies($jar);
+        $this->storeSession($state);
+
+        return [
+            'filename' => $filename,
+            'claim_submission_no' => $importResult['import']->claim_submission_no,
+            'updated' => $importResult['updated'],
+            'import_id' => $importResult['import']->id,
+            'detail_count' => $importResult['import']->detail_count,
+            'total_approved' => (float) $importResult['import']->total_approved,
+        ];
+    }
+
+    /**
+     * สแกนและดาวน์โหลดพร้อมนำเข้าไฟล์ STM ใหม่ทั้งหมด
+     *
+     * @return array{scanned:int,new:int,downloaded:int,imported:int,items:list<mixed>,failures:list<string>}
+     */
+    public function downloadAndImportAllStmFiles(
+        StmFileImportService $importer,
+        ?int $year = null,
+        ?int $month = null,
+        ?string $notes = null,
+        bool $skipExisting = true
+    ): array {
+        $scan = $this->scanStmFiles($year, $month);
+        $downloaded = [];
+        $imported = [];
+        $failures = [];
+
+        foreach ($scan['files'] as $item) {
+            if ($skipExisting && ! empty($item['already_imported'])) {
+                continue;
+            }
+
+            try {
+                $result = $this->downloadAndImportStmFile($item, $importer, $notes);
+                $downloaded[] = $result['filename'];
+                $imported[] = $result;
+            } catch (\Throwable $e) {
+                $failures[] = ($item['filename'] ?? 'STM').' — '.$e->getMessage();
+                Log::warning('Download STM failed', [
+                    'item' => $item,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return [
+            'scanned' => $scan['total_files'],
+            'new' => $scan['new_files'],
+            'downloaded' => count($downloaded),
+            'imported' => count($imported),
+            'items' => $imported,
+            'failures' => $failures,
+        ];
+    }
+
 
     public function validationUrl(): string
     {
@@ -1195,11 +1742,11 @@ class CgdEclaimNhsoPortalService
         Cache::forget($this->cacheKey());
     }
 
-    private function assertConfigured(): void
+    private function assertConfigured(?string $overrideUsername = null, ?string $overridePassword = null): void
     {
-        if (! $this->isConfigured()) {
+        if (! $this->isConfigured($overrideUsername, $overridePassword)) {
             throw new RuntimeException(
-                'ยังไม่ได้ตั้งค่า CGD_ECLAIM_USERNAME / CGD_ECLAIM_PASSWORD ในไฟล์ .env'
+                'ยังไม่ได้ตั้งค่า CGD_ECLAIM_USERNAME / CGD_ECLAIM_PASSWORD หรือยังไม่ได้ระบุรหัสผ่าน e-Claim'
             );
         }
     }
@@ -2006,6 +2553,31 @@ class CgdEclaimNhsoPortalService
             $state,
             now()->addMinutes((int) config('cgd_eclaim.session_ttl_minutes', 25))
         );
+
+        // ซิงค์ session ที่ผ่านการยืนยันตัวตนแล้วข้าม scheme (cgd <-> lgo <-> ucs)
+        if (($state['phase'] ?? '') === 'authenticated' && ! empty($state['cookies'])) {
+            $allSchemes = ['cgd', 'lgo', 'ucs'];
+            foreach ($allSchemes as $altScheme) {
+                if ($altScheme === $this->scheme) {
+                    continue;
+                }
+                $altKey = $this->cacheKey($altScheme);
+                $altState = Cache::get($altKey);
+
+                if (! is_array($altState)) {
+                    $altState = $state;
+                    $altState['pending_excel_links'] = [];
+                    $altState['download_done'] = 0;
+                    $altState['download_total'] = 0;
+                    unset($altState['scanned_summary']);
+                    Cache::put($altKey, $altState, now()->addMinutes((int) config('cgd_eclaim.session_ttl_minutes', 25)));
+                } else {
+                    $altState['cookies'] = $state['cookies'];
+                    $altState['phase'] = 'authenticated';
+                    Cache::put($altKey, $altState, now()->addMinutes((int) config('cgd_eclaim.session_ttl_minutes', 25)));
+                }
+            }
+        }
     }
 
     /**
@@ -2014,7 +2586,29 @@ class CgdEclaimNhsoPortalService
     private function loadSession(): array
     {
         $state = Cache::get($this->cacheKey());
-        if (! is_array($state)) {
+
+        // ถ้าไม่มี session ใน scheme ปัจจุบัน ให้ตรวจดู sibling schemes (cgd <-> lgo <-> ucs)
+        if (! is_array($state) || empty($state['cookies'])) {
+            $allSchemes = ['cgd', 'lgo', 'ucs'];
+            foreach ($allSchemes as $altScheme) {
+                if ($altScheme === $this->scheme) {
+                    continue;
+                }
+                $altState = Cache::get($this->cacheKey($altScheme));
+
+                if (is_array($altState) && ($altState['phase'] ?? '') === 'authenticated' && ! empty($altState['cookies'])) {
+                    $state = $altState;
+                    $state['phase'] = 'authenticated';
+                    $state['pending_excel_links'] = [];
+                    $state['download_done'] = 0;
+                    $state['download_total'] = 0;
+                    unset($state['scanned_summary']);
+                    $this->storeSession($state);
+
+                    return $state;
+                }
+            }
+
             throw new RuntimeException('ไม่พบ session การเชื่อมต่อ e-Claim — กรุณาเริ่มเข้าสู่ระบบใหม่');
         }
 
@@ -2031,6 +2625,11 @@ class CgdEclaimNhsoPortalService
             ? count($state['pending_excel_links'])
             : 0;
 
+        $totpSecret = $state['totp_secret'] ?? $this->configuredTotpSecret();
+        $hasTotpSecret = filled($totpSecret);
+        $currentOtp = $hasTotpSecret ? Totp::generate($totpSecret) : null;
+        $totpRemaining = Totp::timeRemaining();
+
         $public = [
             'phase' => $state['phase'] ?? 'unknown',
             'year' => $state['year'] ?? null,
@@ -2039,10 +2638,18 @@ class CgdEclaimNhsoPortalService
             'pending_downloads' => $pending,
             'download_done' => (int) ($state['download_done'] ?? 0),
             'download_total' => (int) ($state['download_total'] ?? 0),
+            'has_totp_secret' => $hasTotpSecret,
+            'current_otp' => $currentOtp,
+            'totp_remaining' => $totpRemaining,
         ];
 
-        if (($state['phase'] ?? null) === 'configure_totp' && ! empty($state['totp_secret'])) {
-            $public['totp_secret'] = $state['totp_secret'];
+        if (($state['phase'] ?? null) === 'configure_totp') {
+            if (! empty($state['totp_secret'])) {
+                $public['totp_secret'] = $state['totp_secret'];
+            }
+            if (! empty($state['totp_qr'])) {
+                $public['totp_qr'] = $state['totp_qr'];
+            }
         }
 
         if (isset($state['scanned_summary'])) {
@@ -2052,8 +2659,9 @@ class CgdEclaimNhsoPortalService
         return $public;
     }
 
-    private function cacheKey(): string
+    private function cacheKey(?string $scheme = null): string
     {
-        return 'cgd_eclaim_nhso_session_'.$this->scheme.'_'.(Auth::id() ?: 'guest');
+        $s = $scheme ?? $this->scheme;
+        return 'cgd_eclaim_nhso_session_'.$s.'_'.(Auth::id() ?: 'guest');
     }
 }

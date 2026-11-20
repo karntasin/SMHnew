@@ -4,6 +4,7 @@ return [
     'base_url' => rtrim(env('CGD_ECLAIM_BASE_URL', 'https://eclaim.nhso.go.th'), '/'),
     'username' => env('CGD_ECLAIM_USERNAME'),
     'password' => env('CGD_ECLAIM_PASSWORD'),
+    'totp_secret' => env('CGD_ECLAIM_TOTP_SECRET', env('NHSO_TOTP_SECRET')),
     // ปัจจุบัน e-Claim ใช้ NHSO IAM (Keycloak SSO) ผ่าน LoginSSOAction
     'login_path' => env('CGD_ECLAIM_LOGIN_PATH', '/webComponent/LoginSSOAction.do'),
     'iam_host' => env('CGD_ECLAIM_IAM_HOST', 'iam.nhso.go.th'),

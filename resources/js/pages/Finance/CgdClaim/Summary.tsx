@@ -419,7 +419,7 @@ export default function CgdClaimSummary({
     }) => {
         const sDate = next && 'start_date' in next ? next.start_date : (startDate || filters.start_date || undefined);
         const eDate = next && 'end_date' in next ? next.end_date : (endDate || filters.end_date || undefined);
-        const status =
+        let status =
             next && 'status' in next ? next.status || undefined : filters.status || undefined;
         const month =
             next && 'month' in next ? next.month || undefined : filters.month || undefined;
@@ -427,6 +427,11 @@ export default function CgdClaimSummary({
             next && 'error_code' in next
                 ? next.error_code || undefined
                 : filters.error_code || undefined;
+
+        // เมื่อเจาะจงกรอง Error Code ให้เคลียร์สถานะ 'matched' (ยอดตรงกันไม่มี error)
+        if (next && 'error_code' in next && next.error_code && status === 'matched') {
+            status = undefined;
+        }
         const amount =
             next && 'amount' in next ? next.amount || undefined : filters.amount || undefined;
         const compA =

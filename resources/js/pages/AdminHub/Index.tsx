@@ -9,7 +9,8 @@ import {
   ChevronRight,
   Building2,
   Stethoscope,
-  ClipboardList
+  ClipboardList,
+  BarChart3
 } from 'lucide-react';
 import { useTranslation } from '@/hooks/use-translation';
 import { cn } from '@/lib/utils';
@@ -125,6 +126,22 @@ export default function AdminHub() {
         { label: 'ภาพรวมการลา', href: route('leave.index') },
         { label: 'ยื่นใบลา', href: route('leave.create') },
         { label: 'รออนุมัติ', href: route('leave.index', { tab: 'pending' }) },
+      ]
+    },
+    {
+      title: 'รายงาน AmedStat',
+      description: 'ระบบสถิติและรายงานทางการแพทย์ กรมแพทย์ทหารบก (รง.ผสต. 1-10, รง.ทพ. 1-2, รง.พท.)',
+      icon: BarChart3,
+      color: 'text-indigo-600',
+      bg: 'bg-indigo-100',
+      gradient: 'from-indigo-500 to-blue-500',
+      href: '/admin-docs/amedstat',
+      links: [
+        { label: 'ภาพรวมรายงาน AmedStat', href: '/admin-docs/amedstat' },
+        { label: 'รง.ผสต.1 ผู้ป่วยนอกและกำลังพล', href: '/admin-docs/amedstat/show/A0101' },
+        { label: 'รง.ผสต.5 สาเหตุป่วย 21 กลุ่มโรค', href: '/admin-docs/amedstat/show/A0105' },
+        { label: 'รง.ผสต.6 บัญชียอดกำลังพล', href: '/admin-docs/amedstat/show/A0106' },
+        { label: 'รง.ทพ.1 ทรัพยากรทันตกรรม', href: '/admin-docs/amedstat/show/E0101' },
       ]
     }
   ];

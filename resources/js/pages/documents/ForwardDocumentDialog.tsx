@@ -32,6 +32,8 @@ interface TargetDocument {
     document_number?: string;
     title: string;
     due_date?: string | null;
+    director_comment?: string | null;
+    director_assigned_departments?: number[] | string[] | null;
 }
 
 interface Props {
@@ -61,11 +63,24 @@ export default function ForwardDocumentDialog({
 
     useEffect(() => {
         if (open && document) {
-            setDepartmentIds([]);
             setUserIds([]);
-            setComment('');
             setDeptSearch('');
             setUserSearch('');
+
+            // Prefill แผนกที่ ผอ. สั่งการมอบหมายไว้
+            if (document.director_assigned_departments && Array.isArray(document.director_assigned_departments)) {
+                setDepartmentIds(document.director_assigned_departments.map(id => String(id)));
+            } else {
+                setDepartmentIds([]);
+            }
+
+            // Prefill คำสั่งการ ผอ.
+            if (document.director_comment) {
+                setComment(`คำสั่งการ ผอ.: ${document.director_comment}`);
+            } else {
+                setComment('');
+            }
+
             if (document.due_date) {
                 try {
                     const d = new Date(document.due_date);

@@ -10,6 +10,8 @@ class ClaimScheme
 
     public const LGO = 'lgo';
 
+    public const UCS = 'ucs';
+
     /**
      * @return array<string, mixed>
      */
@@ -73,6 +75,12 @@ class ClaimScheme
             ?? '/webComponent/validation/ValidationMainAction.do?maininscl='.self::maininscl($key));
     }
 
+    public static function statementPath(string $key): string
+    {
+        return (string) (self::get($key)['statement_path']
+            ?? '/webComponent/nch/StatementReportWebAction.do');
+    }
+
     public static function storageDir(string $key): string
     {
         return (string) (self::get($key)['storage_dir'] ?? 'finance/cgd-stm');
@@ -84,13 +92,33 @@ class ClaimScheme
     }
 
     /**
-     * ตรวจจากชื่อไฟล์ว่าเป็น scheme ใด (OPLGO ก่อน OPCS เพื่อไม่ชนกัน)
+     * ตรวจจากชื่อไฟล์ว่าเป็น scheme ใด (OPLGO ก่อน OPCS ก่อน UCS เพื่อไม่ชนกัน)
      */
     public static function detectFromFilename(string $filename): ?string
     {
         $base = mb_strtolower(basename(str_replace('\\', '/', $filename)));
 
-        foreach (['lgo', 'cgd'] as $key) {
+        // 1. ตรวจจับ LGO ก่อน (OPLGO, IPLGO)
+        if (str_contains($base, 'oplgo') || str_contains($base, 'iplgo')) {
+            return self::LGO;
+        }
+
+        // 2. ตรวจจับ CGD (OPCS, IPCS)
+        if (str_contains($base, 'opcs') || str_contains($base, 'ipcs')) {
+            return self::CGD;
+        }
+
+        // 3. ตรวจจับ UCS บัตรทอง (OPUCS, IPUCS, eclaim_14689_op_, eclaim_14689_ip_, 14689_opucs, OPUC, IPUC)
+        if (str_contains($base, 'opucs') || str_contains($base, 'ipucs')
+            || str_contains($base, 'opuc') || str_contains($base, 'ipuc')
+            || str_starts_with($base, 'eclaim_14689_op_') || str_starts_with($base, 'rep_eclaim_14689_op_')
+            || str_starts_with($base, 'eclaim_14689_ip_') || str_starts_with($base, 'rep_eclaim_14689_ip_')
+            || str_starts_with($base, '14689_opucs') || str_starts_with($base, '14689_ipucs')
+            || str_starts_with($base, 'stm_14689_opucs') || str_starts_with($base, 'stm_14689_ipucs')) {
+            return self::UCS;
+        }
+
+        foreach (['lgo', 'cgd', 'ucs'] as $key) {
             if (! self::exists($key)) {
                 continue;
             }
@@ -99,15 +127,24 @@ class ClaimScheme
                 continue;
             }
             $core = preg_replace('/^rep_/', '', $rep) ?? $rep;
+            $coreIp = str_replace(['opcs', 'oplgo', 'opuc'], ['ipcs', 'iplgo', 'ipuc'], $core);
+            $repIp = str_replace(['opcs', 'oplgo', 'opuc'], ['ipcs', 'iplgo', 'ipuc'], $rep);
             if (str_starts_with($base, $rep)
                 || str_starts_with($base, $core)
-                || str_contains($base, $core.'_appeal')) {
+                || str_starts_with($base, $repIp)
+                || str_starts_with($base, $coreIp)
+                || str_contains($base, $core.'_appeal')
+                || str_contains($base, $coreIp.'_appeal')) {
                 return $key;
             }
 
             $stm = self::stmPrefix($key);
-            if ($stm && str_starts_with($base, mb_strtolower($stm))) {
-                return $key;
+            if ($stm) {
+                $stmLower = mb_strtolower($stm);
+                $stmIp = str_replace('_op', '_ip', $stmLower);
+                if (str_starts_with($base, $stmLower) || str_starts_with($base, $stmIp)) {
+                    return $key;
+                }
             }
         }
 

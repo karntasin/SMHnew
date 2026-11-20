@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Link, router, useForm, usePage } from '@inertiajs/react';
-import { AlertTriangle, FileSpreadsheet, Trash2, Upload, X } from 'lucide-react';
+import { AlertTriangle, CloudDownload, FileSpreadsheet, KeyRound, RefreshCw, ShieldCheck, Trash2, Upload, X } from 'lucide-react';
 import { QualityPage, Panel, StatusPill } from '@/components/quality/quality-ui';
 import DataHubSubNav, { dataHubBreadcrumbs } from '../DataHub/DataHubSubNav';
 import ClaimModuleSubNav from '../DataHub/ClaimModuleSubNav';
@@ -34,6 +34,8 @@ interface Props {
         links: { url: string | null; label: string; active: boolean }[];
     };
     filenamePrefix?: string;
+    hasTotp?: boolean;
+    portalConfigured?: boolean;
 }
 
 const money = (n: number) =>
@@ -42,7 +44,7 @@ const money = (n: number) =>
 const ALLOWED_EXT = ['.xls', '.xlsx'];
 const DEFAULT_STM_PREFIX = 'STM_14689_OP';
 
-export default function StmImportPage({ imports, filenamePrefix }: Props) {
+export default function StmImportPage({ imports, filenamePrefix, hasTotp, portalConfigured }: Props) {
     const stmPrefix = filenamePrefix || DEFAULT_STM_PREFIX;
     const { flash } = usePage().props as {
         flash?: { success?: string; error?: string; import_failures?: string[] };
@@ -54,6 +56,20 @@ export default function StmImportPage({ imports, filenamePrefix }: Props) {
     const inputRef = useRef<HTMLInputElement>(null);
     const [dragOver, setDragOver] = useState(false);
     const [rejectedNames, setRejectedNames] = useState<string[]>([]);
+    const [autoFetching, setAutoFetching] = useState(false);
+    const [fetchYear, setFetchYear] = useState(new Date().getFullYear());
+    const [fetchMonth, setFetchMonth] = useState(new Date().getMonth() + 1);
+
+    const handleAutoFetch = () => {
+        setAutoFetching(true);
+        router.post(
+            route('finance.cgd.stm.auto-fetch'),
+            { year: fetchYear, month: fetchMonth },
+            {
+                onFinish: () => setAutoFetching(false),
+            }
+        );
+    };
 
     const totalSizeMb = useMemo(
         () => form.data.stm_files.reduce((sum, f) => sum + f.size, 0) / (1024 * 1024),
@@ -226,26 +242,95 @@ export default function StmImportPage({ imports, filenamePrefix }: Props) {
                     </Button>
                 </Panel>
 
-                <Panel title="ข้อมูลที่เก็บ" description="ใช้เลขที่นำเบิกเป็นกุญแจหลัก · นำเข้าซ้ำจะอัปเดตชุดเดิม">
-                    <ul className="space-y-2 text-sm text-slate-700">
-                        <li>
-                            <StatusPill label="เลขที่นำเบิก" className="mr-2 border-emerald-200 bg-emerald-50 text-emerald-800" />
-                            จาก “เลขที่เอกสาร” เช่น 14689_OP202607_01
-                        </li>
-                        <li>
-                            <StatusPill label="แท็บพึงรับ" className="mr-2 border-sky-200 bg-sky-50 text-sky-800" />
-                            รายละเอียดราย visit / SEQ / เรียกเก็บ / พึงรับ
-                        </li>
-                        <li>
-                            <StatusPill label="แท็บสรุป(พึงรับ)" className="mr-2 border-violet-200 bg-violet-50 text-violet-800" />
-                            สรุปราย REP NO · จำนวนผ่าน/ไม่ผ่าน · จ่ายชดเชยทั้งสิ้น
-                        </li>
-                        <li>
-                            <StatusPill label="เปรียบเทียบ" className="mr-2 border-amber-200 bg-amber-50 text-amber-800" />
-                            ใช้เป็นหลักในหน้าตรวจเบิกจ่าย · จับคู่ HOSxP ด้วย SEQ
-                        </li>
-                    </ul>
-                </Panel>
+                <div className="space-y-6">
+                    <Panel
+                        title="ดึงไฟล์ Statement (STM) จาก e-Claim อัตโนมัติ"
+                        description="สแกนหน้า Statement Report และดาวน์โหลดนำเข้าอัตโนมัติ"
+                    >
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-2">
+                                {hasTotp ? (
+                                    <StatusPill
+                                        label="ผูกรหัส OTP อัตโนมัติแล้ว"
+                                        className="border-emerald-200 bg-emerald-50 text-emerald-800"
+                                    />
+                                ) : (
+                                    <StatusPill
+                                        label="ยังไม่ได้ผูก OTP Secret Key"
+                                        className="border-amber-200 bg-amber-50 text-amber-800"
+                                    />
+                                )}
+                            </div>
+
+                            <p className="text-xs text-slate-500">
+                                ระบบจะเชื่อมต่อไปยัง e-Claim สปสช. เพื่อสแกนงวดการจ่ายล่าสุด และดาวน์โหลดไฟล์ STM เข้าสู่ฐานข้อมูลอัตโนมัติ (ทำงานคู่กับแบ็คกราวด์ทุกวันตอน 12:00 น.)
+                            </p>
+
+                            <div className="grid grid-cols-2 gap-2 pt-1">
+                                <div>
+                                    <Label className="text-xs text-slate-600">ปี (ค.ศ. เช่น 2026)</Label>
+                                    <Input
+                                        type="number"
+                                        className="mt-1 h-9 rounded-xl text-xs"
+                                        value={fetchYear}
+                                        onChange={(e) => setFetchYear(Number(e.target.value))}
+                                    />
+                                </div>
+                                <div>
+                                    <Label className="text-xs text-slate-600">เดือน (1-12)</Label>
+                                    <Input
+                                        type="number"
+                                        min={1}
+                                        max={12}
+                                        className="mt-1 h-9 rounded-xl text-xs"
+                                        value={fetchMonth}
+                                        onChange={(e) => setFetchMonth(Number(e.target.value))}
+                                    />
+                                </div>
+                            </div>
+
+                            <Button
+                                type="button"
+                                className="w-full rounded-xl bg-sky-700 hover:bg-sky-800 text-white mt-2"
+                                disabled={autoFetching}
+                                onClick={handleAutoFetch}
+                            >
+                                {autoFetching ? (
+                                    <>
+                                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                                        กำลังดึง Statement จาก e-Claim...
+                                    </>
+                                ) : (
+                                    <>
+                                        <CloudDownload className="mr-2 h-4 w-4" />
+                                        ⚡ ดึง Statement (STM) จาก e-Claim ตอนนี้
+                                    </>
+                                )}
+                            </Button>
+                        </div>
+                    </Panel>
+
+                    <Panel title="ข้อมูลที่เก็บ" description="ใช้เลขที่นำเบิกเป็นกุญแจหลัก · นำเข้าซ้ำจะอัปเดตชุดเดิม">
+                        <ul className="space-y-2 text-sm text-slate-700">
+                            <li>
+                                <StatusPill label="เลขที่นำเบิก" className="mr-2 border-emerald-200 bg-emerald-50 text-emerald-800" />
+                                จาก “เลขที่เอกสาร” เช่น 14689_OP202607_01
+                            </li>
+                            <li>
+                                <StatusPill label="แท็บพึงรับ" className="mr-2 border-sky-200 bg-sky-50 text-sky-800" />
+                                รายละเอียดราย visit / SEQ / เรียกเก็บ / พึงรับ
+                            </li>
+                            <li>
+                                <StatusPill label="แท็บสรุป(พึงรับ)" className="mr-2 border-violet-200 bg-violet-50 text-violet-800" />
+                                สรุปราย REP NO · จำนวนผ่าน/ไม่ผ่าน · จ่ายชดเชยทั้งสิ้น
+                            </li>
+                            <li>
+                                <StatusPill label="เปรียบเทียบ" className="mr-2 border-amber-200 bg-amber-50 text-amber-800" />
+                                ใช้เป็นหลักในหน้าตรวจเบิกจ่าย · จับคู่ HOSxP ด้วย SEQ
+                            </li>
+                        </ul>
+                    </Panel>
+                </div>
             </div>
 
             <div className="mt-6">

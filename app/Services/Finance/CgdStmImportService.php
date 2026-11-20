@@ -24,9 +24,9 @@ class CgdStmImportService
     public function import(UploadedFile $file, ?string $notes = null, string $scheme = ClaimScheme::CGD): array
     {
         $ext = strtolower($file->getClientOriginalExtension());
-        if (! in_array($ext, ['xls', 'xlsx', 'csv'], true)) {
+        if (! in_array($ext, ['xls', 'xlsx', 'csv', 'ecd'], true)) {
             throw ValidationException::withMessages([
-                'files' => 'รองรับเฉพาะไฟล์ .xls .xlsx หรือ .csv จากระบบ e-Claim (REP / Invoice)',
+                'files' => 'รองรับเฉพาะไฟล์ .xls .xlsx .csv หรือ .ecd จากระบบ e-Claim (REP / Invoice)',
             ]);
         }
 
@@ -60,9 +60,9 @@ class CgdStmImportService
         string $scheme = ClaimScheme::CGD,
     ): array {
         $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION) ?: pathinfo($absolutePath, PATHINFO_EXTENSION));
-        if (! in_array($ext, ['xls', 'xlsx', 'csv'], true)) {
+        if (! in_array($ext, ['xls', 'xlsx', 'csv', 'ecd'], true)) {
             throw ValidationException::withMessages([
-                'files' => 'รองรับเฉพาะไฟล์ .xls .xlsx หรือ .csv จากระบบ e-Claim (REP / Invoice)',
+                'files' => 'รองรับเฉพาะไฟล์ .xls .xlsx .csv หรือ .ecd จากระบบ e-Claim (REP / Invoice)',
             ]);
         }
 
@@ -108,23 +108,25 @@ class CgdStmImportService
         }
 
         return DB::transaction(function () use ($parsed, $originalName, $storedPath, $notes, $scheme) {
-            $documentNo = $parsed['document_no'] ?: pathinfo($originalName, PATHINFO_FILENAME);
+            $rawDocNo = $parsed['document_no'] ?: pathinfo($originalName, PATHINFO_FILENAME);
+            $documentNo = preg_replace('/\.ecd$/i', '', $rawDocNo);
             $fileKind = CgdAppealService::detectFileKind($originalName);
             $parentHint = $fileKind === 'appeal'
-                ? preg_replace('/_APPEAL/i', '', pathinfo($originalName, PATHINFO_FILENAME))
+                ? preg_replace('/_APPEAL/i', '', $documentNo)
                 : null;
 
             $existing = CgdStmBatch::query()
                 ->where('scheme', $scheme)
-                ->where('document_no', $documentNo)
+                ->where(function ($q) use ($documentNo, $originalName) {
+                    $cleanName = preg_replace('/\.ecd\.xls$/i', '.xls', $originalName);
+                    $ecdName = preg_replace('/\.xls$/i', '.ecd.xls', $cleanName);
+                    $q->where('document_no', $documentNo)
+                        ->orWhere('document_no', $documentNo.'.ecd')
+                        ->orWhere('filename', $originalName)
+                        ->orWhere('filename', $cleanName)
+                        ->orWhere('filename', $ecdName);
+                })
                 ->first();
-
-            if (! $existing) {
-                $existing = CgdStmBatch::query()
-                    ->where('scheme', $scheme)
-                    ->where('filename', $originalName)
-                    ->first();
-            }
 
             $errorRowCount = collect($parsed['rows'])
                 ->filter(fn (array $row) => filled($row['error_code'] ?? null))
@@ -205,6 +207,22 @@ class CgdStmImportService
             $batch = $batch->fresh();
             if (($batch->file_kind ?? 'rep') === 'appeal') {
                 app(CgdAppealService::class)->syncFromAppealBatch($batch);
+
+                // ป้องกันข้อมูลซ้ำ: ลบแถวประวัติเดิมของ REP เก่าในไฟล์อุทธรณ์ ที่มีบันทึกในระบบอยู่แล้ว
+                $duplicateHistoricalIds = CgdStmRow::query()
+                    ->where('batch_id', $batch->id)
+                    ->whereExists(function ($q) use ($batch) {
+                        $q->select(DB::raw(1))
+                            ->from('finance_cgd_stm_rows as r2')
+                            ->whereColumn('r2.rep_no', 'finance_cgd_stm_rows.rep_no')
+                            ->whereColumn('r2.tran_id', 'finance_cgd_stm_rows.tran_id')
+                            ->where('r2.batch_id', '!=', $batch->id);
+                    })
+                    ->pluck('id');
+
+                if ($duplicateHistoricalIds->isNotEmpty()) {
+                    CgdStmRow::whereIn('id', $duplicateHistoricalIds)->delete();
+                }
             } else {
                 app(CgdErrorCaseService::class)->syncFromRepBatch($batch);
                 if (ClaimScheme::seedAppealsFromRep($scheme)) {
@@ -286,7 +304,8 @@ class CgdStmImportService
             throw new \RuntimeException('ไม่พบแถวหัวตารางในแท็บ Detail (ต้องมี HN / PID / SEQ NO)');
         }
 
-        $map = $this->mapEclaimDetailColumns($matrix[$headerIndex], $matrix[$headerIndex + 1] ?? []);
+        $extraHeader = $matrix[$headerIndex + 2] ?? [];
+        $map = $this->mapEclaimDetailColumns($matrix[$headerIndex], $matrix[$headerIndex + 1] ?? [], $extraHeader);
         $rows = [];
         $minDate = null;
         $maxDate = null;
@@ -300,13 +319,14 @@ class CgdStmImportService
             $hn = $this->cell($line, $map['hn'] ?? null);
             $pid = $this->cell($line, $map['pid'] ?? null);
             $seq = $this->cell($line, $map['seq'] ?? null);
-            if ($hn === '' && $pid === '' && $seq === '') {
+            $an = $this->normalizeDash($this->cell($line, $map['an'] ?? null));
+            if ($hn === '' && $pid === '' && $seq === '' && $an === '') {
                 continue;
             }
             if ($this->looksLikeSubHeader($line)) {
                 continue;
             }
-            if ($hn === '' || $seq === '') {
+            if ($hn === '' && $pid === '') {
                 continue;
             }
 
@@ -326,12 +346,15 @@ class CgdStmImportService
                 $approved = CgdClaimMatchKey::parseMoney($this->cell($line, $map['billable'] ?? null)) ?? 0;
             }
 
+            $seqNorm = CgdClaimMatchKey::normalizeSeq($seq) ?: $seq;
+            $matchKeyParam = $seqNorm !== '' ? $seqNorm : $an;
+
             $rows[] = [
                 'rep_no' => $this->normalizeDash($this->cell($line, $map['rep'] ?? null)),
                 'tran_id' => $this->normalizeDash($this->cell($line, $map['tran_id'] ?? null)),
                 'row_no' => (int) CgdClaimMatchKey::parseMoney($this->cell($line, $map['row_no'] ?? null)) ?: null,
                 'hn' => $hn,
-                'an' => $this->normalizeDash($this->cell($line, $map['an'] ?? null)),
+                'an' => $an,
                 'pid' => CgdClaimMatchKey::normalizePid($pid) ?: $pid,
                 'patient_name' => $this->normalizeDash($this->cell($line, $map['name'] ?? null)),
                 'visit_at' => $visitAt?->format('Y-m-d H:i:s'),
@@ -352,10 +375,10 @@ class CgdStmImportService
                 'amount_wait' => 0,
                 'amount_other' => CgdClaimMatchKey::parseMoney($this->cell($line, $map['other'] ?? null)) ?? 0,
                 'amount_approved' => $approved ?? 0,
-                'seq_no' => CgdClaimMatchKey::normalizeSeq($seq) ?: $seq,
+                'seq_no' => $seqNorm,
                 'error_code' => $errorCode,
                 'fund_codes' => $fundCodes,
-                'match_key' => CgdClaimMatchKey::make($hn, $pid, $seq),
+                'match_key' => CgdClaimMatchKey::make($hn, $pid, $matchKeyParam),
                 'remark' => null,
             ];
         }
@@ -409,7 +432,7 @@ class CgdStmImportService
             if ($this->looksLikeSubHeader($line)) {
                 continue;
             }
-            if ($hn === '' || $seq === '') {
+            if ($hn === '' && $pid === '') {
                 continue;
             }
 
@@ -542,7 +565,7 @@ class CgdStmImportService
     /**
      * @return array<string,int>
      */
-    private function mapEclaimDetailColumns(array $header, array $subHeader): array
+    private function mapEclaimDetailColumns(array $header, array $subHeader, array $extraHeader = []): array
     {
         $map = [];
         foreach ($header as $idx => $label) {
@@ -578,8 +601,12 @@ class CgdStmImportService
                 $map['projcode'] = $idx;
             } elseif (str_contains($token, 'adjrw') || str_contains($token, 'adj rw')) {
                 $map['adj_rw'] = $idx;
-            } elseif (str_contains($token, 'เรียกเก็บ') || $token === 'claim') {
+            } elseif (str_contains($token, 'รวมยอดเรียกเก็บ')) {
                 $map['claim'] = $idx;
+            } elseif ((str_contains($token, 'เรียกเก็บ') && ! str_contains($token, 'central') && ! str_contains($token, 'reimburse')) || $token === 'claim') {
+                if (! isset($map['claim'])) {
+                    $map['claim'] = $idx;
+                }
             } elseif (str_contains($token, 'เบิกได้')) {
                 $map['billable'] = $idx;
             } elseif (str_contains($token, 'เบิกไม่ได้')) {
@@ -590,6 +617,20 @@ class CgdStmImportService
                 $map['act'] = $idx;
             } elseif (str_contains($token, 'seq')) {
                 $map['seq'] = $idx;
+            }
+        }
+
+        // ค้นหาคอลัมน์ "รวมยอดเรียกเก็บ" จาก subHeader หรือ extraHeader เพิ่มเติม
+        foreach ($extraHeader as $idx => $label) {
+            $e = mb_strtolower(trim((string) $label));
+            if (str_contains($e, 'รวมยอดเรียกเก็บ')) {
+                $map['claim'] = $idx;
+            }
+        }
+        foreach ($subHeader as $idx => $label) {
+            $s = mb_strtolower(trim((string) $label));
+            if (str_contains($s, 'รวมยอดเรียกเก็บ')) {
+                $map['claim'] = $idx;
             }
         }
 
@@ -664,11 +705,10 @@ class CgdStmImportService
         $documentNo = null;
         $hcode = null;
         $periodLabel = null;
-        $channel = 'OP';
+        $channel = CgdClaimFilenameGuard::detectChannel($originalName);
 
         if (preg_match('/eclaim_(\d+)_([A-Z0-9]+)_(\d{8})_(\d+)/i', $originalName, $m)) {
             $hcode = $m[1];
-            $channel = strtoupper($m[2]);
             $periodLabel = $m[3];
             $documentNo = pathinfo($originalName, PATHINFO_FILENAME);
         }
@@ -681,8 +721,8 @@ class CgdStmImportService
             if ($hcode === null && preg_match('/โรงพยาบาล\s*(\d+)/u', $text, $m)) {
                 $hcode = $m[1];
             }
-            if (preg_match('/_([A-Z]+)CS_/i', $text, $m) || preg_match('/eclaim_\d+_([A-Z0-9]+)_/i', $text, $m)) {
-                $channel = strtoupper($m[1]);
+            if ($channel === 'OP' && (preg_match('/_IPCS_/i', $text) || preg_match('/eclaim_\d+_IP/i', $text) || preg_match('/ผู้ป่วยใน/u', $text))) {
+                $channel = 'IP';
             }
         }
 
@@ -699,11 +739,10 @@ class CgdStmImportService
         $documentNo = null;
         $hcode = null;
         $periodLabel = null;
-        $channel = 'OP';
+        $channel = CgdClaimFilenameGuard::detectChannel($originalName);
 
         if (preg_match('/(?:STM|REP)_(\d+)_([A-Z]+)(\d{6})_(\d+)/i', $originalName, $m)) {
             $hcode = $m[1];
-            $channel = strtoupper($m[2]);
             $periodLabel = $m[3];
             $documentNo = $m[1].'_'.$m[2].$m[3].'_'.$m[4];
         }
@@ -716,9 +755,8 @@ class CgdStmImportService
             if ($hcode === null && preg_match('/โรงพยาบาล\s*(\d+)/u', $text, $m)) {
                 $hcode = $m[1];
             }
-            if (preg_match('/_OP(\d{6})_/i', $text, $m)) {
-                $channel = 'OP';
-                $periodLabel = $periodLabel ?: $m[1];
+            if ($channel === 'OP' && (preg_match('/_IP(\d{6})_/i', $text) || preg_match('/ผู้ป่วยใน/u', $text))) {
+                $channel = 'IP';
             }
         }
 
@@ -740,7 +778,8 @@ class CgdStmImportService
             $hasHn = preg_match('/(^|\|)hn(\||$)/', $joined) === 1;
             $hasPid = str_contains($joined, 'pid') || str_contains($joined, 'เลขบัตร');
             $hasSeq = str_contains($joined, 'seq');
-            if ($hasHn && ($hasPid || $hasSeq)) {
+            $hasAn = preg_match('/(^|\|)an(\||$)/', $joined) === 1;
+            if ($hasHn && ($hasPid || $hasSeq || $hasAn)) {
                 return (int) $i;
             }
         }
@@ -950,5 +989,112 @@ class CgdStmImportService
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    /**
+     * ดึงข้อมูล HOSxP เพื่อเติมค่า seq_no ที่ว่างในตาราง finance_cgd_stm_rows
+     * ด้วย Fallback Matching (HN + Visit Date)
+     */
+    public function backfillMissingSeqs(int $chunkSize = 500): int
+    {
+        try {
+            if (! DB::connection('hosxp')->getPdo()) {
+                return 0;
+            }
+        } catch (\Throwable) {
+            return 0;
+        }
+
+        $query = DB::table('finance_cgd_stm_rows')
+            ->where(function ($q) {
+                $q->whereNull('seq_no')->orWhere('seq_no', '')->orWhere('seq_no', '0');
+            })
+            ->whereNotNull('visit_date')
+            ->whereNotNull('hn')
+            ->where('hn', '!=', '');
+
+        $totalUpdated = 0;
+        $rows = $query->select('id', 'hn', 'pid', 'visit_date', 'amount_claim')->get();
+
+        foreach ($rows->chunk($chunkSize) as $chunk) {
+            $dates = $chunk->pluck('visit_date')->unique()->filter()->values()->all();
+            $hns = $chunk->pluck('hn')->unique()->filter()->values()->all();
+            if (empty($dates) || empty($hns)) {
+                continue;
+            }
+
+            $allHns = [];
+            foreach ($hns as $h) {
+                $allHns[] = $h;
+                $allHns[] = ltrim($h, '0');
+            }
+            $allHns = array_unique($allHns);
+
+            $hosVisits = DB::connection('hosxp')->table('vn_stat')
+                ->whereIn('vstdate', $dates)
+                ->whereIn('hn', $allHns)
+                ->select('vn', 'hn', 'vstdate', 'uc_money')
+                ->get();
+
+            $visitMap = [];
+            foreach ($hosVisits as $hv) {
+                $k1 = $hv->hn.'_'.$hv->vstdate;
+                $k2 = ltrim($hv->hn, '0').'_'.$hv->vstdate;
+                $visitMap[$k1][] = $hv;
+                if ($k1 !== $k2) {
+                    $visitMap[$k2][] = $hv;
+                }
+            }
+
+            foreach ($chunk as $r) {
+                $k = $r->hn.'_'.$r->visit_date;
+                $candidates = $visitMap[$k] ?? ($visitMap[ltrim($r->hn, '0').'_'.$r->visit_date] ?? []);
+
+                $chosenVn = null;
+                if (count($candidates) === 1) {
+                    $chosenVn = $candidates[0]->vn;
+                } elseif (count($candidates) > 1) {
+                    foreach ($candidates as $c) {
+                        if (abs((float) $c->uc_money - (float) $r->amount_claim) < 0.01) {
+                            $chosenVn = $c->vn;
+                            break;
+                        }
+                    }
+                    if (! $chosenVn) {
+                        $chosenVn = $candidates[0]->vn;
+                    }
+                }
+
+                if ($chosenVn) {
+                    $matchKey = CgdClaimMatchKey::make($r->hn, $r->pid, (string) $chosenVn);
+                    DB::table('finance_cgd_stm_rows')
+                        ->where('id', $r->id)
+                        ->update([
+                            'seq_no' => (string) $chosenVn,
+                            'match_key' => $matchKey,
+                        ]);
+                    $totalUpdated++;
+                }
+            }
+        }
+
+        // Also fix any rows that already have seq_no but match_key was missing seq (ending with '|')
+        $hasSeqNoKey = DB::table('finance_cgd_stm_rows')
+            ->whereNotNull('seq_no')
+            ->where('seq_no', '!=', '')
+            ->where('seq_no', '!=', '0')
+            ->where('match_key', 'like', '%|')
+            ->select('id', 'hn', 'pid', 'seq_no')
+            ->get();
+        foreach ($hasSeqNoKey as $item) {
+            DB::table('finance_cgd_stm_rows')
+                ->where('id', $item->id)
+                ->update([
+                    'match_key' => CgdClaimMatchKey::make($item->hn, $item->pid, $item->seq_no),
+                ]);
+            $totalUpdated++;
+        }
+
+        return $totalUpdated;
     }
 }

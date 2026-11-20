@@ -109,21 +109,34 @@ export default function AiSummarizer() {
                 </div>
 
                 <div className="space-y-3 pt-4 border-t border-slate-100">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                         <Label className="text-base font-semibold">2. ผลลัพธ์การสรุป (สามารถแก้ไขได้)</Label>
-                        <Button 
-                            type="button" 
-                            variant="outline" 
-                            onClick={handleDownloadWord}
-                            disabled={!summary || isDownloading}
-                            className="rounded-xl border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                        >
-                            {isDownloading ? (
-                                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> กำลังสร้างไฟล์...</>
-                            ) : (
-                                <><FileText className="mr-2 h-4 w-4" /> ดาวน์โหลดเป็น Word (.docx)</>
+                        <div className="flex items-center gap-2">
+                            {summary && (
+                                <Button
+                                    type="button"
+                                    onClick={() => {
+                                        window.location.href = route('documents.create') + '?summary=' + encodeURIComponent(summary);
+                                    }}
+                                    className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white"
+                                >
+                                    <Sparkles className="mr-2 h-4 w-4" /> นำไปรับหนังสือเข้าทันที
+                                </Button>
                             )}
-                        </Button>
+                            <Button 
+                                type="button" 
+                                variant="outline" 
+                                onClick={handleDownloadWord}
+                                disabled={!summary || isDownloading}
+                                className="rounded-xl border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                            >
+                                {isDownloading ? (
+                                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> กำลังสร้างไฟล์...</>
+                                ) : (
+                                    <><FileText className="mr-2 h-4 w-4" /> ดาวน์โหลดเป็น Word (.docx)</>
+                                )}
+                            </Button>
+                        </div>
                     </div>
                     <Textarea 
                         className="min-h-[250px] rounded-xl text-base leading-relaxed" 

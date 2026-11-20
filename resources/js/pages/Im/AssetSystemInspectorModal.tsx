@@ -3,8 +3,9 @@ import { Modal } from '@/pages/Im/ui';
 import { Button } from '@/components/ui/button';
 import {
     Activity, Cpu, HardDrive, Network, Layers, Monitor,
-    Clock, RefreshCw, Zap, ShieldCheck, UserCheck, CheckCircle2,
-    XCircle, Server
+    Clock, RefreshCw, Zap, ShieldCheck, ShieldAlert, AlertTriangle,
+    UserCheck, CheckCircle2, XCircle, Server, Bug, Lock,
+    Terminal, FileText, AlertCircle, Wrench
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -14,13 +15,15 @@ interface Props {
     asset: any;
 }
 
-type InspectorTab = 'live' | 'cpu' | 'memory' | 'mainboard' | 'storage' | 'network';
+type InspectorTab = 'live' | 'security' | 'cpu' | 'memory' | 'mainboard' | 'storage' | 'network';
 
 export default function AssetSystemInspectorModal({ open, onClose, asset }: Props) {
     const [tab, setTab] = useState<InspectorTab>('live');
     const [liveData, setLiveData] = useState<any>(null);
     const [loading, setLoading] = useState(false);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [ticketSubmitting, setTicketSubmitting] = useState(false);
+    const [ticketMsg, setTicketMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
     // Initial spec from asset prop or updated liveData
     const spec = liveData?.spec || asset?.system_spec;
@@ -74,6 +77,63 @@ export default function AssetSystemInspectorModal({ open, onClose, asset }: Prop
         return 'bg-rose-500';
     };
 
+    // Security & Threat Data
+    const security = liveData?.security || spec?.security_status || {};
+    const rawAlerts: string[] = Array.isArray(security?.alerts) ? security.alerts : [];
+    // User requirement: omit Real-time protection, Quarantined items, and generic Defender headers
+    const alerts: string[] = rawAlerts.filter((a) => {
+        const low = a.toLowerCase();
+        if (low.includes('real-time protection') || low.includes('realtime protection')) return false;
+        if (low.includes('quarantined') || low.includes('remediated')) return false;
+        if (low.includes('microsoft defender antivirus has detected')) return false;
+        if (low.includes('powershell') || low.includes('smh-agent') || low.includes('rustdesk') || low.includes('install-fshh')) return false;
+        return true;
+    });
+
+    const rawActiveThreats: any[] = Array.isArray(security?.active_threats) ? security.active_threats : [];
+    const activeThreats: any[] = rawActiveThreats.filter((t) => {
+        const action = (t.action_taken || '').toLowerCase();
+        if (['quarantined', 'removed', 'cleaned', 'remediated/quarantined', 'remediated'].includes(action)) return false;
+        const path = (t.path || '').toLowerCase();
+        const name = (t.name || '').toLowerCase();
+        if (name.includes('microsoft defender antivirus has detected')) return false;
+        if (path.includes('powershell.exe') || path.includes('smh-agent') || path.includes('rustdesk') || path.includes('ar25b4kv5ysi')) return false;
+        if (name.includes('smh') || name.includes('fshh')) return false;
+        return true;
+    });
+
+    const vpnDetails = security?.vpn_details || {};
+    const vpnDetected = liveData?.vpn_detected ?? spec?.vpn_detected ?? Boolean(vpnDetails?.vpn_detected);
+    const antivirus = security?.antivirus || {};
+    const anomalies = security?.anomalies || {};
+    const hackerTools: any[] = Array.isArray(anomalies?.hacker_tools) ? anomalies.hacker_tools : [];
+
+    // Compute effective threat level & score without self-agent triggers
+    let threatScore = 0;
+    if (vpnDetected) threatScore += 25;
+    if (activeThreats.length > 0) threatScore += 60;
+    if (hackerTools.length > 0) threatScore += 65;
+    if (anomalies?.is_brute_force) threatScore += 30;
+    threatScore = Math.min(100, threatScore);
+
+    const threatLevel = threatScore >= 60 ? 'critical' : (threatScore >= 20 ? 'warning' : 'normal');
+
+    const handleCreateTicket = async (type: 'ticket' | 'repair') => {
+        if (!asset?.id || ticketSubmitting) return;
+        setTicketSubmitting(true);
+        setTicketMsg(null);
+        try {
+            const res = await axios.post(`/im/resource/assets/${asset.id}/report-threat-ticket`, { type });
+            if (res.data?.success) {
+                setTicketMsg({ type: 'success', text: res.data.message });
+            }
+        } catch (err: any) {
+            setTicketMsg({ type: 'error', text: err.response?.data?.message || 'เกิดข้อผิดพลาดในการส่งรายงานปัญหา' });
+        } finally {
+            setTicketSubmitting(false);
+        }
+    };
+
     return (
         <Modal
             open={open}
@@ -124,6 +184,26 @@ export default function AssetSystemInspectorModal({ open, onClose, asset }: Prop
                     </div>
 
                     <div className="flex items-center gap-3">
+                        {/* Threat Level Badge */}
+                        {threatLevel === 'critical' && (
+                            <div className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 border text-xs font-bold bg-rose-950/80 border-rose-500/60 text-rose-300 animate-pulse">
+                                <AlertTriangle className="h-3.5 w-3.5 text-rose-400" />
+                                <span>🚨 พบภัยคุกคาม</span>
+                            </div>
+                        )}
+                        {threatLevel === 'warning' && (
+                            <div className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 border text-xs font-bold bg-amber-950/80 border-amber-500/60 text-amber-300">
+                                <ShieldAlert className="h-3.5 w-3.5 text-amber-400" />
+                                <span>{vpnDetected ? '⚠️ พบการใช้ VPN' : '⚠️ มีความเสี่ยง'}</span>
+                            </div>
+                        )}
+                        {threatLevel === 'normal' && (
+                            <div className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 border text-xs font-medium bg-emerald-950/60 border-emerald-500/40 text-emerald-300">
+                                <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+                                <span>🛡️ ปลอดภัย</span>
+                            </div>
+                        )}
+
                         {/* Live Ping & Online Status Badge */}
                         <div className={`flex items-center gap-2 rounded-xl px-3 py-1.5 border text-xs font-semibold ${isOnline ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>
                             <span className={`h-2.5 w-2.5 rounded-full ${isOnline ? 'bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400' : 'bg-slate-500'}`} />
@@ -141,23 +221,29 @@ export default function AssetSystemInspectorModal({ open, onClose, asset }: Prop
                 <div className="flex flex-wrap gap-1.5 border-b border-slate-100 pb-2">
                     {[
                         { key: 'live', label: 'สถานะสด Real-Time', icon: Activity },
+                        { key: 'security', label: 'ความปลอดภัย & VPN', icon: ShieldCheck, hasAlert: threatLevel !== 'normal' },
                         { key: 'cpu', label: 'ซีพียู (CPU-Z)', icon: Cpu },
                         { key: 'memory', label: 'หน่วยความจำ (RAM Slots)', icon: Layers },
                         { key: 'mainboard', label: 'เมนบอร์ด & BIOS', icon: Server },
                         { key: 'storage', label: 'ดิสก์ & การ์ดจอ', icon: HardDrive },
                         { key: 'network', label: 'เครือข่าย & IP', icon: Network },
-                    ].map(({ key, label, icon: Icon }) => (
+                    ].map(({ key, label, icon: Icon, hasAlert }: any) => (
                         <button
                             key={key}
                             onClick={() => setTab(key as InspectorTab)}
-                            className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold transition ${
+                            className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-semibold transition relative ${
                                 tab === key
                                     ? 'bg-sky-600 text-white shadow-sm'
+                                    : hasAlert
+                                    ? 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
                                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                             }`}
                         >
                             <Icon className="h-3.5 w-3.5" />
                             <span>{label}</span>
+                            {hasAlert && (
+                                <span className="h-2 w-2 rounded-full bg-rose-500 animate-ping inline-block shrink-0" />
+                            )}
                         </button>
                     ))}
                 </div>
@@ -287,6 +373,274 @@ export default function AssetSystemInspectorModal({ open, onClose, asset }: Prop
                                     {isOnline ? 'กำลังรอข้อมูลโปรเซสจาก Agent...' : 'เครื่องออฟไลน์หรือไม่สามารถติดต่อ Agent ได้ในขณะนี้'}
                                 </div>
                             )}
+                        </div>
+                    </div>
+                )}
+
+                {/* TAB: SECURITY & THREAT RADAR */}
+                {tab === 'security' && (
+                    <div className="space-y-4">
+                        {/* Action feedback message */}
+                        {ticketMsg && (
+                            <div className={`p-3.5 rounded-xl text-xs font-semibold flex items-center justify-between border ${ticketMsg.type === 'success' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-rose-50 text-rose-800 border-rose-200'}`}>
+                                <div className="flex items-center gap-2">
+                                    {ticketMsg.type === 'success' ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <AlertCircle className="h-4 w-4 text-rose-600" />}
+                                    <span>{ticketMsg.text}</span>
+                                </div>
+                                <button onClick={() => setTicketMsg(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+                            </div>
+                        )}
+
+                        {/* Top Threat Level & Problem Ticket Trigger Card */}
+                        <div className={`rounded-2xl border p-5 shadow-sm flex flex-wrap items-center justify-between gap-4 ${
+                            threatLevel === 'critical'
+                                ? 'bg-gradient-to-r from-rose-950 via-rose-900 to-slate-900 border-rose-500/50 text-white'
+                                : threatLevel === 'warning'
+                                ? 'bg-gradient-to-r from-amber-950 via-amber-900 to-slate-900 border-amber-500/50 text-white'
+                                : 'bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-slate-700 text-white'
+                        }`}>
+                            <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                    {threatLevel === 'critical' ? (
+                                        <AlertTriangle className="h-6 w-6 text-rose-400 animate-bounce" />
+                                    ) : threatLevel === 'warning' ? (
+                                        <ShieldAlert className="h-6 w-6 text-amber-400" />
+                                    ) : (
+                                        <ShieldCheck className="h-6 w-6 text-emerald-400" />
+                                    )}
+                                    <h4 className="text-base font-bold">
+                                        {threatLevel === 'critical'
+                                            ? 'ระดับวิกฤต (Critical Threat Detected)'
+                                            : threatLevel === 'warning'
+                                            ? 'ระดับเฝ้าระวัง (Security Risk / VPN Active)'
+                                            : 'ระดับปกติ (Secure & Healthy Baseline)'}
+                                    </h4>
+                                </div>
+                                <p className="text-xs text-slate-300">
+                                    คะแนนความเสี่ยงภัยคุกคาม: <b className="font-mono text-sm text-amber-300">{threatScore}/100</b> · ตรวจสอบล่าสุดเมื่อ: {security?.evaluated_at || 'สด Real-Time'}
+                                </p>
+                            </div>
+
+                            {/* One-Click Action Buttons */}
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={ticketSubmitting}
+                                    onClick={() => handleCreateTicket('ticket')}
+                                    className="rounded-xl border-sky-400 bg-sky-500/20 text-sky-200 hover:bg-sky-500/40 text-xs font-semibold gap-1.5"
+                                >
+                                    <FileText className="h-3.5 w-3.5" />
+                                    {ticketSubmitting ? 'กำลังสร้าง...' : 'เปิดตั๋วปัญหา Service Desk'}
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={ticketSubmitting}
+                                    onClick={() => handleCreateTicket('repair')}
+                                    className="rounded-xl border-amber-400 bg-amber-500/20 text-amber-200 hover:bg-amber-500/40 text-xs font-semibold gap-1.5"
+                                >
+                                    <Wrench className="h-3.5 w-3.5" />
+                                    {ticketSubmitting ? 'กำลังส่ง...' : 'เปิดใบส่งซ่อม/ล้างเครื่อง'}
+                                </Button>
+                            </div>
+                        </div>
+
+                        {/* Active Alerts List Callout */}
+                        {alerts.length > 0 && (
+                            <div className="rounded-2xl border border-rose-200 bg-rose-50/70 p-4 space-y-2">
+                                <h5 className="text-xs font-bold text-rose-900 flex items-center gap-1.5">
+                                    <AlertTriangle className="h-4 w-4 text-rose-600" />
+                                    <span>ข้อความแจ้งเตือนความผิดปกติ ({alerts.length} รายการ):</span>
+                                </h5>
+                                <div className="space-y-1.5">
+                                    {alerts.map((al, idx) => (
+                                        <div key={idx} className="flex items-start gap-2 text-xs text-rose-800 bg-white/80 p-2 rounded-xl border border-rose-100">
+                                            <span className="font-bold text-rose-600 shrink-0">#{idx + 1}</span>
+                                            <span>{al}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 4 Radar Cards Grid */}
+                        <div className="grid gap-4 md:grid-cols-2">
+                            {/* Card 1: VPN Radar */}
+                            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
+                                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                                    <h5 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                        <ShieldAlert className={`h-4 w-4 ${vpnDetected ? 'text-amber-500' : 'text-slate-400'}`} />
+                                        <span>การตรวจจับ VPN (VPN Radar)</span>
+                                    </h5>
+                                    <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${vpnDetected ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+                                        {vpnDetected ? '⚠️ พบ VPN กำลังทำงาน' : '✓ ไม่พบ VPN'}
+                                    </span>
+                                </div>
+
+                                <div className="space-y-2 text-xs">
+                                    {vpnDetails?.active_adapters && vpnDetails.active_adapters.length > 0 ? (
+                                        <div className="space-y-1.5">
+                                            <div className="font-semibold text-slate-600 text-[11px]">Virtual Adapters ที่ตรวจพบ:</div>
+                                            {vpnDetails.active_adapters.map((ad: any, i: number) => (
+                                                <div key={i} className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1 font-mono text-[11px]">
+                                                    <div className="font-bold text-slate-900 flex justify-between">
+                                                        <span>{ad.name}</span>
+                                                        <span className="text-amber-600 font-sans">{ad.status}</span>
+                                                    </div>
+                                                    <div className="text-slate-500 text-[10px]">{ad.description}</div>
+                                                    {ad.ip && <div className="text-sky-700 font-bold">Tunnel IP: {ad.ip}</div>}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="text-slate-500 text-xs py-1">ไม่พบ Virtual Adapter หรือไดรเวอร์ Wintun/TAP ที่เปิดใช้งาน</div>
+                                    )}
+
+                                    {vpnDetails?.active_processes && vpnDetails.active_processes.length > 0 && (
+                                        <div className="pt-1">
+                                            <div className="font-semibold text-slate-600 text-[11px]">VPN Client Process:</div>
+                                            <div className="flex flex-wrap gap-1 mt-1">
+                                                {vpnDetails.active_processes.map((p: any, i: number) => (
+                                                    <span key={i} className="px-2 py-0.5 rounded bg-amber-50 text-amber-700 font-mono text-[11px] border border-amber-200">
+                                                        {p.process_name} (PID: {p.id})
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="rounded-xl bg-slate-50 p-2.5 text-[11px] text-slate-500 leading-relaxed border border-slate-100">
+                                        💡 <b>นโยบายความมั่นคงปลอดภัย:</b> การเปิดใช้งาน VPN บนเครื่องลูกข่ายของโรงพยาบาลอาจทำให้เกิดการรั่วไหลของข้อมูลผู้ป่วย (PDPA) และ Bypass ระบบตรวจจับไฟร์วอลล์กลาง
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Card 2: Windows Defender & Antivirus Health */}
+                            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
+                                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                                    <h5 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                        <ShieldCheck className="h-4 w-4 text-emerald-500" />
+                                        <span>สถานะแอนตี้ไวรัส (Windows Defender)</span>
+                                    </h5>
+                                    <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                        {antivirus?.available ? 'พร้อมใช้งาน' : 'ไม่พบ'}
+                                    </span>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                    <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                                        <div className="text-[10px] text-slate-400 font-medium">อายุ Signature ฐานข้อมูล</div>
+                                        <div className={`font-bold mt-0.5 ${antivirus?.signature_age_days <= 7 ? 'text-emerald-700' : 'text-amber-600'}`}>
+                                            {antivirus?.signature_age_days >= 0 ? `${antivirus.signature_age_days} วันที่แล้ว` : 'เป็นปัจจุบัน'}
+                                        </div>
+                                    </div>
+                                    <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                                        <div className="text-[10px] text-slate-400 font-medium">Anti-Spyware</div>
+                                        <div className="font-bold text-slate-700 mt-0.5">
+                                            {antivirus?.antispyware_enabled ? 'เปิดทำงาน' : 'ปิด'}
+                                        </div>
+                                    </div>
+                                    <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                                        <div className="text-[10px] text-slate-400 font-medium">Tamper Protection</div>
+                                        <div className="font-bold text-slate-700 mt-0.5">
+                                            {antivirus?.tamper_protection ? 'เปิดการป้องกัน' : 'ปิด'}
+                                        </div>
+                                    </div>
+                                    <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                                        <div className="text-[10px] text-slate-400 font-medium">Behavior Monitor</div>
+                                        <div className="font-bold text-slate-700 mt-0.5">
+                                            {antivirus?.behavior_monitor_enabled ? 'เปิดทำงาน' : 'ปิด'}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="text-[11px] text-slate-500 space-y-0.5 font-mono pt-1">
+                                    <div>Engine: {antivirus?.engine_version || '-'}</div>
+                                    <div>Signature Version: {antivirus?.signature_version || '-'}</div>
+                                </div>
+                            </div>
+
+                            {/* Card 3: Active Malware & Threat Logs */}
+                            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
+                                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                                    <h5 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                        <Bug className={`h-4 w-4 ${activeThreats.length > 0 ? 'text-rose-500' : 'text-slate-400'}`} />
+                                        <span>มัลแวร์และไวรัส (Active Threat Logs)</span>
+                                    </h5>
+                                    <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${activeThreats.length > 0 ? 'bg-rose-100 text-rose-800 border border-rose-300' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+                                        {activeThreats.length > 0 ? `พบ ${activeThreats.length} รายการ` : 'สะอาด 100%'}
+                                    </span>
+                                </div>
+
+                                {activeThreats.length > 0 ? (
+                                    <div className="space-y-2 max-h-56 overflow-y-auto">
+                                        {activeThreats.map((thr: any, idx: number) => (
+                                            <div key={idx} className="p-2.5 rounded-xl bg-rose-50/60 border border-rose-200 text-xs space-y-1">
+                                                <div className="flex items-center justify-between font-bold text-rose-900">
+                                                    <span>{thr.name}</span>
+                                                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-200 text-rose-800">{thr.severity}</span>
+                                                </div>
+                                                <div className="text-[10px] font-mono text-slate-600 break-all">{thr.path || '-'}</div>
+                                                <div className="text-[10px] text-slate-500 flex justify-between">
+                                                    <span>สถานะ: {thr.action_taken}</span>
+                                                    <span>{thr.time}</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="py-6 text-center text-xs text-slate-400 space-y-1">
+                                        <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto opacity-70" />
+                                        <div className="font-semibold text-slate-600">ไม่พบมัลแวร์หรือไวรัสค้างอยู่ในระบบ</div>
+                                        <div className="text-[11px]">Windows Defender ตรวจสอบแล้วระบบปลอดภัย</div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Card 4: Hacker Tools & Anomaly Radar */}
+                            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
+                                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                                    <h5 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                        <Lock className={`h-4 w-4 ${hackerTools.length > 0 || anomalies?.is_brute_force ? 'text-rose-500' : 'text-slate-400'}`} />
+                                        <span>เครื่องมือแฮกเกอร์ & การเจาะระบบ (Intrusion Radar)</span>
+                                    </h5>
+                                    <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${hackerTools.length > 0 || anomalies?.is_brute_force ? 'bg-rose-100 text-rose-800 border border-rose-300' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+                                        {hackerTools.length > 0 || anomalies?.is_brute_force ? 'ตรวจพบความผิดปกติ' : 'ปกติ'}
+                                    </span>
+                                </div>
+
+                                <div className="space-y-2 text-xs">
+                                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
+                                        <div className="text-[11px] font-semibold text-slate-700">สแกนโปรเซสโจมตี/ขุดเหรียญ/Tunnel (Blacklist):</div>
+                                        {hackerTools.length > 0 ? (
+                                            <div className="flex flex-wrap gap-1 mt-1">
+                                                {hackerTools.map((t: any, i: number) => (
+                                                    <span key={i} className="px-2 py-0.5 rounded bg-rose-100 text-rose-800 font-bold font-mono text-[11px] border border-rose-300">
+                                                        ⚠️ {t.tool} ({t.process_name})
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="text-emerald-700 font-semibold text-[11px]">✓ สะอาด ไม่พบ Mimikatz, Ngrok, Chisel, XMRig หรือเครื่องมือเจาะระบบ</div>
+                                        )}
+                                    </div>
+
+                                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
+                                        <div className="text-[11px] font-semibold text-slate-700">ตรวจสอบการสุ่มรหัสผ่าน (Brute Force Audit Event 4625):</div>
+                                        <div className="flex items-center justify-between text-[11px]">
+                                            <span className="text-slate-500">การล็อกอินล้มเหลวใน 1 ชม.:</span>
+                                            <span className={`font-mono font-bold ${anomalies?.failed_logons_1h >= 15 ? 'text-rose-600' : 'text-slate-700'}`}>
+                                                {anomalies?.failed_logons_1h ?? 0} ครั้ง
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="rounded-xl bg-slate-50 p-2.5 text-[11px] text-slate-500 leading-relaxed border border-slate-100">
+                                        🛡️ <b>การตอบสนองอัตโนมัติ:</b> เมื่อเครื่องนี้พบภัยคุกคามระดับวิกฤต ระบบ Server จะทำการสร้างตั๋วปัญหาใน Service Desk ด่วนให้อัตโนมัติทันที
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 )}

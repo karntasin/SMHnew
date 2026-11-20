@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SMH Infographic - รพ.ค่ายสุรสิงหนาท Smart Hospital Transformation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Noto Sans Thai', 'sans-serif'],
+          },
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      font-family: 'Noto Sans Thai', sans-serif;
+    }
+    @media print {
+      .no-print {
+        display: none !important;
+      }
+      body {
+        background-color: white !important;
+        color: black !important;
+      }
+      .page-break {
+        page-break-before: always;
+      }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased selection:bg-emerald-500 selection:text-white">
+
+  <!-- TOP BAR (Sticky Control Bar) -->
+  <header class="no-print sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 sm:px-8 py-3 flex items-center justify-between shadow-xs">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-md shadow-emerald-500/20">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+        </svg>
+      </div>
+      <div>
+        <h1 class="text-sm sm:text-base font-bold text-slate-900 leading-tight">
+          โรงพยาบาลค่ายสุรสิงหนาท (FSHH / SMH)
+        </h1>
+        <p class="text-xs text-slate-500">Smart Hospital Transformation • Infographic Presentation</p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <button onclick="toggleFullscreen()" class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
+        </svg>
+        <span id="fullscreen-text">เต็มจอ (Presentation)</span>
+      </button>
+
+      <button onclick="window.print()" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm transition-all">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path>
+        </svg>
+        <span>พิมพ์ / บันทึก PDF</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN WRAPPER -->
+  <main class="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10 space-y-8 sm:space-y-12">
+
+    <!-- HERO BANNER -->
+    <section class="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-teal-950 to-emerald-950 text-white p-6 sm:p-10 shadow-xl border border-teal-800/40">
+      <div class="relative z-10 space-y-6">
+        <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+          <svg class="w-3.5 h-3.5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path>
+          </svg>
+          <span>ก้าวสู่อนาคตการแพทย์ดิจิทัล • 100% Digital Hospital</span>
+        </div>
+
+        <div class="space-y-3 max-w-3xl">
+          <h2 class="text-2xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-tight text-white">
+            SMH SMART WORKFLOW
+            <span class="block text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400">
+              ลดภาระงาน • ประหยัดเวลา • ไร้กระดาษ
+            </span>
+          </h2>
+          <p class="text-sm sm:text-base text-slate-300 leading-relaxed">
+            เว็บแอปพลิเคชันบริหารจัดการภายในโรงพยาบาลค่ายสุรสิงหนาท เชื่อมต่อทุกสายงานเข้าด้วยกัน 
+            ตั้งแต่คิวผู้ป่วย งานแจ้งซ่อม บริหารยานพาหนะ ยืม-คืนครุภัณฑ์ ไปจนถึงคลังเอกสารคุณภาพ และการวิเคราะห์ข้อมูล HOSxP อัจฉริยะ
+          </p>
+        </div>
+
+        <!-- 3 Highlights -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-teal-800/60">
+          <div class="bg-white/5 backdrop-blur-sm rounded-2xl p-4 border border-white/10 flex items-center gap-4">
+            <div class="w-12 h-12 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"></path>
+              </svg>
+            </div>
+            <div>
+              <div class="text-2xl sm:text-3xl font-extrabold text-amber-300">
+                -70<span class="text-lg font-normal">%</span>
+              </div>
+              <div class="text-xs text-slate-300">ลดภาระงานธุรการซ้ำซ้อน</div>
+            </div>
+          </div>
+
+          <div class="bg-white/5 backdrop-blur-sm rounded-2xl p-4 border border-white/10 flex items-center gap-4">
+            <div class="w-12 h-12 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center shrink-0">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+            </div>
+            <div>
+              <div class="text-2xl sm:text-3xl font-extrabold text-cyan-300">
+                5x <span class="text-base font-normal">เร็วขึ้น</span>
+              </div>
+              <div class="text-xs text-slate-300">ขั้นตอนอนุมัติ & ค้นหาเอกสาร</div>
+            </div>
+          </div>
+
+          <div class="bg-white/5 backdrop-blur-sm rounded-2xl p-4 border border-white/10 flex items-center gap-4">
+            <div class="w-12 h-12 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+            </div>
+            <div>
+              <div class="text-2xl sm:text-3xl font-extrabold text-emerald-300">
+                100<span class="text-lg font-normal">%</span>
+              </div>
+              <div class="text-xs text-slate-300">Paperless ในระบบคำขอหลัก</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3 CORE PILLARS -->
+    <section class="space-y-6">
+      <div class="text-center space-y-2">
+        <h3 class="text-xl sm:text-3xl font-bold text-slate-900">
+          3 เสาหลักมอบคุณค่า ยกระดับชีวิตการทำงานในโรงพยาบาล
+        </h3>
+        <p class="text-sm text-slate-600 max-w-2xl mx-auto">
+          ออกแบบโดยเน้นผู้ใช้งานเป็นศูนย์กลาง ตอบโจทย์ทั้งบุคลากรทางการแพทย์ เจ้าหน้าที่ธุรการ และผู้บริหาร
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Pillar 1 -->
+        <div class="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-4">
+          <div class="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+            </svg>
+          </div>
+          <div class="space-y-1">
+            <span class="text-xs font-bold uppercase tracking-wider text-amber-600">Pillar 01</span>
+            <h4 class="text-lg font-bold text-slate-900">การลดภาระงาน (Workload Cut)</h4>
+          </div>
+          <ul class="space-y-2.5 text-xs sm:text-sm text-slate-600">
+            <li class="flex items-start gap-2">
+              <span class="text-emerald-500 font-bold">✔</span>
+              <span><strong>FSHH-Q คิวอัจฉริยะ:</strong> จอทีวีเรียกคิวอัตโนมัติ ลดการตะโกน ลดความแออัดหน้าห้องตรวจ</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="text-emerald-500 font-bold">✔</span>
+              <span><strong>สแกนแจ้งซ่อม & ตรวจจุด ENV:</strong> สแกน QR หน้างาน แจ้งช่างได้ทันทีพร้อมแนบรูปถ่าย</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="text-emerald-500 font-bold">✔</span>
+              <span><strong>ยืม-คืนเครื่องมือแพทย์:</strong> ระบบเช็คสต็อกสถานะ Real-time ป้องกันอุปกรณ์สูญหาย</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="text-emerald-500 font-bold">✔</span>
+              <span><strong>ดึงรายงาน HOSxP อัตโนมัติ:</strong> ตัดขั้นตอนการคัดลอกและจัดฟอร์แมต Excel ซ้ำซ้อน</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Pillar 2 -->
+        <div class="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-4">
+          <div class="w-12 h-12 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+          </div>
+          <div class="space-y-1">
+            <span class="text-xs font-bold uppercase tracking-wider text-teal-600">Pillar 02</span>
+            <h4 class="text-lg font-bold text-slate-900">ประหยัดเวลา (Time Efficiency)</h4>
+          </div>
+          <ul class="space-y-2.5 text-xs sm:text-sm text-slate-600">
+            <li class="flex items-start gap-2">
+              <span class="text-emerald-500 font-bold">✔</span>
+              <span><strong>อนุมัติ 1-Click ทุกที่:</strong> ขอใช้รถ จองห้องประชุม ขอลางาน อนุมัติผ่านมือถือได้ทันที</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="text-emerald-500 font-bold">✔</span>
+              <span><strong>ค้นหาเอกสารใน 3 วินาที:</strong> ค้นหาระเบียบปฏิบัติ (SOP/WI/นโยบาย) ได้แม่นยำ ไม่ต้องรื้อตู้เอกสาร</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="text-emerald-500 font-bold">✔</span>
+              <span><strong>แจ้งเตือนผ่าน LINE ทันที:</strong> เมื่อช่างรับงาน หรือผู้บริหารอนุมัติคำขอ ทุกฝ่ายทราบผลทันควัน</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="text-emerald-500 font-bold">✔</span>
+              <span><strong>Dashboard สรุปสด:</strong> ผู้บริหารดูตัวเลขสถิติผู้ป่วย ค่าใช้จ่าย ดัชนีคุณภาพ (HA) ได้แบบสดๆ</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Pillar 3 -->
+        <div class="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-4">
+          <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path>
+            </svg>
+          </div>
+          <div class="space-y-1">
+            <span class="text-xs font-bold uppercase tracking-wider text-emerald-600">Pillar 03</span>
+            <h4 class="text-lg font-bold text-slate-900">100% ไร้กระดาษ (Paperless & Green)</h4>
+          </div>
+          <ul class="space-y-2.5 text-xs sm:text-sm text-slate-600">
+            <li class="flex items-start gap-2">
+              <span class="text-emerald-500 font-bold">✔</span>
+              <span><strong>ยกเลิกแบบฟอร์มกระดาษกว่า 20 ชนิด:</strong> ใบขอรถ ใบลา ใบส่งซ่อม ใบบันทึกตรวจเช็คอุปกรณ์</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="text-emerald-500 font-bold">✔</span>
+              <span><strong>ประหยัดกระดาษ 58,000+ แผ่น/ปี:</strong> เทียบเท่าต้นไม้หลายสิบต้น ช่วยรักษาสิ่งแวดล้อม</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="text-emerald-500 font-bold">✔</span>
+              <span><strong>ประหยัดงบค่าหมึก & เครื่องพิมพ์:</strong> ลดค่าใช้จ่ายสิ้นเปลืองของโรงพยาบาลได้มากกว่าแสนบาท/ปี</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="text-emerald-500 font-bold">✔</span>
+              <span><strong>ประหยัดพื้นที่คลังเอกสาร:</strong> เอกสารจัดเก็บในระบบอย่างปลอดภัย ปราศจากความเสี่ยงไฟไหม้หรือสูญหาย</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- BEFORE VS AFTER -->
+    <section class="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-sm space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+        <div>
+          <span class="text-xs font-bold text-emerald-600 uppercase tracking-wider">Before & After Comparison</span>
+          <h3 class="text-xl sm:text-2xl font-bold text-slate-900">
+            เปรียบเทียบชีวิตการทำงาน: รูปแบบเดิม VS ระบบใหม่ SMH
+          </h3>
+        </div>
+        <span class="text-xs px-3 py-1 bg-slate-100 rounded-full font-medium text-slate-600">
+          เห็นผลลัพธ์ชัดเจนตั้งแต่เริ่มใช้งาน
+        </span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Before -->
+        <div class="rounded-2xl bg-rose-50/60 border border-rose-200/80 p-5 space-y-4">
+          <div class="flex items-center gap-2 text-rose-700 font-bold text-base">
+            <svg class="w-5 h-5 text-rose-500" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+            </svg>
+            <span>วันวานที่คุ้นเคย (แบบเดิม)</span>
+          </div>
+          <div class="space-y-3 text-xs sm:text-sm text-slate-700">
+            <div class="p-3 bg-white/80 rounded-xl border border-rose-100">
+              <p class="font-semibold text-rose-900">📄 เอกสารล้นโต๊ะ ลายเซ็นหลายขั้นตอน</p>
+              <p class="text-slate-600 mt-1">ต้องเขียนใบขอรถ ใบลา ใบแจ้งซ่อม เดินแฟ้มไปตามตึก หากผู้บังคับบัญชาไม่อยู่ งานต้องชะงัก</p>
+            </div>
+            <div class="p-3 bg-white/80 rounded-xl border border-rose-100">
+              <p class="font-semibold text-rose-900">⏳ เสียเวลาค้นหาเอกสารเก่าเป็นชั่วโมง</p>
+              <p class="text-slate-600 mt-1">จะหาคู่มือ SOP หรือประวัติการซ่อม ต้องรื้อแฟ้มในห้องเก็บเอกสาร เสี่ยงเอกสารชำรุดหรือสูญหาย</p>
+            </div>
+            <div class="p-3 bg-white/80 rounded-xl border border-rose-100">
+              <p class="font-semibold text-rose-900">📢 คิวผู้ป่วยแออัด เจ้าหน้าที่ต้องตะโกนเรียก</p>
+              <p class="text-slate-600 mt-1">ผู้ป่วยไม่รู้ลำดับคิว ต้องยืนออหน้าห้องตรวจ/ห้องยา เกิดความเครียดทั้งผู้รับบริการและผู้ให้บริการ</p>
+            </div>
+            <div class="p-3 bg-white/80 rounded-xl border border-rose-100">
+              <p class="font-semibold text-rose-900">📊 รายงานคุณภาพ (HA/KPI) ต้องทำมือ</p>
+              <p class="text-slate-600 mt-1">ต้องดึงสถิติยา RDU และข้อมูลเวชระเบียนมาเขียนสูตรคำนวณใน Excel นานเป็นวันๆ</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- After -->
+        <div class="rounded-2xl bg-emerald-50/60 border border-emerald-200/80 p-5 space-y-4">
+          <div class="flex items-center gap-2 text-emerald-800 font-bold text-base">
+            <svg class="w-5 h-5 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+            </svg>
+            <span>วันนี้ที่ รพ.ค่ายสุรสิงหนาท (ระบบใหม่ SMH)</span>
+          </div>
+          <div class="space-y-3 text-xs sm:text-sm text-slate-700">
+            <div class="p-3 bg-white/90 rounded-xl border border-emerald-200 shadow-2xs">
+              <p class="font-semibold text-emerald-950">✨ ยื่นคำขอ 1 นาที อนุมัติผ่านมือถือได้ทันที</p>
+              <p class="text-slate-600 mt-1">ไม่ต้องใช้กระดาษแม้แต่แผ่นเดียว ทุกคำขอส่งตรงถึงผู้มีอำนาจอนุมัติ พร้อมแจ้งเตือนผ่าน LINE</p>
+            </div>
+            <div class="p-3 bg-white/90 rounded-xl border border-emerald-200 shadow-2xs">
+              <p class="font-semibold text-emerald-950">⚡ ค้นหาเอกสารคุณภาพได้ใน 3 วินาที</p>
+              <p class="text-slate-600 mt-1">มีระบบ Smart Search ค้นหาด้วยคีย์เวิร์ด มีประวัติการแก้ไขและเวอร์ชันชัดเจน ถูกต้องตามเกณฑ์ HA</p>
+            </div>
+            <div class="p-3 bg-white/90 rounded-xl border border-emerald-200 shadow-2xs">
+              <p class="font-semibold text-emerald-950">📺 คิวขึ้นจอ TV อัจฉริยะ นั่งรออย่างสบายใจ</p>
+              <p class="text-slate-600 mt-1">ผู้ป่วยเห็นคิวชัดเจนบนจอทีวี ลดความแออัด เจ้าหน้าที่มีสมาธิในการตรวจและจ่ายยาเต็มที่</p>
+            </div>
+            <div class="p-3 bg-white/90 rounded-xl border border-emerald-200 shadow-2xs">
+              <p class="font-semibold text-emerald-950">📈 ประมวลผลดัชนีคุณภาพจาก HOSxP อัตโนมัติ</p>
+              <p class="text-slate-600 mt-1">เชื่อมต่อแบบ Read-Only มั่นคง ปลอดภัย ข้อมูลสถิติและ Dashboard ออกมาให้พร้อมใช้งานทันที</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- INTERACTIVE CALCULATOR -->
+    <section class="bg-gradient-to-br from-teal-900 via-slate-900 to-emerald-950 text-white rounded-3xl p-6 sm:p-8 shadow-lg border border-teal-800/50 space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-teal-800 pb-4">
+        <div>
+          <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 mb-2">
+            <span>✨ จำลองผลลัพธ์ความคุ้มค่า (Interactive ROI Simulator)</span>
+          </div>
+          <h3 class="text-xl sm:text-2xl font-bold text-white">
+            คำนวณการประหยัดเวลา กระดาษ และงบประมาณ สำหรับ รพ.ค่ายสุรสิงหนาท
+          </h3>
+        </div>
+        <div class="text-xs text-slate-300">
+          เลื่อนเพื่อปรับจำนวนบุคลากรของโรงพยาบาล
+        </div>
+      </div>
+
+      <!-- Slider -->
+      <div class="bg-white/5 backdrop-blur-sm rounded-2xl p-5 border border-white/10 space-y-4">
+        <div class="flex justify-between items-center">
+          <label for="calc-slider" class="text-sm font-semibold text-slate-200">
+            จำนวนบุคลากรและเจ้าหน้าที่ในโรงพยาบาล:
+          </label>
+          <div class="text-xl sm:text-2xl font-black text-emerald-400 bg-emerald-950/80 px-4 py-1 rounded-xl border border-emerald-500/30">
+            <span id="staff-val">180</span> <span class="text-sm font-normal text-slate-300">คน</span>
+          </div>
+        </div>
+
+        <input
+          id="calc-slider"
+          type="range"
+          min="50"
+          max="400"
+          step="10"
+          value="180"
+          oninput="updateCalc(this.value)"
+          class="w-full h-2.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+        />
+        <div class="flex justify-between text-xs text-slate-400">
+          <span>50 คน</span>
+          <span>180 คน (ค่าเฉลี่ยปัจจุบัน)</span>
+          <span>400 คน</span>
+        </div>
+      </div>
+
+      <!-- Result Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/10 space-y-1">
+          <span class="text-xs text-emerald-300 font-medium">📄 กระดาษที่ประหยัดได้ต่อปี</span>
+          <div class="text-2xl sm:text-4xl font-black text-white">
+            <span id="res-paper">57,600</span> <span class="text-sm sm:text-base font-normal text-emerald-300">แผ่น/ปี</span>
+          </div>
+          <p class="text-xs text-slate-300 pt-1" id="res-reams">
+            ลดการสั่งซื้อกระดาษได้กว่า 115 รีม/ปี
+          </p>
+        </div>
+
+        <div class="bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/10 space-y-1">
+          <span class="text-xs text-cyan-300 font-medium">⏱️ เวลาทำงานที่ได้คืนต่อปี</span>
+          <div class="text-2xl sm:text-4xl font-black text-white">
+            <span id="res-hours">8,100</span> <span class="text-sm sm:text-base font-normal text-cyan-300">ชั่วโมง/ปี</span>
+          </div>
+          <p class="text-xs text-slate-300 pt-1">
+            มีเวลาเพิ่มขึ้นเพื่อดูแลผู้ป่วยและพัฒนางานบริการ
+          </p>
+        </div>
+
+        <div class="bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/10 space-y-1">
+          <span class="text-xs text-amber-300 font-medium">💰 งบประมาณสิ้นเปลืองที่ประหยัดได้</span>
+          <div class="text-2xl sm:text-4xl font-black text-amber-300">
+            ฿<span id="res-cost">161,280</span> <span class="text-sm sm:text-base font-normal text-slate-200">บาท/ปี</span>
+          </div>
+          <p class="text-xs text-slate-300 pt-1">
+            คำนวณจากค่ากระดาษ ค่าหมึกพิมพ์ และค่าบำรุงรักษา
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECURITY & STANDARDS -->
+    <section class="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs space-y-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+          </svg>
+        </div>
+        <div>
+          <h4 class="font-bold text-slate-900">
+            มาตรฐานความมั่นคงปลอดภัยตามหลักสากล (Security & Compliance)
+          </h4>
+          <p class="text-xs text-slate-500">
+            โรงพยาบาลมั่นใจได้ในความปลอดภัยของข้อมูลผู้ป่วยและบุคลากร
+          </p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+        <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200/60 space-y-1">
+          <div class="flex items-center gap-2 text-slate-900 font-bold text-xs">
+            <span class="text-emerald-600 font-black">🔒</span>
+            <span>PDPA PII Masking</span>
+          </div>
+          <p class="text-xs text-slate-600 leading-relaxed">
+            ซ่อนเลขบัตรประชาชน HN และนามสกุลของผู้ป่วยโดยอัตโนมัติก่อนส่งออกสู่หน้าบ้าน
+          </p>
+        </div>
+
+        <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200/60 space-y-1">
+          <div class="flex items-center gap-2 text-slate-900 font-bold text-xs">
+            <span class="text-teal-600 font-black">⚡</span>
+            <span>HOSxP Read-Only Architecture</span>
+          </div>
+          <p class="text-xs text-slate-600 leading-relaxed">
+            อ่านข้อมูลสถิติจาก HOSxP แบบ Read-Only 100% รับประกันฐานข้อมูลหลักไม่ถูกแก้ไข
+          </p>
+        </div>
+
+        <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200/60 space-y-1">
+          <div class="flex items-center gap-2 text-slate-900 font-bold text-xs">
+            <span class="text-rose-600 font-black">🏥</span>
+            <span>HA Standards Compliant</span>
+          </div>
+          <p class="text-xs text-slate-600 leading-relaxed">
+            รองรับการตรวจรับรองคุณภาพมาตรฐานโรงพยาบาล (HA) ด้วยระบบดัชนีชี้วัดที่ตรวจสอบย้อนกลับได้
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="text-center py-6 border-t border-slate-200 space-y-3">
+      <p class="text-xs text-slate-500">
+        ระบบบริหารจัดการโรงพยาบาลอัจฉริยะ • โรงพยาบาลค่ายสุรสิงหนาท (FSHH / SMH)
+      </p>
+      <div class="no-print flex items-center justify-center gap-3">
+        <button onclick="window.print()" class="px-5 py-2 rounded-xl bg-slate-900 text-white font-medium text-xs hover:bg-slate-800 transition-colors inline-flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path>
+          </svg>
+          <span>พิมพ์เอกสารแผ่นพับ / บันทึกเป็น PDF</span>
+        </button>
+      </div>
+    </footer>
+
+  </main>
+
+  <script>
+    function updateCalc(val) {
+      const staff = parseInt(val, 10);
+      document.getElementById('staff-val').innerText = staff;
+      const paper = Math.round(staff * 320);
+      const hours = Math.round(staff * 45);
+      const cost = Math.round(paper * 2.8);
+      const reams = Math.round(paper / 500);
+
+      document.getElementById('res-paper').innerText = paper.toLocaleString();
+      document.getElementById('res-hours').innerText = hours.toLocaleString();
+      document.getElementById('res-cost').innerText = cost.toLocaleString();
+      document.getElementById('res-reams').innerText = 'ลดการสั่งซื้อกระดาษได้กว่า ' + reams + ' รีม/ปี';
+    }
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().then(() => {
+          document.getElementById('fullscreen-text').innerText = 'ย่อหน้าต่าง';
+        }).catch(() => {});
+      } else {
+        document.exitFullscreen().then(() => {
+          document.getElementById('fullscreen-text').innerText = 'เต็มจอ (Presentation)';
+        }).catch(() => {});
+      }
+    }
+  </script>
+</body>
+</html>

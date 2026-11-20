@@ -22,12 +22,19 @@ interface Document {
     document_number: string;
     title: string;
     status: string;
+    urgency?: string;
     created_at: string;
     document_date: string;
     due_date?: string | null;
     origin_type: string;
     type: string;
     creator?: { name: string };
+    tracking_progress?: {
+        total: number;
+        acknowledged: number;
+        completed: number;
+        percent: number;
+    };
 }
 
 interface Props {
@@ -148,9 +155,9 @@ export default function Index({ documents, filters, statusCounts = {}, departmen
                         <TableRow>
                             <TableHead>เลขที่</TableHead>
                             <TableHead>เรื่อง</TableHead>
-                            <TableHead>ประเภท</TableHead>
+                            <TableHead>ความเร่งด่วน</TableHead>
                             <TableHead>สถานะ</TableHead>
-                            <TableHead>ผู้สร้าง</TableHead>
+                            <TableHead>ความคืบหน้าแจกจ่าย</TableHead>
                             <TableHead>ลงวันที่</TableHead>
                             <TableHead>กำหนดส่ง</TableHead>
                             <TableHead className="text-right">จัดการ</TableHead>
@@ -164,57 +171,84 @@ export default function Index({ documents, filters, statusCounts = {}, departmen
                                 </TableCell>
                             </TableRow>
                         ) : (
-                            documents.data.map((doc) => (
-                                <TableRow key={doc.id} className="hover:bg-indigo-50/40">
-                                    <TableCell className="font-mono text-xs text-indigo-700">{doc.document_number || '-'}</TableCell>
-                                    <TableCell className="max-w-[280px] truncate font-medium">{doc.title}</TableCell>
-                                    <TableCell>
-                                        {doc.type === 'circular' ? (
-                                            <Badge variant="outline" className="border-violet-300 text-violet-700">เวียน</Badge>
-                                        ) : (
-                                            <Badge variant="outline">ปกติ</Badge>
-                                        )}
-                                    </TableCell>
-                                    <TableCell>
-                                        <Badge variant="outline" className={cn(DOCUMENT_STATUS_BADGE[doc.status])}>
-                                            {DOCUMENT_STATUS_LABELS[doc.status] || doc.status}
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell className="text-slate-500">{doc.creator?.name || '-'}</TableCell>
-                                    <TableCell className="text-slate-500">
-                                        {doc.document_date ? new Date(doc.document_date).toLocaleDateString('th-TH') : '-'}
-                                    </TableCell>
-                                    <TableCell>
-                                        {doc.due_date ? (
-                                            <span className={new Date(doc.due_date) < new Date() ? 'text-red-500 font-semibold' : 'text-slate-500'}>
-                                                {new Date(doc.due_date).toLocaleDateString('th-TH')}
-                                            </span>
-                                        ) : '-'}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <div className="flex items-center justify-end gap-1.5">
-                                            {canForward && (
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    className="rounded-xl border-indigo-200 text-indigo-700 hover:bg-indigo-50 hover:text-indigo-800"
-                                                    onClick={() => {
-                                                        setForwardDoc(doc);
-                                                        setIsForwardOpen(true);
-                                                    }}
-                                                >
-                                                    <Send className="mr-1 h-3.5 w-3.5" /> ส่งต่อ
-                                                </Button>
+                            documents.data.map((doc) => {
+                                const prog = doc.tracking_progress;
+                                return (
+                                    <TableRow key={doc.id} className="hover:bg-indigo-50/40">
+                                        <TableCell className="font-mono text-xs text-indigo-700 font-semibold">{doc.document_number || '-'}</TableCell>
+                                        <TableCell className="max-w-[280px]">
+                                            <div className="truncate font-medium">{doc.title}</div>
+                                            <div className="text-[11px] text-slate-400">
+                                                {doc.type === 'circular' ? 'หนังสือเวียน' : 'หนังสือทั่วไป'} · สร้างโดย {doc.creator?.name || '-'}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            {doc.urgency && doc.urgency !== 'normal' ? (
+                                                <Badge className="bg-rose-100 text-rose-800 border-rose-300 text-xs">
+                                                    {doc.urgency === 'urgent' ? 'ด่วน' : doc.urgency === 'very_urgent' ? 'ด่วนมาก' : 'ด่วนที่สุด'}
+                                                </Badge>
+                                            ) : (
+                                                <span className="text-xs text-slate-400">ปกติ</span>
                                             )}
-                                            <Button asChild size="sm" variant="outline" className="rounded-xl">
-                                                <Link href={route('documents.show', doc.id)}>
-                                                    <Eye className="mr-1 h-3.5 w-3.5" /> เปิด
-                                                </Link>
-                                            </Button>
-                                        </div>
-                                    </TableCell>
-                                </TableRow>
-                            ))
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline" className={cn(DOCUMENT_STATUS_BADGE[doc.status])}>
+                                                {DOCUMENT_STATUS_LABELS[doc.status] || doc.status}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                            {prog && prog.total > 0 ? (
+                                                <div className="space-y-1 min-w-[120px]">
+                                                    <div className="flex justify-between text-[11px] text-slate-600">
+                                                        <span>รับ {prog.acknowledged}/{prog.total}</span>
+                                                        <span className="font-bold text-emerald-700">{prog.percent}%</span>
+                                                    </div>
+                                                    <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                                                        <div 
+                                                            className="bg-emerald-500 h-1.5 rounded-full" 
+                                                            style={{ width: `${prog.percent}%` }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <span className="text-xs text-slate-400">-</span>
+                                            )}
+                                        </TableCell>
+                                        <TableCell className="text-slate-500 text-xs">
+                                            {doc.document_date ? new Date(doc.document_date).toLocaleDateString('th-TH') : '-'}
+                                        </TableCell>
+                                        <TableCell>
+                                            {doc.due_date ? (
+                                                <span className={new Date(doc.due_date) < new Date() ? 'text-red-600 font-bold text-xs' : 'text-slate-500 text-xs'}>
+                                                    {new Date(doc.due_date).toLocaleDateString('th-TH')}
+                                                </span>
+                                            ) : '-'}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <div className="flex items-center justify-end gap-1.5">
+                                                {canForward && (
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className="rounded-xl border-indigo-200 text-indigo-700 hover:bg-indigo-50 hover:text-indigo-800"
+                                                        onClick={() => {
+                                                            setForwardDoc(doc);
+                                                            setIsForwardOpen(true);
+                                                        }}
+                                                    >
+                                                        <Send className="mr-1 h-3.5 w-3.5" /> ส่งต่อ
+                                                    </Button>
+                                                )}
+                                                <Button asChild size="sm" variant="outline" className="rounded-xl">
+                                                    <Link href={route('documents.show', doc.id)}>
+                                                        <Eye className="mr-1 h-3.5 w-3.5" /> เปิด
+                                                    </Link>
+                                                </Button>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })
                         )}
                     </TableBody>
                 </Table>

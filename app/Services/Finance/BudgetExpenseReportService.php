@@ -2,16 +2,12 @@
 
 namespace App\Services\Finance;
 
-use App\Services\HosxpSchema;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class BudgetExpenseReportService
 {
     private const THAI_MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
-
-    /** @var array<string, bool> */
-    private array $schema = [];
 
     public function currentFiscalYear(): int
     {
@@ -99,9 +95,16 @@ class BudgetExpenseReportService
 
             return true;
         } catch (\Exception $e) {
-            Log::warning('HOSxP connection not available: '.$e->getMessage());
+            Log::warning('HOSxP connection not available in BudgetExpenseReport: '.$e->getMessage());
 
             return false;
+        }
+    }
+
+    private function extendExecutionTime(int $seconds = 300): void
+    {
+        if (function_exists('set_time_limit')) {
+            @set_time_limit($seconds);
         }
     }
 
@@ -118,17 +121,73 @@ class BudgetExpenseReportService
         $this->extendExecutionTime();
         [$startDate, $endDate] = $this->fiscalRange($fiscalYearBe);
         $conn = DB::connection('hosxp');
-        $this->initSchema($conn);
 
-        if (! HosxpSchema::columnExists($conn, 'opitemrece', 'sum_price')) {
-            throw new \RuntimeException('ไม่พบคอลัมน์ opitemrece.sum_price ใน HOSxP');
-        }
+        // 1. สรุปข้อมูลผู้ป่วยนอก (OPD) จาก vn_stat โดยแยกผู้ป่วยที่ไม่ได้ Admit (o.an is null)
+        $opdSummary = $conn->table('vn_stat as v')
+            ->leftJoin('ovst as o', 'o.vn', '=', 'v.vn')
+            ->whereBetween('v.vstdate', [$startDate, $endDate])
+            ->where(function ($q) {
+                $q->whereNull('o.an')->orWhere('o.an', '');
+            })
+            ->selectRaw('
+                COUNT(DISTINCT v.vn) as visits,
+                SUM(COALESCE(v.income, 0)) as total,
+                SUM(COALESCE(v.paid_money, 0)) as cash,
+                SUM(COALESCE(v.uc_money, 0)) as debt,
+                SUM(COALESCE(v.remain_money, 0)) as unpaid
+            ')
+            ->first();
 
-        $base = $this->baseQuery($conn, $startDate, $endDate);
-        $summary = $this->summary($base);
-        $monthly = $this->monthly($base, $startDate);
-        $byIncome = $this->byIncome($base, (float) $summary['total_amount']);
-        $byPttype = $this->byPttype($base, (float) $summary['total_amount']);
+        // 2. สรุปข้อมูลผู้ป่วยใน (IPD) จาก an_stat ที่จำหน่ายในรอบปีงบประมาณ (dchdate)
+        $ipdSummary = $conn->table('an_stat as ast')
+            ->whereBetween('ast.dchdate', [$startDate, $endDate])
+            ->whereNotNull('ast.dchdate')
+            ->where('ast.dchdate', '<>', '')
+            ->where('ast.dchdate', '<>', '0000-00-00')
+            ->selectRaw('
+                COUNT(DISTINCT ast.an) as visits,
+                SUM(COALESCE(ast.income, 0)) as total,
+                SUM(COALESCE(ast.paid_money, 0)) as cash,
+                SUM(COALESCE(ast.uc_money, 0)) as debt,
+                SUM(COALESCE(ast.remain_money, 0)) as unpaid
+            ')
+            ->first();
+
+        $opdTotal = (float) ($opdSummary->total ?? 0);
+        $ipdTotal = (float) ($ipdSummary->total ?? 0);
+        $totalAmount = $opdTotal + $ipdTotal;
+
+        $opdVisits = (int) ($opdSummary->visits ?? 0);
+        $ipdVisits = (int) ($ipdSummary->visits ?? 0);
+
+        $cashTotal = (float) ($opdSummary->cash ?? 0) + (float) ($ipdSummary->cash ?? 0);
+        $debtTotal = (float) ($opdSummary->debt ?? 0) + (float) ($ipdSummary->debt ?? 0);
+        $unpaidTotal = (float) ($opdSummary->unpaid ?? 0) + (float) ($ipdSummary->unpaid ?? 0);
+        $otherTotal = max(0.0, round($totalAmount - ($cashTotal + $debtTotal + $unpaidTotal), 2));
+
+        $summary = [
+            'total_amount' => $totalAmount,
+            'opd_amount' => $opdTotal,
+            'ipd_amount' => $ipdTotal,
+            'opd_share' => $totalAmount > 0 ? round($opdTotal / $totalAmount * 100, 1) : 0,
+            'ipd_share' => $totalAmount > 0 ? round($ipdTotal / $totalAmount * 100, 1) : 0,
+            'cash_amount' => $cashTotal,
+            'debt_amount' => $debtTotal,
+            'unpaid_amount' => $unpaidTotal,
+            'other_amount' => $otherTotal,
+            'total_items' => $opdVisits + $ipdVisits,
+            'opd_visits' => $opdVisits,
+            'ipd_visits' => $ipdVisits,
+        ];
+
+        // 3. ข้อมูลรายเดือน 12 เดือน (ต.ค. - ก.ย.)
+        $monthly = $this->buildMonthly($conn, $startDate, $endDate);
+
+        // 4. หมวดรายได้
+        $byIncome = $this->buildByIncome($conn, $startDate, $endDate, $totalAmount);
+
+        // 5. สิทธิการรักษา
+        $byPttype = $this->buildByPttype($conn, $startDate, $endDate, $totalAmount);
 
         return [
             'summary' => $summary,
@@ -138,164 +197,45 @@ class BudgetExpenseReportService
         ];
     }
 
-    private function extendExecutionTime(int $seconds = 300): void
-    {
-        if (function_exists('set_time_limit')) {
-            @set_time_limit($seconds);
-        }
-    }
-
-    private function initSchema($conn): void
-    {
-        if ($this->schema !== []) {
-            return;
-        }
-
-        $this->schema = [
-            'oi_an' => HosxpSchema::columnExists($conn, 'opitemrece', 'an'),
-            'paidst' => HosxpSchema::columnExists($conn, 'opitemrece', 'paidst'),
-            'income' => HosxpSchema::columnExists($conn, 'opitemrece', 'income'),
-            'income_table' => HosxpSchema::tableExists($conn, 'income'),
-            'pttype_table' => HosxpSchema::tableExists($conn, 'pttype'),
-            'ipt' => HosxpSchema::tableExists($conn, 'ipt'),
-            'ovst' => HosxpSchema::tableExists($conn, 'ovst'),
-        ];
-    }
-
-    private function ipdConditionSql(): string
-    {
-        $parts = [];
-        if ($this->schema['oi_an']) {
-            $parts[] = "(oi.an IS NOT NULL AND TRIM(oi.an) <> '')";
-        }
-        if ($this->schema['ovst']) {
-            $parts[] = "(o.an IS NOT NULL AND TRIM(o.an) <> '')";
-        }
-        if ($parts === []) {
-            return '0 = 1';
-        }
-
-        return '('.implode(' OR ', $parts).')';
-    }
-
-    private function opdConditionSql(): string
-    {
-        return 'NOT ('.$this->ipdConditionSql().')';
-    }
-
-    private function iptJoinAnSql(): string
-    {
-        if ($this->schema['oi_an'] && $this->schema['ovst']) {
-            return "IF(oi.an IS NOT NULL AND TRIM(oi.an) <> '', oi.an, o.an)";
-        }
-        if ($this->schema['oi_an']) {
-            return 'oi.an';
-        }
-
-        return 'o.an';
-    }
-
-    private function paidExpression(): string
-    {
-        return "TRIM(COALESCE(oi.paidst, ''))";
-    }
-
-    private function baseQuery($conn, string $startDate, string $endDate)
-    {
-        $query = $conn->table('opitemrece as oi')
-            ->whereBetween('oi.vstdate', [$startDate, $endDate]);
-
-        if ($this->schema['ovst']) {
-            $query->leftJoin('ovst as o', 'o.vn', '=', 'oi.vn');
-        }
-
-        if ($this->schema['ipt'] && ($this->schema['oi_an'] || $this->schema['ovst'])) {
-            $query->leftJoin(DB::raw('ipt i'), DB::raw('i.an'), '=', DB::raw($this->iptJoinAnSql()));
-        }
-
-        return $query;
-    }
-
     /**
-     * @param  \Illuminate\Database\Query\Builder  $base
-     * @return array<string, float|int>
-     */
-    private function summary($base): array
-    {
-        $ipd = $this->ipdConditionSql();
-        $opd = $this->opdConditionSql();
-        $ipdKey = match (true) {
-            $this->schema['oi_an'] && $this->schema['ovst'] => "COALESCE(NULLIF(TRIM(oi.an), ''), NULLIF(TRIM(o.an), ''), oi.vn)",
-            $this->schema['oi_an'] => "COALESCE(NULLIF(TRIM(oi.an), ''), oi.vn)",
-            $this->schema['ovst'] => "COALESCE(NULLIF(TRIM(o.an), ''), oi.vn)",
-            default => 'oi.vn',
-        };
-
-        $row = (clone $base)
-            ->selectRaw('COALESCE(SUM(oi.sum_price), 0) as total_amount')
-            ->selectRaw("COALESCE(SUM(CASE WHEN {$opd} THEN oi.sum_price ELSE 0 END), 0) as opd_amount")
-            ->selectRaw("COALESCE(SUM(CASE WHEN {$ipd} THEN oi.sum_price ELSE 0 END), 0) as ipd_amount")
-            ->selectRaw('COUNT(*) as total_items')
-            ->selectRaw("COUNT(DISTINCT CASE WHEN {$opd} THEN oi.vn END) as opd_visits")
-            ->selectRaw("COUNT(DISTINCT CASE WHEN {$ipd} THEN {$ipdKey} END) as ipd_visits")
-            ->selectRaw($this->paymentSelectSql())
-            ->first();
-
-        $total = (float) ($row->total_amount ?? 0);
-        $opdAmount = (float) ($row->opd_amount ?? 0);
-        $ipdAmount = (float) ($row->ipd_amount ?? 0);
-
-        return [
-            'total_amount' => $total,
-            'opd_amount' => $opdAmount,
-            'ipd_amount' => $ipdAmount,
-            'opd_share' => $total > 0 ? round($opdAmount / $total * 100, 1) : 0,
-            'ipd_share' => $total > 0 ? round($ipdAmount / $total * 100, 1) : 0,
-            'cash_amount' => (float) ($row->cash_amount ?? 0),
-            'debt_amount' => (float) ($row->debt_amount ?? 0),
-            'unpaid_amount' => (float) ($row->unpaid_amount ?? 0),
-            'other_amount' => (float) ($row->other_amount ?? 0),
-            'total_items' => (int) ($row->total_items ?? 0),
-            'opd_visits' => (int) ($row->opd_visits ?? 0),
-            'ipd_visits' => (int) ($row->ipd_visits ?? 0),
-        ];
-    }
-
-    private function paymentSelectSql(): string
-    {
-        if (! $this->schema['paidst']) {
-            return '0 as cash_amount, 0 as debt_amount, 0 as unpaid_amount, COALESCE(SUM(oi.sum_price), 0) as other_amount';
-        }
-
-        $paid = $this->paidExpression();
-
-        return "
-            COALESCE(SUM(CASE WHEN {$paid} IN ('01', '03') THEN oi.sum_price ELSE 0 END), 0) as cash_amount,
-            COALESCE(SUM(CASE WHEN {$paid} = '02' THEN oi.sum_price ELSE 0 END), 0) as debt_amount,
-            COALESCE(SUM(CASE WHEN {$paid} = '00' THEN oi.sum_price ELSE 0 END), 0) as unpaid_amount,
-            COALESCE(SUM(CASE WHEN {$paid} NOT IN ('00', '01', '02', '03') THEN oi.sum_price ELSE 0 END), 0) as other_amount
-        ";
-    }
-
-    /**
-     * @param  \Illuminate\Database\Query\Builder  $base
      * @return list<array<string, float|int|string>>
      */
-    private function monthly($base, string $startDate): array
+    private function buildMonthly($conn, string $startDate, string $endDate): array
     {
-        $ipd = $this->ipdConditionSql();
-        $opd = $this->opdConditionSql();
-
-        $rows = (clone $base)
-            ->selectRaw('YEAR(oi.vstdate) as y')
-            ->selectRaw('MONTH(oi.vstdate) as m')
-            ->selectRaw("COALESCE(SUM(CASE WHEN {$opd} THEN oi.sum_price ELSE 0 END), 0) as opd")
-            ->selectRaw("COALESCE(SUM(CASE WHEN {$ipd} THEN oi.sum_price ELSE 0 END), 0) as ipd")
-            ->selectRaw('COALESCE(SUM(oi.sum_price), 0) as total')
-            ->selectRaw($this->paymentSelectSql())
-            ->groupByRaw('YEAR(oi.vstdate), MONTH(oi.vstdate)')
+        $monthlyOpd = $conn->table('vn_stat as v')
+            ->leftJoin('ovst as o', 'o.vn', '=', 'v.vn')
+            ->whereBetween('v.vstdate', [$startDate, $endDate])
+            ->where(function ($q) {
+                $q->whereNull('o.an')->orWhere('o.an', '');
+            })
+            ->selectRaw('
+                YEAR(v.vstdate) as y,
+                MONTH(v.vstdate) as m,
+                SUM(COALESCE(v.income, 0)) as total,
+                SUM(COALESCE(v.paid_money, 0)) as cash,
+                SUM(COALESCE(v.uc_money, 0)) as debt,
+                SUM(COALESCE(v.remain_money, 0)) as unpaid
+            ')
+            ->groupBy('y', 'm')
             ->get()
-            ->keyBy(fn ($row) => sprintf('%04d-%02d', $row->y, $row->m));
+            ->keyBy(fn ($r) => sprintf('%04d-%02d', $r->y, $r->m));
+
+        $monthlyIpd = $conn->table('an_stat as ast')
+            ->whereBetween('ast.dchdate', [$startDate, $endDate])
+            ->whereNotNull('ast.dchdate')
+            ->where('ast.dchdate', '<>', '')
+            ->where('ast.dchdate', '<>', '0000-00-00')
+            ->selectRaw('
+                YEAR(ast.dchdate) as y,
+                MONTH(ast.dchdate) as m,
+                SUM(COALESCE(ast.income, 0)) as total,
+                SUM(COALESCE(ast.paid_money, 0)) as cash,
+                SUM(COALESCE(ast.uc_money, 0)) as debt,
+                SUM(COALESCE(ast.remain_money, 0)) as unpaid
+            ')
+            ->groupBy('y', 'm')
+            ->get()
+            ->keyBy(fn ($r) => sprintf('%04d-%02d', $r->y, $r->m));
 
         $cursor = new \DateTimeImmutable($startDate);
         $months = [];
@@ -303,22 +243,30 @@ class BudgetExpenseReportService
         for ($i = 0; $i < 12; $i++) {
             $point = $cursor->modify("+{$i} months");
             $key = $point->format('Y-m');
-            $row = $rows->get($key);
-            $opdAmount = (float) ($row->opd ?? 0);
-            $ipdAmount = (float) ($row->ipd ?? 0);
+            $opdRow = $monthlyOpd->get($key);
+            $ipdRow = $monthlyIpd->get($key);
+
+            $opd = (float) ($opdRow->total ?? 0);
+            $ipd = (float) ($ipdRow->total ?? 0);
+            $cash = (float) ($opdRow->cash ?? 0) + (float) ($ipdRow->cash ?? 0);
+            $debt = (float) ($opdRow->debt ?? 0) + (float) ($ipdRow->debt ?? 0);
+            $unpaid = (float) ($opdRow->unpaid ?? 0) + (float) ($ipdRow->unpaid ?? 0);
+            $total = $opd + $ipd;
+            $other = max(0.0, round($total - ($cash + $debt + $unpaid), 2));
+
             $monthIndex = (int) $point->format('n') - 1;
             $label = self::THAI_MONTHS[$monthIndex].' '.((int) $point->format('Y') + 543);
 
             $months[] = [
                 'key' => $key,
                 'label' => $label,
-                'opd' => $opdAmount,
-                'ipd' => $ipdAmount,
-                'total' => (float) ($row->total ?? ($opdAmount + $ipdAmount)),
-                'cash' => (float) ($row->cash_amount ?? 0),
-                'debt' => (float) ($row->debt_amount ?? 0),
-                'unpaid' => (float) ($row->unpaid_amount ?? 0),
-                'other' => (float) ($row->other_amount ?? 0),
+                'opd' => $opd,
+                'ipd' => $ipd,
+                'total' => $total,
+                'cash' => $cash,
+                'debt' => $debt,
+                'unpaid' => $unpaid,
+                'other' => $other,
             ];
         }
 
@@ -326,105 +274,216 @@ class BudgetExpenseReportService
     }
 
     /**
-     * @param  \Illuminate\Database\Query\Builder  $base
      * @return list<array<string, float|int|string>>
      */
-    private function byIncome($base, float $totalAmount): array
+    private function buildByIncome($conn, string $startDate, string $endDate, float $totalAmount): array
     {
-        if (! $this->schema['income']) {
-            return [];
-        }
+        $incomeNames = $conn->table('income')->pluck('name', 'income');
 
-        $ipd = $this->ipdConditionSql();
-        $opd = $this->opdConditionSql();
-        $code = "COALESCE(NULLIF(TRIM(oi.income), ''), '-')";
-        $query = clone $base;
-
-        if ($this->schema['income_table']) {
-            $query->leftJoin('income as inc', 'inc.income', '=', 'oi.income');
-            $name = "CASE WHEN {$code} = '-' THEN 'ไม่ระบุหมวด' ELSE COALESCE(NULLIF(inc.name, ''), {$code}) END";
-        } else {
-            $name = "CASE WHEN {$code} = '-' THEN 'ไม่ระบุหมวด' ELSE {$code} END";
-        }
-
-        return $query
-            ->selectRaw("{$code} as income_code")
-            ->selectRaw("{$name} as income_name")
-            ->selectRaw("COALESCE(SUM(CASE WHEN {$opd} THEN oi.sum_price ELSE 0 END), 0) as opd_amount")
-            ->selectRaw("COALESCE(SUM(CASE WHEN {$ipd} THEN oi.sum_price ELSE 0 END), 0) as ipd_amount")
-            ->selectRaw('COALESCE(SUM(oi.sum_price), 0) as total_amount')
-            ->selectRaw('COUNT(*) as items')
-            ->groupByRaw($code)
-            ->groupByRaw($name)
-            ->orderByDesc('total_amount')
-            ->get()
-            ->map(function ($row) use ($totalAmount) {
-                $total = (float) $row->total_amount;
-
-                return [
-                    'income_code' => (string) $row->income_code,
-                    'income_name' => (string) $row->income_name,
-                    'opd_amount' => (float) $row->opd_amount,
-                    'ipd_amount' => (float) $row->ipd_amount,
-                    'total_amount' => $total,
-                    'items' => (int) $row->items,
-                    'share_percent' => $totalAmount > 0 ? round($total / $totalAmount * 100, 1) : 0,
-                ];
+        $opdIncs = $conn->table('vn_stat as v')
+            ->leftJoin('ovst as o', 'o.vn', '=', 'v.vn')
+            ->whereBetween('v.vstdate', [$startDate, $endDate])
+            ->where(function ($q) {
+                $q->whereNull('o.an')->orWhere('o.an', '');
             })
-            ->values()
-            ->all();
+            ->selectRaw('
+                SUM(inc01) as inc01, COUNT(CASE WHEN inc01 > 0 THEN 1 END) as inc01_cnt,
+                SUM(inc02) as inc02, COUNT(CASE WHEN inc02 > 0 THEN 1 END) as inc02_cnt,
+                SUM(inc03) as inc03, COUNT(CASE WHEN inc03 > 0 THEN 1 END) as inc03_cnt,
+                SUM(inc04) as inc04, COUNT(CASE WHEN inc04 > 0 THEN 1 END) as inc04_cnt,
+                SUM(inc05) as inc05, COUNT(CASE WHEN inc05 > 0 THEN 1 END) as inc05_cnt,
+                SUM(inc06) as inc06, COUNT(CASE WHEN inc06 > 0 THEN 1 END) as inc06_cnt,
+                SUM(inc07) as inc07, COUNT(CASE WHEN inc07 > 0 THEN 1 END) as inc07_cnt,
+                SUM(inc08) as inc08, COUNT(CASE WHEN inc08 > 0 THEN 1 END) as inc08_cnt,
+                SUM(inc09) as inc09, COUNT(CASE WHEN inc09 > 0 THEN 1 END) as inc09_cnt,
+                SUM(inc10) as inc10, COUNT(CASE WHEN inc10 > 0 THEN 1 END) as inc10_cnt,
+                SUM(inc11) as inc11, COUNT(CASE WHEN inc11 > 0 THEN 1 END) as inc11_cnt,
+                SUM(inc12) as inc12, COUNT(CASE WHEN inc12 > 0 THEN 1 END) as inc12_cnt,
+                SUM(inc13) as inc13, COUNT(CASE WHEN inc13 > 0 THEN 1 END) as inc13_cnt,
+                SUM(inc14) as inc14, COUNT(CASE WHEN inc14 > 0 THEN 1 END) as inc14_cnt,
+                SUM(inc15) as inc15, COUNT(CASE WHEN inc15 > 0 THEN 1 END) as inc15_cnt,
+                SUM(inc16) as inc16, COUNT(CASE WHEN inc16 > 0 THEN 1 END) as inc16_cnt,
+                SUM(inc17) as inc17, COUNT(CASE WHEN inc17 > 0 THEN 1 END) as inc17_cnt,
+                SUM(income) as total
+            ')
+            ->first();
+
+        $ipdIncs = $conn->table('an_stat as ast')
+            ->whereBetween('ast.dchdate', [$startDate, $endDate])
+            ->whereNotNull('ast.dchdate')
+            ->where('ast.dchdate', '<>', '')
+            ->where('ast.dchdate', '<>', '0000-00-00')
+            ->selectRaw('
+                SUM(inc01) as inc01, COUNT(CASE WHEN inc01 > 0 THEN 1 END) as inc01_cnt,
+                SUM(inc02) as inc02, COUNT(CASE WHEN inc02 > 0 THEN 1 END) as inc02_cnt,
+                SUM(inc03) as inc03, COUNT(CASE WHEN inc03 > 0 THEN 1 END) as inc03_cnt,
+                SUM(inc04) as inc04, COUNT(CASE WHEN inc04 > 0 THEN 1 END) as inc04_cnt,
+                SUM(inc05) as inc05, COUNT(CASE WHEN inc05 > 0 THEN 1 END) as inc05_cnt,
+                SUM(inc06) as inc06, COUNT(CASE WHEN inc06 > 0 THEN 1 END) as inc06_cnt,
+                SUM(inc07) as inc07, COUNT(CASE WHEN inc07 > 0 THEN 1 END) as inc07_cnt,
+                SUM(inc08) as inc08, COUNT(CASE WHEN inc08 > 0 THEN 1 END) as inc08_cnt,
+                SUM(inc09) as inc09, COUNT(CASE WHEN inc09 > 0 THEN 1 END) as inc09_cnt,
+                SUM(inc10) as inc10, COUNT(CASE WHEN inc10 > 0 THEN 1 END) as inc10_cnt,
+                SUM(inc11) as inc11, COUNT(CASE WHEN inc11 > 0 THEN 1 END) as inc11_cnt,
+                SUM(inc12) as inc12, COUNT(CASE WHEN inc12 > 0 THEN 1 END) as inc12_cnt,
+                SUM(inc13) as inc13, COUNT(CASE WHEN inc13 > 0 THEN 1 END) as inc13_cnt,
+                SUM(inc14) as inc14, COUNT(CASE WHEN inc14 > 0 THEN 1 END) as inc14_cnt,
+                SUM(inc15) as inc15, COUNT(CASE WHEN inc15 > 0 THEN 1 END) as inc15_cnt,
+                SUM(inc16) as inc16, COUNT(CASE WHEN inc16 > 0 THEN 1 END) as inc16_cnt,
+                SUM(inc17) as inc17, COUNT(CASE WHEN inc17 > 0 THEN 1 END) as inc17_cnt,
+                SUM(income) as total
+            ')
+            ->first();
+
+        // คำนวณค่ายาในบัญชี (ED) และนอกบัญชี (NED) ตาม drugitems.drugaccount ตรงตามสรุปมูลค่ารักษาพยาบาล
+        $opdDrug = $conn->table('opitemrece as o')
+            ->leftJoin('drugitems as d', 'd.icode', '=', 'o.icode')
+            ->whereBetween('o.vstdate', [$startDate, $endDate])
+            ->where(function ($q) {
+                $q->whereNull('o.an')->orWhere('o.an', '');
+            })
+            ->whereIn('o.income', ['03', '17'])
+            ->selectRaw("
+                SUM(CASE WHEN d.drugaccount IS NOT NULL AND TRIM(d.drugaccount) <> '' AND UPPER(TRIM(d.drugaccount)) <> 'NED' THEN o.sum_price ELSE 0 END) as ed,
+                SUM(CASE WHEN d.drugaccount IS NULL OR TRIM(d.drugaccount) = '' OR UPPER(TRIM(d.drugaccount)) = 'NED' THEN o.sum_price ELSE 0 END) as ned
+            ")
+            ->first();
+
+        $ipdDrug = $conn->table('opitemrece as o')
+            ->join('an_stat as a', 'a.an', '=', 'o.an')
+            ->leftJoin('drugitems as d', 'd.icode', '=', 'o.icode')
+            ->whereBetween('a.dchdate', [$startDate, $endDate])
+            ->whereNotNull('a.dchdate')
+            ->where('a.dchdate', '<>', '')
+            ->where('a.dchdate', '<>', '0000-00-00')
+            ->whereIn('o.income', ['03', '17'])
+            ->selectRaw("
+                SUM(CASE WHEN d.drugaccount IS NOT NULL AND TRIM(d.drugaccount) <> '' AND UPPER(TRIM(d.drugaccount)) <> 'NED' THEN o.sum_price ELSE 0 END) as ed,
+                SUM(CASE WHEN d.drugaccount IS NULL OR TRIM(d.drugaccount) = '' OR UPPER(TRIM(d.drugaccount)) = 'NED' THEN o.sum_price ELSE 0 END) as ned
+            ")
+            ->first();
+
+        $defs = [
+            '01' => ['name' => $incomeNames['01'] ?? 'ค่าห้องและค่าอาหาร', 'col' => 'inc01'],
+            '02' => ['name' => $incomeNames['02'] ?? 'ค่าอวัยวะเทียมและอุปกรณ์', 'col' => 'inc02'],
+            '03' => ['name' => 'ค่ายาในบัญชียาหลักแห่งชาติ (ED)', 'col' => 'inc03', 'opd' => (float) ($opdDrug->ed ?? 0), 'ipd' => (float) ($ipdDrug->ed ?? 0)],
+            '04' => ['name' => $incomeNames['04'] ?? 'ค่ายากลับบ้าน', 'col' => 'inc04'],
+            '05' => ['name' => $incomeNames['05'] ?? 'ค่าเวชภัณฑ์ที่มิใช่ยา', 'col' => 'inc05'],
+            '06' => ['name' => $incomeNames['06'] ?? 'ค่าบริการโลหิตและส่วนประกอบ', 'col' => 'inc06'],
+            '07' => ['name' => $incomeNames['07'] ?? 'ค่าตรวจวินิจฉัยทางเทคนิคการแพทย์และพยาธิ', 'col' => 'inc07'],
+            '08' => ['name' => $incomeNames['08'] ?? 'ค่าตรวจวินิจฉัยและรักษาทางรังสีวิทยา', 'col' => 'inc08'],
+            '09' => ['name' => $incomeNames['09'] ?? 'ค่าตรวจวินิจฉัยโดยวิธีพิเศษอื่นๆ', 'col' => 'inc09'],
+            '10' => ['name' => $incomeNames['10'] ?? 'ค่าอุปกรณ์ของใช้และเครื่องมือทางการแพทย์', 'col' => 'inc10'],
+            '11' => ['name' => $incomeNames['11'] ?? 'ค่าทำหัตถการ และวิสัญญี', 'col' => 'inc11'],
+            '12' => ['name' => $incomeNames['12'] ?? 'ค่าบริการทางพยาบาล', 'col' => 'inc12'],
+            '13' => ['name' => $incomeNames['13'] ?? 'ค่าบริการทางทันตกรรม', 'col' => 'inc13'],
+            '14' => ['name' => $incomeNames['14'] ?? 'ค่าบริการทางกายภาพบำบัดและฟื้นฟู', 'col' => 'inc14'],
+            '15' => ['name' => $incomeNames['15'] ?? 'ค่านวดและแพทย์แผนไทย', 'col' => 'inc15'],
+            '16' => ['name' => $incomeNames['16'] ?? 'ค่าบริการอื่น ๆ ที่ไม่เกี่ยวกับการรักษาพยาบาล', 'col' => 'inc16'],
+            '17' => ['name' => 'ค่ายานอกบัญชียาหลักแห่งชาติ (NED)', 'col' => 'inc17', 'opd' => (float) ($opdDrug->ned ?? 0), 'ipd' => (float) ($ipdDrug->ned ?? 0)],
+        ];
+
+        $rows = [];
+        foreach ($defs as $code => $meta) {
+            $col = $meta['col'];
+            $opd = isset($meta['opd']) ? $meta['opd'] : (float) ($opdIncs->{$col} ?? 0);
+            $ipd = isset($meta['ipd']) ? $meta['ipd'] : (float) ($ipdIncs->{$col} ?? 0);
+            $tot = $opd + $ipd;
+            if ($tot > 0) {
+                $rows[] = [
+                    'income_code' => $code,
+                    'income_name' => $meta['name'],
+                    'opd_amount' => $opd,
+                    'ipd_amount' => $ipd,
+                    'total_amount' => $tot,
+                    'items' => (int) ($opdIncs->{$col.'_cnt'} ?? 0) + (int) ($ipdIncs->{$col.'_cnt'} ?? 0),
+                    'share_percent' => $totalAmount > 0 ? round($tot / $totalAmount * 100, 1) : 0,
+                ];
+            }
+        }
+        usort($rows, fn ($a, $b) => $b['total_amount'] <=> $a['total_amount']);
+
+        return $rows;
     }
 
     /**
-     * @param  \Illuminate\Database\Query\Builder  $base
      * @return list<array<string, float|int|string>>
      */
-    private function byPttype($base, float $totalAmount): array
+    private function buildByPttype($conn, string $startDate, string $endDate, float $totalAmount): array
     {
-        $ipd = $this->ipdConditionSql();
-        $opd = $this->opdConditionSql();
-        $iptCode = $this->schema['ipt'] ? "NULLIF(TRIM(i.pttype), '')" : 'NULL';
-        $ovstCode = $this->schema['ovst'] ? "NULLIF(TRIM(o.pttype), '')" : 'NULL';
-        $code = "CASE WHEN {$ipd} THEN COALESCE({$iptCode}, {$ovstCode}, '-') ELSE COALESCE({$ovstCode}, '-') END";
-
-        $query = clone $base;
-        if ($this->schema['pttype_table']) {
-            $query->leftJoin(DB::raw('pttype pt'), DB::raw('pt.pttype'), '=', DB::raw($code));
-            $name = "COALESCE(NULLIF(pt.name, ''), {$code}, 'ไม่ระบุสิทธิ')";
-        } else {
-            $name = "CASE WHEN {$code} = '-' THEN 'ไม่ระบุสิทธิ' ELSE {$code} END";
-        }
-
-        return $query
-            ->selectRaw("{$code} as pttype_code")
-            ->selectRaw("{$name} as pttype_name")
-            ->selectRaw("COALESCE(SUM(CASE WHEN {$opd} THEN oi.sum_price ELSE 0 END), 0) as opd_amount")
-            ->selectRaw("COALESCE(SUM(CASE WHEN {$ipd} THEN oi.sum_price ELSE 0 END), 0) as ipd_amount")
-            ->selectRaw('COALESCE(SUM(oi.sum_price), 0) as total_amount')
-            ->selectRaw('COUNT(*) as items')
-            ->selectRaw($this->paymentSelectSql())
-            ->groupByRaw($code)
-            ->groupByRaw($name)
-            ->orderByDesc('total_amount')
-            ->get()
-            ->map(function ($row) use ($totalAmount) {
-                $total = (float) $row->total_amount;
-
-                return [
-                    'pttype_code' => (string) $row->pttype_code,
-                    'pttype_name' => (string) $row->pttype_name,
-                    'opd_amount' => (float) $row->opd_amount,
-                    'ipd_amount' => (float) $row->ipd_amount,
-                    'cash_amount' => (float) ($row->cash_amount ?? 0),
-                    'debt_amount' => (float) ($row->debt_amount ?? 0),
-                    'unpaid_amount' => (float) ($row->unpaid_amount ?? 0),
-                    'other_amount' => (float) ($row->other_amount ?? 0),
-                    'total_amount' => $total,
-                    'items' => (int) $row->items,
-                    'share_percent' => $totalAmount > 0 ? round($total / $totalAmount * 100, 1) : 0,
-                ];
+        // OPD by pttype
+        $opdPttypes = $conn->table('vn_stat as v')
+            ->leftJoin('ovst as o', 'o.vn', '=', 'v.vn')
+            ->leftJoin('pttype as pt', 'pt.pttype', '=', 'v.pttype')
+            ->whereBetween('v.vstdate', [$startDate, $endDate])
+            ->where(function ($q) {
+                $q->whereNull('o.an')->orWhere('o.an', '');
             })
-            ->values()
-            ->all();
+            ->selectRaw('
+                COALESCE(NULLIF(TRIM(v.pttype), \'\'), \'-\') as pttype_code,
+                COALESCE(pt.name, NULLIF(TRIM(v.pttype), \'\'), \'ไม่ระบุสิทธิ\') as pttype_name,
+                COUNT(DISTINCT v.vn) as opd_items,
+                SUM(COALESCE(v.income, 0)) as opd_amount,
+                SUM(COALESCE(v.paid_money, 0)) as cash_amount,
+                SUM(COALESCE(v.uc_money, 0)) as debt_amount,
+                SUM(COALESCE(v.remain_money, 0)) as unpaid_amount
+            ')
+            ->groupByRaw("COALESCE(NULLIF(TRIM(v.pttype), ''), '-')")
+            ->groupByRaw("COALESCE(pt.name, NULLIF(TRIM(v.pttype), ''), 'ไม่ระบุสิทธิ')")
+            ->get()
+            ->keyBy('pttype_code');
+
+        // IPD by pttype
+        $ipdPttypes = $conn->table('an_stat as ast')
+            ->leftJoin('pttype as pt', 'pt.pttype', '=', 'ast.pttype')
+            ->whereBetween('ast.dchdate', [$startDate, $endDate])
+            ->whereNotNull('ast.dchdate')
+            ->where('ast.dchdate', '<>', '')
+            ->where('ast.dchdate', '<>', '0000-00-00')
+            ->selectRaw('
+                COALESCE(NULLIF(TRIM(ast.pttype), \'\'), \'-\') as pttype_code,
+                COALESCE(pt.name, NULLIF(TRIM(ast.pttype), \'\'), \'ไม่ระบุสิทธิ\') as pttype_name,
+                COUNT(DISTINCT ast.an) as ipd_items,
+                SUM(COALESCE(ast.income, 0)) as ipd_amount,
+                SUM(COALESCE(ast.paid_money, 0)) as cash_amount,
+                SUM(COALESCE(ast.uc_money, 0)) as debt_amount,
+                SUM(COALESCE(ast.remain_money, 0)) as unpaid_amount
+            ')
+            ->groupByRaw("COALESCE(NULLIF(TRIM(ast.pttype), ''), '-')")
+            ->groupByRaw("COALESCE(pt.name, NULLIF(TRIM(ast.pttype), ''), 'ไม่ระบุสิทธิ')")
+            ->get()
+            ->keyBy('pttype_code');
+
+        $allCodes = $opdPttypes->keys()->merge($ipdPttypes->keys())->unique()->values();
+
+        $list = $allCodes->map(function ($code) use ($opdPttypes, $ipdPttypes, $totalAmount) {
+            $opd = $opdPttypes->get($code);
+            $ipd = $ipdPttypes->get($code);
+            $name = $opd->pttype_name ?? $ipd->pttype_name ?? 'ไม่ระบุสิทธิ';
+            $opdAmount = (float) ($opd->opd_amount ?? 0);
+            $ipdAmount = (float) ($ipd->ipd_amount ?? 0);
+            $total = $opdAmount + $ipdAmount;
+            $cash = (float) ($opd->cash_amount ?? 0) + (float) ($ipd->cash_amount ?? 0);
+            $debt = (float) ($opd->debt_amount ?? 0) + (float) ($ipd->debt_amount ?? 0);
+            $unpaid = (float) ($opd->unpaid_amount ?? 0) + (float) ($ipd->unpaid_amount ?? 0);
+            $other = max(0.0, round($total - ($cash + $debt + $unpaid), 2));
+            $items = (int) ($opd->opd_items ?? 0) + (int) ($ipd->ipd_items ?? 0);
+
+            return [
+                'pttype_code' => (string) $code,
+                'pttype_name' => (string) $name,
+                'opd_amount' => $opdAmount,
+                'ipd_amount' => $ipdAmount,
+                'cash_amount' => $cash,
+                'debt_amount' => $debt,
+                'unpaid_amount' => $unpaid,
+                'other_amount' => $other,
+                'total_amount' => $total,
+                'items' => $items,
+                'share_percent' => $totalAmount > 0 ? round($total / $totalAmount * 100, 1) : 0,
+            ];
+        })->sortByDesc('total_amount')->values()->all();
+
+        return $list;
     }
 }

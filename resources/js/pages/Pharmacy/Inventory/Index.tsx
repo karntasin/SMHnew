@@ -2,7 +2,7 @@ import { Head, Link, router, usePage } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import PharmacySubNav, { pharmacyBreadcrumbs } from '@/pages/Pharmacy/PharmacySubNav';
 import { Button } from '@/components/ui/button';
-import { ArrowRightLeft, BarChart3, Boxes, ClipboardCheck, FileText, History, PackageMinus, PackagePlus, Printer, QrCode, RefreshCw, ScanLine, Settings, TriangleAlert } from 'lucide-react';
+import { ArrowRightLeft, BarChart3, Boxes, ClipboardCheck, FileSpreadsheet, FileText, History, PackageMinus, PackagePlus, Printer, QrCode, RefreshCw, ScanLine, Settings, TriangleAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { type SharedData } from '@/types';
 import { warehouseActive, warehouseHome, warehouseSupply, wh } from '@/pages/Pharmacy/inventoryCatalog';
@@ -44,6 +44,11 @@ export default function InventoryIndex({ summary }: { summary: Summary }) {
     const flash = pageProps.flash;
     const hasChatFab = Boolean(pageProps.fshhChat?.enabled && pageProps.fshhChat.openUrl);
     const supply = warehouseSupply();
+    const roles = (pageProps.auth?.user?.roles as string[] | undefined) ?? [];
+    const isAdmin = Boolean(
+        pageProps.auth?.user?.is_admin ||
+        roles.some((r) => typeof r === 'string' && (r.toLowerCase() === 'admin' || r.toLowerCase() === 'superuser'))
+    );
 
     return (
         <AppLayout breadcrumbs={pharmacyBreadcrumbs([{ title: warehouseHome(), href: wh('index') }])}>
@@ -113,19 +118,26 @@ export default function InventoryIndex({ summary }: { summary: Summary }) {
                             <Link href={wh('counts')}><ClipboardCheck className="mr-2 h-4 w-4" />{supply ? 'ตรวจนับเวชภัณฑ์' : 'ตรวจนับยา'}</Link>
                         </Button>
                         <Button asChild variant="secondary" className="rounded-xl">
-                            <Link href={wh('sync-dispense.history')}><History className="mr-2 h-4 w-4" />ประวัติซิงก์ตัดจ่าย</Link>
+                            <Link href={wh('reports.stock-summary')}><FileSpreadsheet className="mr-2 h-4 w-4 text-teal-500" />รายงานสรุปยอดสต็อก</Link>
                         </Button>
                         <Button asChild variant="secondary" className="rounded-xl">
-                            <Link href={wh('settings')}><Settings className="mr-2 h-4 w-4" />ตั้งค่า</Link>
+                            <Link href={wh('sync-dispense.history')}><History className="mr-2 h-4 w-4" />ประวัติซิงก์ตัดจ่าย</Link>
                         </Button>
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            className="rounded-xl"
-                            onClick={() => router.post(wh('sync-dispense'))}
-                        >
-                            <RefreshCw className="mr-2 h-4 w-4" />ซิงก์ตัดจ่ายวันนี้
-                        </Button>
+                        {isAdmin && (
+                            <>
+                                <Button asChild variant="secondary" className="rounded-xl">
+                                    <Link href={wh('settings')}><Settings className="mr-2 h-4 w-4" />ตั้งค่า</Link>
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    className="rounded-xl"
+                                    onClick={() => router.post(wh('sync-dispense'))}
+                                >
+                                    <RefreshCw className="mr-2 h-4 w-4" />ซิงก์ตัดจ่ายวันนี้
+                                </Button>
+                            </>
+                        )}
                     </div>
                 </section>
 

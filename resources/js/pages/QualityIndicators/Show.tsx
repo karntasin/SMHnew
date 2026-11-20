@@ -19,7 +19,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { Plus, BarChart2, Target, Calendar, Pencil, Trash2, TrendingUp, FileDown, ClipboardCheck, Crown, Unlink } from 'lucide-react';
+import { Plus, BarChart2, Target, Calendar, Pencil, Trash2, TrendingUp, FileDown, ClipboardCheck, Crown, Unlink, RefreshCw } from 'lucide-react';
 import {
     ResponsiveContainer,
     ComposedChart,
@@ -159,6 +159,17 @@ export default function Show({
     const [isOpen, setIsOpen] = useState(false);
     const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
     const [aliasOpen, setAliasOpen] = useState(false);
+    const [syncingRcm, setSyncingRcm] = useState(false);
+
+    const handleSyncRcm = () => {
+        if (confirm('คุณต้องการซิงค์ข้อมูลสถิติการติด C จากระบบ RCM เข้าสู่ตัวชี้วัดนี้หรือไม่?')) {
+            setSyncingRcm(true);
+            router.post(route('quality-indicators.sync-rcm', indicator.id), {}, {
+                preserveScroll: true,
+                onFinish: () => setSyncingRcm(false),
+            });
+        }
+    };
 
     const series = indicator.series ?? [];
     const hasSeries = series.length > 0;
@@ -451,6 +462,18 @@ export default function Show({
                             ดาวน์โหลด PDF
                         </Button>
                     </a>
+                    {indicator.code === 'IM-11' && (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={handleSyncRcm}
+                            disabled={syncingRcm}
+                            className="rounded-xl border-blue-300 text-blue-700 hover:bg-blue-50 bg-blue-50/50"
+                        >
+                            <RefreshCw className={`mr-2 h-4 w-4 ${syncingRcm ? 'animate-spin' : ''}`} />
+                            {syncingRcm ? 'กำลังซิงค์จาก RCM...' : 'ซิงค์ข้อมูลจาก RCM'}
+                        </Button>
+                    )}
                     <Button onClick={openCreate} className="rounded-xl bg-emerald-600 hover:bg-emerald-700">
                         <Plus className="mr-2 h-4 w-4" />
                         บันทึกข้อมูล

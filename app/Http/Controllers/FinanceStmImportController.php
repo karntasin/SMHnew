@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Finance\StmImport;
+use App\Services\Finance\CgdEclaimNhsoPortalService;
 use App\Services\Finance\StmFileImportService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -15,8 +16,9 @@ class FinanceStmImportController extends Controller
         private readonly StmFileImportService $importer,
     ) {}
 
-    public function index(): Response
+    public function index(CgdEclaimNhsoPortalService $portalService): Response
     {
+        $portal = $portalService->forScheme('cgd');
         $imports = StmImport::query()
             ->with('importer:id,name')
             ->latest()
@@ -26,7 +28,51 @@ class FinanceStmImportController extends Controller
         return Inertia::render('Finance/CgdClaim/StmImport', [
             'imports' => $imports,
             'filenamePrefix' => \App\Services\Finance\CgdClaimFilenameGuard::stmPrefix(),
+            'hasTotp' => $portal->isTotpConfigured(),
+            'portalConfigured' => $portal->isConfigured(),
         ]);
+    }
+
+    public function autoFetch(Request $request, CgdEclaimNhsoPortalService $portalService)
+    {
+        try {
+            $portal = $portalService->forScheme('cgd');
+            $year = (int) ($request->input('year') ?: date('Y'));
+            $month = (int) ($request->input('month') ?: date('n'));
+            $ceYear = $year >= 2500 ? $year - 543 : $year;
+
+            if (! $portal->isConfigured()) {
+                return back()->with('error', 'ยังไม่ได้ตั้งค่า Username/Password ในไฟล์ .env ของระบบ');
+            }
+
+            if (! $portal->isAuthenticated()) {
+                if (! $portal->isTotpConfigured()) {
+                    return back()->with('error', 'กรุณาระบุ TOTP Secret Key ในหน้าตั้งค่า e-Claim ก่อนเพื่อใช้งานดึงอัตโนมัติ');
+                }
+                $loginRes = $portal->startLogin($ceYear, $month);
+                if (($loginRes['status'] ?? '') !== 'authenticated') {
+                    return back()->with('error', $loginRes['message'] ?? 'เข้าสู่ระบบ e-Claim ไม่สำเร็จ');
+                }
+            }
+
+            $result = $portal->downloadAndImportAllStmFiles(
+                $this->importer,
+                $ceYear,
+                $month,
+                'ดึงอัตโนมัติผ่านหน้าเว็บ STM Import'
+            );
+
+            $scanned = $result['scanned'];
+            $imported = $result['imported'];
+            $msg = "ดึง Statement (STM) สำเร็จ: สแกนพบ {$scanned} ไฟล์ · นำเข้าแล้ว {$imported} ไฟล์";
+            if ($result['failures'] !== []) {
+                $msg .= ' · มีข้อผิดพลาด '.count($result['failures']).' รายการ';
+            }
+
+            return back()->with('success', $msg)->with('import_failures', $result['failures']);
+        } catch (\Throwable $e) {
+            return back()->with('error', 'ดึงข้อมูล Statement (STM) ไม่สำเร็จ: '.$e->getMessage());
+        }
     }
 
     public function store(Request $request)

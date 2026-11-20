@@ -2,6 +2,7 @@
 
 namespace App\Services\Pharmacy;
 
+use App\Models\Pharmacy\PharmacyDispenseSync;
 use App\Models\Pharmacy\PharmacyItem;
 use App\Models\Pharmacy\PharmacyItemUnit;
 use App\Models\Pharmacy\PharmacyLocation;
@@ -1508,5 +1509,218 @@ class PharmacyInventoryService
         return ($flag ? (clone $query)->where($flag, true)->first() : null)
             ?? (clone $query)->where('factor_to_base', 1)->first()
             ?? $this->ensureBaseUnit($item);
+    }
+
+    /**
+     * รายงานสรุปความเคลื่อนไหวสต็อก (คลังหลัก, ยอดเบิกมาห้องยา, ยอดห้องยา, ยอด HOSxP ตัดจ่าย, ยอดตัดออกหน่วย)
+     *
+     * @return array{items:list<array>,totals:array,locations:array}
+     */
+    public function stockSummaryReport(string $startDate, string $endDate, string $catalog = 'drug', ?string $search = null): array
+    {
+        $this->ensureDefaultLocations();
+        $catalog = $this->normalizeCatalog($catalog);
+
+        $whLocation = PharmacyLocation::query()
+            ->where('catalog', $catalog)
+            ->where('type', 'warehouse')
+            ->orderBy('sort_order')
+            ->first();
+
+        $pharmLocation = PharmacyLocation::query()
+            ->where('catalog', $catalog)
+            ->where('type', 'pharmacy')
+            ->orderBy('sort_order')
+            ->first();
+
+        $whId = $whLocation?->id;
+        $pharmId = $pharmLocation?->id;
+
+        $itemsQuery = PharmacyItem::query()->ofCatalog($catalog)->where('is_active', true);
+        if ($search = trim((string) $search)) {
+            $itemsQuery->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('icode', 'like', "%{$search}%");
+            });
+        }
+        $items = $itemsQuery->orderBy('name')->get(['id', 'icode', 'name', 'strength', 'unit', 'item_type']);
+        $itemIds = $items->pluck('id')->all();
+
+        if ($itemIds === []) {
+            return [
+                'items' => [],
+                'totals' => [
+                    'items_count' => 0,
+                    'total_wh_qty' => 0,
+                    'total_transferred' => 0,
+                    'total_opd_qty' => 0,
+                    'total_hosxp_dispensed' => 0,
+                    'total_unit_issued' => 0,
+                ],
+                'locations' => [
+                    'warehouse' => $whLocation ? ['id' => $whLocation->id, 'name' => $whLocation->name, 'code' => $whLocation->code] : null,
+                    'pharmacy' => $pharmLocation ? ['id' => $pharmLocation->id, 'name' => $pharmLocation->name, 'code' => $pharmLocation->code] : null,
+                ],
+            ];
+        }
+
+        // 1. Current Balances
+        $whBalances = $whId ? PharmacyStockBalance::query()
+            ->where('location_id', $whId)
+            ->whereIn('item_id', $itemIds)
+            ->pluck('qty_on_hand', 'item_id')
+            ->all() : [];
+
+        $pharmBalances = $pharmId ? PharmacyStockBalance::query()
+            ->where('location_id', $pharmId)
+            ->whereIn('item_id', $itemIds)
+            ->pluck('qty_on_hand', 'item_id')
+            ->all() : [];
+
+        // 2. Transferred from WH to Pharmacy OR Received directly into Pharmacy
+        $transferredQuery = PharmacyStockMovement::query()
+            ->whereIn('item_id', $itemIds)
+            ->where('to_location_id', $pharmId)
+            ->where(function ($q) use ($whId) {
+                $q->where(function ($sq) use ($whId) {
+                    $sq->where('type', 'transfer_in')
+                        ->where('from_location_id', $whId);
+                })->orWhere('type', 'receive');
+            });
+        if ($startDate && $endDate && $startDate !== 'all') {
+            $transferredQuery->whereBetween(DB::raw('DATE(created_at)'), [$startDate, $endDate]);
+        }
+        $transferredMap = $pharmId ? $transferredQuery
+            ->groupBy('item_id')
+            ->select('item_id', DB::raw('SUM(qty) as total_qty'))
+            ->pluck('total_qty', 'item_id')
+            ->all() : [];
+
+        // 3. Dispensed via HOSxP (reference_type = 'hosxp_opitemrece') - Net of Rollbacks/Returns
+        $hosxpQuery = PharmacyStockMovement::query()
+            ->whereIn('item_id', $itemIds)
+            ->where('type', 'dispense')
+            ->where('from_location_id', $pharmId)
+            ->where('reference_type', 'hosxp_opitemrece');
+        if ($startDate && $endDate && $startDate !== 'all') {
+            $hosxpQuery->where(function ($q) use ($startDate, $endDate) {
+                $q->whereBetween('vstdate', [$startDate, $endDate])
+                    ->orWhere(function ($sq) use ($startDate, $endDate) {
+                        $sq->whereNull('vstdate')
+                            ->whereBetween(DB::raw('DATE(created_at)'), [$startDate, $endDate]);
+                    });
+            });
+        }
+        $hosxpDispensedMap = $pharmId ? $hosxpQuery
+            ->groupBy('item_id')
+            ->select('item_id', DB::raw('SUM(qty) as total_qty'))
+            ->pluck('total_qty', 'item_id')
+            ->all() : [];
+
+        // 3.1 Returned/Reversed HOSxP Dispenses
+        $hosxpReturnQuery = PharmacyStockMovement::query()
+            ->whereIn('item_id', $itemIds)
+            ->where('type', 'return')
+            ->where('to_location_id', $pharmId)
+            ->whereIn('reference_type', ['rollback_all_hosxp', 'rollback_hosxp']);
+        if ($startDate && $endDate && $startDate !== 'all') {
+            $hosxpReturnQuery->where(function ($q) use ($startDate, $endDate) {
+                $q->whereBetween('vstdate', [$startDate, $endDate])
+                    ->orWhere(function ($sq) use ($startDate, $endDate) {
+                        $sq->whereNull('vstdate')
+                            ->whereBetween(DB::raw('DATE(created_at)'), [$startDate, $endDate]);
+                    });
+            });
+        }
+        $hosxpReturnedMap = $pharmId ? $hosxpReturnQuery
+            ->groupBy('item_id')
+            ->select('item_id', DB::raw('SUM(qty) as total_qty'))
+            ->pluck('total_qty', 'item_id')
+            ->all() : [];
+
+        // 3.2 Active Deductions from PharmacyDispenseSync (Single Source of Truth)
+        $syncDeductedQuery = PharmacyDispenseSync::query()
+            ->where('status', 'deducted');
+        if ($startDate && $endDate && $startDate !== 'all') {
+            $syncDeductedQuery->whereBetween('vstdate', [$startDate, $endDate]);
+        }
+        $syncDeductedByIcode = $syncDeductedQuery
+            ->groupBy('icode')
+            ->select('icode', DB::raw('SUM(qty) as total_qty'))
+            ->pluck('total_qty', 'icode')
+            ->all();
+
+        // 4. Issued to Mobile Unit / Departments (type = 'dispense' and reference_type != 'hosxp_opitemrece')
+        $unitQuery = PharmacyStockMovement::query()
+            ->whereIn('item_id', $itemIds)
+            ->where('type', 'dispense')
+            ->where('from_location_id', $pharmId)
+            ->where(function ($q) {
+                $q->where('reference_type', '!=', 'hosxp_opitemrece')
+                    ->orWhereNull('reference_type');
+            });
+        if ($startDate && $endDate && $startDate !== 'all') {
+            $unitQuery->whereBetween(DB::raw('DATE(created_at)'), [$startDate, $endDate]);
+        }
+        $unitIssuedMap = $pharmId ? $unitQuery
+            ->groupBy('item_id')
+            ->select('item_id', DB::raw('SUM(qty) as total_qty'))
+            ->pluck('total_qty', 'item_id')
+            ->all() : [];
+
+        $rows = [];
+        $totalWh = 0;
+        $totalTransferred = 0;
+        $totalOpd = 0;
+        $totalHosxp = 0;
+        $totalUnit = 0;
+
+        foreach ($items as $item) {
+            $whQty = (float) ($whBalances[$item->id] ?? 0);
+            $transQty = (float) ($transferredMap[$item->id] ?? 0);
+            $opdQty = (float) ($pharmBalances[$item->id] ?? 0);
+            $movementDispense = (float) ($hosxpDispensedMap[$item->id] ?? 0);
+            $movementReturn = (float) ($hosxpReturnedMap[$item->id] ?? 0);
+            $netMovementDispense = max(0.0, $movementDispense - $movementReturn);
+            $syncDispensedQty = (float) ($syncDeductedByIcode[$item->icode] ?? 0);
+            $hosxpQty = $syncDispensedQty > 0 ? $syncDispensedQty : $netMovementDispense;
+            $unitQty = (float) ($unitIssuedMap[$item->id] ?? 0);
+
+            $totalWh += $whQty;
+            $totalTransferred += $transQty;
+            $totalOpd += $opdQty;
+            $totalHosxp += $hosxpQty;
+            $totalUnit += $unitQty;
+
+            $rows[] = [
+                'id' => $item->id,
+                'icode' => $item->icode,
+                'name' => $item->name,
+                'strength' => $item->strength,
+                'unit' => $item->unit ?: 'หน่วย',
+                'item_type' => $item->item_type,
+                'wh_qty' => $whQty,
+                'transferred_to_opd' => $transQty,
+                'opd_qty' => $opdQty,
+                'hosxp_dispensed' => $hosxpQty,
+                'unit_issued' => $unitQty,
+            ];
+        }
+
+        return [
+            'items' => $rows,
+            'totals' => [
+                'items_count' => count($rows),
+                'total_wh_qty' => round($totalWh, 2),
+                'total_transferred' => round($totalTransferred, 2),
+                'total_opd_qty' => round($totalOpd, 2),
+                'total_hosxp_dispensed' => round($totalHosxp, 2),
+                'total_unit_issued' => round($totalUnit, 2),
+            ],
+            'locations' => [
+                'warehouse' => $whLocation ? ['id' => $whLocation->id, 'name' => $whLocation->name, 'code' => $whLocation->code] : null,
+                'pharmacy' => $pharmLocation ? ['id' => $pharmLocation->id, 'name' => $pharmLocation->name, 'code' => $pharmLocation->code] : null,
+            ],
+        ];
     }
 }

@@ -490,10 +490,18 @@ class DashboardController extends Controller
             ->distinct('o.vn')
             ->count('o.vn');
 
-        // Costs total in range
-        $costTotal = (float) $conn->table('opitemrece')
-            ->whereBetween('vstdate', [$startDate, $endDate])
-            ->sum('sum_price');
+        // Costs total in range (OPD + IPD จาก vn_stat และ an_stat ที่แม่นยำและเร็วกว่า opitemrece)
+        if ($this->tableExists($conn, 'vn_stat') && $this->columnExists($conn, 'vn_stat', 'income')) {
+            $vnTotal = (float) $conn->table('vn_stat')->whereBetween('vstdate', [$startDate, $endDate])->sum('income');
+            $anTotal = ($this->tableExists($conn, 'an_stat') && $this->columnExists($conn, 'an_stat', 'income'))
+                ? (float) $conn->table('an_stat')->whereBetween('dchdate', [$startDate, $endDate])->sum('income')
+                : 0.0;
+            $costTotal = $vnTotal + $anTotal;
+        } else {
+            $costTotal = (float) $conn->table('opitemrece')
+                ->whereBetween('vstdate', [$startDate, $endDate])
+                ->sum('sum_price');
+        }
 
         $todayOps = $this->buildTodayOperations($conn, $today, $monthStart);
         $departmentVisitsThisMonth = $this->buildDepartmentVisits($conn, $monthStart, $today);
@@ -570,24 +578,91 @@ class DashboardController extends Controller
             ];
         }, $map));
 
-        // Costs per year (Last 5 years based on endDate)
-        $endYear = (int) date('Y', strtotime($endDate));
-        $startYearLast5 = $endYear - 4;
-        $costsByYearLast5 = $conn->table('opitemrece')
-            ->selectRaw('YEAR(vstdate) as y, SUM(sum_price) as total')
-            ->whereRaw('YEAR(vstdate) BETWEEN ? AND ?', [$startYearLast5, $endYear])
-            ->groupBy('y')
-            ->orderBy('y')
-            ->get();
+        // มูลค่ารักษาพยาบาลย้อนหลัง 5 ปีงบประมาณ (Fiscal Years: 1 ต.ค. - 30 ก.ย.)
+        $endDt = new \DateTime($endDate);
+        $endM = (int) $endDt->format('n');
+        $endY = (int) $endDt->format('Y');
 
-        // Costs per month in range
-        $costsByMonth = $conn->table('opitemrece')
-            ->selectRaw('YEAR(vstdate) as y, MONTH(vstdate) as m, SUM(sum_price) as total')
-            ->whereBetween('vstdate', [$startDate, $endDate])
-            ->groupBy('y', 'm')
-            ->orderBy('y')
-            ->orderBy('m')
-            ->get();
+        // หากเดือนปัจจุบันคือ ต.ค.-ธ.ค. (ไตรมาสแรกของปีงบใหม่)
+        // แสดง 5 ปีงบประมาณล่าสุดที่สมบูรณ์เต็มปี เพื่อให้เปรียบเทียบแนวโน้ม 12 เดือนเต็มได้อย่างถูกต้อง
+        $latestCompletedFy = $endM >= 10 ? $endY : $endY - 1;
+        $fiscalYears = [];
+        for ($i = 4; $i >= 0; $i--) {
+            $fiscalYears[] = $latestCompletedFy - $i;
+        }
+
+        $minFy = min($fiscalYears);
+        $maxFy = max($fiscalYears);
+        $fyStart = ($minFy - 1).'-10-01';
+        $fyEnd = $maxFy.'-09-30';
+
+        if ($this->tableExists($conn, 'vn_stat') && $this->columnExists($conn, 'vn_stat', 'income')) {
+            $vnRows = $conn->table('vn_stat')
+                ->whereBetween('vstdate', [$fyStart, $fyEnd])
+                ->selectRaw('
+                    CASE WHEN MONTH(vstdate) >= 10 THEN YEAR(vstdate) + 1 ELSE YEAR(vstdate) END as fy,
+                    SUM(income) as total_vn
+                ')
+                ->groupBy('fy')
+                ->pluck('total_vn', 'fy');
+
+            $anRows = ($this->tableExists($conn, 'an_stat') && $this->columnExists($conn, 'an_stat', 'income'))
+                ? $conn->table('an_stat')
+                    ->whereBetween('dchdate', [$fyStart, $fyEnd])
+                    ->selectRaw('
+                        CASE WHEN MONTH(dchdate) >= 10 THEN YEAR(dchdate) + 1 ELSE YEAR(dchdate) END as fy,
+                        SUM(income) as total_an
+                    ')
+                    ->groupBy('fy')
+                    ->pluck('total_an', 'fy')
+                : collect();
+
+            $costsByYearLast5 = collect($fiscalYears)->map(function ($fy) use ($vnRows, $anRows) {
+                $opd = (float) ($vnRows[$fy] ?? 0);
+                $ipd = (float) ($anRows[$fy] ?? 0);
+
+                return (object) [
+                    'y' => (int) $fy,
+                    'total' => round($opd + $ipd, 2),
+                    'opd' => round($opd, 2),
+                    'ipd' => round($ipd, 2),
+                    'label' => 'ปีงบ '.($fy + 543),
+                ];
+            });
+        } else {
+            $costsByYearLast5 = $conn->table('opitemrece')
+                ->selectRaw('
+                    CASE WHEN MONTH(vstdate) >= 10 THEN YEAR(vstdate) + 1 ELSE YEAR(vstdate) END as y,
+                    SUM(sum_price) as total
+                ')
+                ->whereBetween('vstdate', [$fyStart, $fyEnd])
+                ->groupBy('y')
+                ->orderBy('y')
+                ->get()
+                ->map(function ($r) {
+                    $r->label = 'ปีงบ '.($r->y + 543);
+                    return $r;
+                });
+        }
+
+        // Costs per month in range (ใช้ vn_stat เมื่อมีคอลัมน์พร้อมเพื่อความเร็ว)
+        if ($this->tableExists($conn, 'vn_stat') && $this->columnExists($conn, 'vn_stat', 'income')) {
+            $costsByMonth = $conn->table('vn_stat')
+                ->selectRaw('YEAR(vstdate) as y, MONTH(vstdate) as m, SUM(income) as total')
+                ->whereBetween('vstdate', [$startDate, $endDate])
+                ->groupBy('y', 'm')
+                ->orderBy('y')
+                ->orderBy('m')
+                ->get();
+        } else {
+            $costsByMonth = $conn->table('opitemrece')
+                ->selectRaw('YEAR(vstdate) as y, MONTH(vstdate) as m, SUM(sum_price) as total')
+                ->whereBetween('vstdate', [$startDate, $endDate])
+                ->groupBy('y', 'm')
+                ->orderBy('y')
+                ->orderBy('m')
+                ->get();
+        }
 
         // attach labels to monthly cost rows
         $costsByMonth = $costsByMonth->map(function($r){

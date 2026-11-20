@@ -34,6 +34,37 @@ class RedirectSubdirectoryOnDocumentRoot
             }
 
             $stripped = substr($path, strlen($configured)) ?: '/';
+
+            // หากเป็น static asset ที่มีไฟล์อยู่จริงใน public/ (เช่น /build/assets/*.js) ให้ serve ตรงทันที
+            // เพื่อป้องกันปัญหา browser ES Module dynamic import ติด 302 redirect หรือ mime-type เพี้ยนจนเกิด ERR_ABORTED
+            $staticFile = public_path(ltrim($stripped, '/'));
+            if (is_file($staticFile) && ! str_ends_with($staticFile, '.php')) {
+                $ext = strtolower(pathinfo($staticFile, PATHINFO_EXTENSION));
+                $mimeTypes = [
+                    'js' => 'application/javascript; charset=utf-8',
+                    'mjs' => 'application/javascript; charset=utf-8',
+                    'css' => 'text/css; charset=utf-8',
+                    'svg' => 'image/svg+xml',
+                    'png' => 'image/png',
+                    'jpg' => 'image/jpeg',
+                    'jpeg' => 'image/jpeg',
+                    'webp' => 'image/webp',
+                    'gif' => 'image/gif',
+                    'ico' => 'image/x-icon',
+                    'woff' => 'font/woff',
+                    'woff2' => 'font/woff2',
+                    'ttf' => 'font/ttf',
+                    'json' => 'application/json; charset=utf-8',
+                ];
+                $headers = [
+                    'Cache-Control' => 'public, max-age=31536000, immutable',
+                ];
+                if (isset($mimeTypes[$ext])) {
+                    $headers['Content-Type'] = $mimeTypes[$ext];
+                }
+
+                return response()->file($staticFile, $headers);
+            }
             $query = $request->getQueryString();
 
             return redirect()->away(

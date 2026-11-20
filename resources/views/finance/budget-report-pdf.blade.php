@@ -50,7 +50,7 @@
             &nbsp;|&nbsp; {{ $appName }}
         @endif
         <br>
-        แหล่งข้อมูล: opitemrece.sum_price ตามวัน vstdate ทั้ง OPD และ IPD · เงินสด = paidst 01/03 · ลูกหนี้สิทธิ = 02 · ค้างชำระ = 00
+        แหล่งข้อมูล: vn_stat (ผู้ป่วยนอก) และ an_stat (ผู้ป่วยใน) ตามปีงบประมาณ · สอดคล้องกับรายงานสรุปมูลค่ารักษาพยาบาล
     </div>
 
     <table class="kpi-row">

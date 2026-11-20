@@ -41,9 +41,15 @@ class CgdStmRow extends Model
         'fund_codes',
         'match_key',
         'remark',
+        'is_settled',
+        'settling_row_id',
+        'settling_rep_no',
+        'settled_at',
     ];
 
     protected $casts = [
+        'is_settled' => 'boolean',
+        'settled_at' => 'datetime',
         'visit_at' => 'datetime',
         'visit_date' => 'date',
         'discharge_at' => 'datetime',

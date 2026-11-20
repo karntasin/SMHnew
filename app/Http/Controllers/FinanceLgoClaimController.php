@@ -153,6 +153,8 @@ class FinanceLgoClaimController extends FinanceCgdClaimController
                 'latest_only_stm' => (int) ($latest?->only_stm ?? 0),
             ],
             'caseTracking' => $this->caseTrackingSummary(),
+            'smtSummary' => app(\App\Services\Finance\NhsoSmtPortalService::class)->getDatabaseSummary(),
+            'smtTransfers' => \App\Models\Finance\NhsoSmtTransfer::forSource('lgo')->latest('transfer_date')->limit(10)->get(),
         ]);
     }
 
@@ -353,8 +355,10 @@ class FinanceLgoClaimController extends FinanceCgdClaimController
             'hosxpReady' => $this->hosxp->available(),
             'batches' => $batches,
             'filenamePrefix' => ClaimScheme::repPrefix(self::SCHEME),
+            'smtSummary' => app(\App\Services\Finance\NhsoSmtPortalService::class)->getDatabaseSummary(),
             'nhsoPortal' => [
                 'configured' => $this->nhso()->isConfigured(),
+                'has_totp' => $this->nhso()->isTotpConfigured(),
                 'session' => $this->nhso()->currentSession(),
                 'validation_url' => $this->nhso()->validationUrl(),
                 'username_hint' => $this->maskUsername((string) config('cgd_eclaim.username')),
@@ -369,10 +373,45 @@ class FinanceLgoClaimController extends FinanceCgdClaimController
         $data = $request->validate([
             'year' => ['required', 'integer', 'min:2000', 'max:2100'],
             'month' => ['required', 'integer', 'min:1', 'max:12'],
+            'username' => ['nullable', 'string', 'max:64'],
+            'password' => ['nullable', 'string', 'max:128'],
+            'totp_secret' => ['nullable', 'string', 'max:128'],
+            'remember' => ['nullable', 'boolean'],
+            'auto_otp' => ['nullable', 'boolean'],
         ]);
 
+        $username = filled($data['username'] ?? null) ? trim((string) $data['username']) : null;
+        $password = filled($data['password'] ?? null) ? (string) $data['password'] : null;
+        $totpSecret = filled($data['totp_secret'] ?? null) ? trim((string) $data['totp_secret']) : null;
+        $autoOtp = $request->boolean('auto_otp', true);
+
         try {
-            $result = $this->nhso()->startLogin((int) $data['year'], (int) $data['month']);
+            $result = $this->nhso()->startLogin(
+                (int) $data['year'],
+                (int) $data['month'],
+                $username,
+                $password,
+                $totpSecret,
+                $autoOtp
+            );
+
+            if (! empty($data['remember'])) {
+                $updates = [];
+                if (! empty($password)) {
+                    $updates['CGD_ECLAIM_PASSWORD'] = $password;
+                }
+                if (! empty($username)) {
+                    $updates['CGD_ECLAIM_USERNAME'] = $username;
+                }
+                if (! empty($totpSecret)) {
+                    $updates['LGO_ECLAIM_TOTP_SECRET'] = $totpSecret;
+                    $updates['CGD_ECLAIM_TOTP_SECRET'] = $totpSecret;
+                }
+                if (! empty($updates)) {
+                    \App\Support\EnvFile::set($updates);
+                    @\Illuminate\Support\Facades\Artisan::call('config:clear');
+                }
+            }
         } catch (\Throwable $e) {
             throw ValidationException::withMessages([
                 'nhso' => $e->getMessage(),
@@ -391,10 +430,23 @@ class FinanceLgoClaimController extends FinanceCgdClaimController
 
         $data = $request->validate([
             'otp' => ['required', 'string', 'regex:/^\d{6}$/'],
+            'remember_totp' => ['nullable', 'boolean'],
         ]);
 
         try {
             $result = $this->nhso()->submitOtp($data['otp']);
+
+            if (! empty($data['remember_totp'])) {
+                $session = $this->nhso()->currentSession();
+                $secret = $session['totp_secret'] ?? null;
+                if (! empty($secret)) {
+                    \App\Support\EnvFile::set([
+                        'LGO_ECLAIM_TOTP_SECRET' => $secret,
+                        'CGD_ECLAIM_TOTP_SECRET' => $secret,
+                    ]);
+                    @\Illuminate\Support\Facades\Artisan::call('config:clear');
+                }
+            }
         } catch (\Throwable $e) {
             throw ValidationException::withMessages([
                 'otp' => $e->getMessage(),

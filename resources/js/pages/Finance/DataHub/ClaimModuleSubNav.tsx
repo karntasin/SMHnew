@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { ArrowLeftRight, FileCheck2, FileSpreadsheet, ShieldAlert, Upload } from 'lucide-react';
+import { ArrowLeftRight, Banknote, FileCheck2, FileSpreadsheet, ShieldAlert, Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -7,9 +7,10 @@ interface Props {
     importUrl: string;
     compareUrl?: string;
     stmUrl?: string;
+    smtUrl?: string;
     precheckUrl?: string;
     importLabel?: string;
-    active: 'dashboard' | 'compare' | 'import' | 'stm' | 'precheck';
+    active: 'dashboard' | 'compare' | 'import' | 'stm' | 'precheck' | 'smt';
     disabledImport?: boolean;
 }
 
@@ -18,6 +19,7 @@ export default function ClaimModuleSubNav({
     importUrl,
     compareUrl,
     stmUrl,
+    smtUrl,
     precheckUrl,
     importLabel = 'นำเข้าไฟล์',
     active,
@@ -76,39 +78,82 @@ export default function ClaimModuleSubNav({
                   },
               ]
             : []),
+        ...(smtUrl
+            ? [
+                  {
+                      key: 'smt' as const,
+                      label: 'จ่ายเงิน SMT',
+                      hint: 'สปสช. โอนเงิน',
+                      href: smtUrl,
+                      icon: Banknote,
+                      disabled: false,
+                  },
+              ]
+            : []),
     ];
 
     return (
-        <div className="mb-4 flex flex-wrap gap-2 rounded-2xl border border-slate-100 bg-white p-2">
+        <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
             {items.map((item) => {
                 const Icon = item.icon;
                 const isActive = active === item.key;
-                const className = cn(
-                    'inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition',
-                    isActive
-                        ? 'bg-emerald-600 text-white shadow-sm'
-                        : 'text-slate-600 hover:bg-emerald-50 hover:text-emerald-700',
-                    item.disabled && !isActive && 'pointer-events-none opacity-50',
-                );
 
-                if (item.disabled && !isActive) {
+                if (item.disabled) {
                     return (
-                        <span key={item.key} className={className} title="กำลังเตรียมระบบ">
-                            <Icon className="h-4 w-4" />
-                            {item.label}
-                        </span>
+                        <div
+                            key={item.key}
+                            className="flex cursor-not-allowed items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50/50 p-3.5 opacity-50"
+                        >
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
+                                <Icon className="h-5 w-5" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <p className="text-sm font-semibold text-slate-400">{item.label}</p>
+                                <p className="truncate text-xs text-slate-400">{item.hint}</p>
+                            </div>
+                        </div>
                     );
                 }
 
                 return (
-                    <Link key={item.key} href={item.href} className={className}>
-                        <Icon className="h-4 w-4" />
-                        <span>
-                            {item.label}
-                            <span className={cn('ml-1 text-[11px] font-normal', isActive ? 'text-emerald-100' : 'text-slate-400')}>
+                    <Link
+                        key={item.key}
+                        href={item.href}
+                        className={cn(
+                            'group flex items-center gap-3 rounded-2xl border p-3.5 transition-all',
+                            isActive
+                                ? 'border-emerald-500 bg-emerald-50/60 shadow-xs'
+                                : 'border-slate-200/80 bg-white hover:border-emerald-200 hover:bg-emerald-50/20'
+                        )}
+                    >
+                        <div
+                            className={cn(
+                                'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors',
+                                isActive
+                                    ? 'bg-emerald-600 text-white shadow-xs'
+                                    : 'bg-slate-100 text-slate-600 group-hover:bg-emerald-100 group-hover:text-emerald-700'
+                            )}
+                        >
+                            <Icon className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                            <p
+                                className={cn(
+                                    'text-sm font-semibold',
+                                    isActive ? 'text-emerald-900 font-bold' : 'text-slate-800 group-hover:text-emerald-800'
+                                )}
+                            >
+                                {item.label}
+                            </p>
+                            <p
+                                className={cn(
+                                    'truncate text-xs',
+                                    isActive ? 'text-emerald-600' : 'text-slate-500 group-hover:text-slate-600'
+                                )}
+                            >
                                 {item.hint}
-                            </span>
-                        </span>
+                            </p>
+                        </div>
                     </Link>
                 );
             })}

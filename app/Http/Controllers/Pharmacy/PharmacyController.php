@@ -17,6 +17,14 @@ class PharmacyController extends Controller
         return Inertia::render('Pharmacy/Index', [
             'channels' => [
                 [
+                    'key' => 'pricing',
+                    'title' => 'วิเคราะห์ราคายา ว.111',
+                    'hint' => 'คิดราคาทุน-ขาย เทียบเกณฑ์ ว.111 จำลองส่วนลด และประมาณการรายได้ปีงบ',
+                    'href' => route('pharmacy.pricing.index'),
+                    'tone' => 'cyan',
+                    'stats_label' => 'ระเบียบ ว.111 / ประมาณการรายได้',
+                ],
+                [
                     'key' => 'drug-alerts',
                     'title' => 'แจ้งเตือนการใช้ยา',
                     'hint' => 'ตรวจสั่งยาเบาหวานเทียบ eGFR ล่าสุด',

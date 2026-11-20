@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\SettingApp;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Box\Spout\Common\Entity\Style\Color;
@@ -15,9 +16,11 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class FinanceRevenueController extends Controller
 {
-    private const MAX_REPORT_DAYS = 366;
+    private const MAX_REPORT_DAYS = 1100;
+    private const CACHE_PREFIX = 'finance_revenue_';
+    private const CACHE_VERSION = 'v3';
 
-    /** @var array{has_oi_an: bool, has_iptdiag: bool, has_an_stat: bool} */
+    /** @var array{has_oi_an: bool, has_iptdiag: bool, has_an_stat: bool, has_vn_stat: bool} */
     private array $hosxpSchema = [];
 
     private function initHosxpSchema($conn): void
@@ -33,7 +36,35 @@ class FinanceRevenueController extends Controller
             'has_an_stat' => $this->tableExists($conn, 'an_stat')
                 && $this->columnExists($conn, 'an_stat', 'income')
                 && $this->columnExists($conn, 'an_stat', 'dchdate'),
+            'has_vn_stat' => $this->tableExists($conn, 'vn_stat')
+                && $this->columnExists($conn, 'vn_stat', 'income')
+                && $this->columnExists($conn, 'vn_stat', 'vstdate'),
         ];
+    }
+
+    private function usesVnStatForOpd($conn): bool
+    {
+        $this->initHosxpSchema($conn);
+
+        return $this->hosxpSchema['has_vn_stat'] ?? false;
+    }
+
+    private function getReportCacheKey(string $startDate, string $endDate, bool $pttypeOnly = false): string
+    {
+        $type = $pttypeOnly ? 'pttype' : 'full';
+
+        return self::CACHE_PREFIX.self::CACHE_VERSION."_{$type}_{$startDate}_{$endDate}";
+    }
+
+    private function getCacheTtl(string $endDate): int
+    {
+        // ข้อมูลในอดีต (ไม่รวมวันนี้หรืออนาคต) แคช 24 ชั่วโมง
+        // ข้อมูลที่รวมงวดปัจจุบัน แคช 20 นาที
+        if ($endDate < date('Y-m-d')) {
+            return 86400;
+        }
+
+        return 1200;
     }
 
     private function opitemreceHasAn($conn): bool
@@ -106,7 +137,7 @@ class FinanceRevenueController extends Controller
         $days = (int) floor(($endTs - $startTs) / 86400) + 1;
         if ($days > self::MAX_REPORT_DAYS) {
             throw new \InvalidArgumentException(
-                'ช่วงวันที่ยาวเกินไป กรุณาเลือกไม่เกิน '.self::MAX_REPORT_DAYS.' วัน (ประมาณ 12 เดือน)'
+                'ช่วงวันที่ยาวเกินไป กรุณาเลือกไม่เกิน '.self::MAX_REPORT_DAYS.' วัน (ประมาณ 3 ปี)'
             );
         }
     }
@@ -391,7 +422,26 @@ class FinanceRevenueController extends Controller
 
         try {
             $this->extendExecutionTime();
-            $data = $this->buildReport($startDate, $endDate);
+            $forceRefresh = $request->boolean('refresh');
+            $cacheKey = $this->getReportCacheKey($startDate, $endDate, false);
+
+            if ($forceRefresh) {
+                Cache::forget($cacheKey);
+                Cache::forget($this->getReportCacheKey($startDate, $endDate, true));
+            }
+
+            $cacheTtl = $this->getCacheTtl($endDate);
+            $cached = Cache::get($cacheKey);
+
+            if ($cached !== null && ! $forceRefresh) {
+                $data = $cached;
+                $data['is_cached'] = true;
+            } else {
+                $data = $this->buildReport($startDate, $endDate);
+                $data['cached_at'] = now()->timezone('Asia/Bangkok')->format('d/m/Y H:i:s');
+                $data['is_cached'] = false;
+                Cache::put($cacheKey, $data, $cacheTtl);
+            }
 
             return Inertia::render('Finance/RevenueDashboard', [
                 'filter' => $filter,
@@ -446,7 +496,12 @@ class FinanceRevenueController extends Controller
                     return;
                 }
 
-                $data = $this->buildReport($startDate, $endDate);
+                $cacheKey = $this->getReportCacheKey($startDate, $endDate, false);
+                $data = Cache::get($cacheKey);
+                if (! $data) {
+                    $data = $this->buildReport($startDate, $endDate);
+                    Cache::put($cacheKey, $data, $this->getCacheTtl($endDate));
+                }
                 // Sheet 1: Summary
                 $writer->getCurrentSheet()->setName('Summary');
                 $summary = $data['summary'] ?? null;
@@ -609,7 +664,20 @@ class FinanceRevenueController extends Controller
                     return;
                 }
 
-                $data = $this->buildPttypeReport($startDate, $endDate);
+                $cacheKey = $this->getReportCacheKey($startDate, $endDate, true);
+                $data = Cache::get($cacheKey);
+                if (! $data) {
+                    $fullCached = Cache::get($this->getReportCacheKey($startDate, $endDate, false));
+                    if ($fullCached && isset($fullCached['summary'], $fullCached['by_pttype'])) {
+                        $data = [
+                            'summary' => $fullCached['summary'],
+                            'by_pttype' => $fullCached['by_pttype'],
+                        ];
+                    } else {
+                        $data = $this->buildPttypeReport($startDate, $endDate);
+                    }
+                    Cache::put($cacheKey, $data, $this->getCacheTtl($endDate));
+                }
                 $this->writePttypeDetailExcelSheet($writer, $data, $startDate, $endDate);
             } catch (\Throwable $e) {
                 $writer->addRow(WriterEntityFactory::createRowFromArray(['Error', $e->getMessage()]));
@@ -762,9 +830,24 @@ class FinanceRevenueController extends Controller
 
         try {
             $this->extendExecutionTime();
-            $data = $pttypeOnly
-                ? $this->buildPttypeReport($startDate, $endDate)
-                : $this->buildReport($startDate, $endDate);
+            $cacheKey = $this->getReportCacheKey($startDate, $endDate, $pttypeOnly);
+            $data = Cache::get($cacheKey);
+            if (! $data) {
+                if ($pttypeOnly) {
+                    $fullCached = Cache::get($this->getReportCacheKey($startDate, $endDate, false));
+                    if ($fullCached && isset($fullCached['summary'], $fullCached['by_pttype'])) {
+                        $data = [
+                            'summary' => $fullCached['summary'],
+                            'by_pttype' => $fullCached['by_pttype'],
+                        ];
+                    } else {
+                        $data = $this->buildPttypeReport($startDate, $endDate);
+                    }
+                } else {
+                    $data = $this->buildReport($startDate, $endDate);
+                }
+                Cache::put($cacheKey, $data, $this->getCacheTtl($endDate));
+            }
             $setting = SettingApp::first();
             $appName = $setting?->nama_app ?? config('app.name');
 
@@ -956,76 +1039,12 @@ class FinanceRevenueController extends Controller
     {
         $conn = DB::connection('hosxp');
         $this->initHosxpSchema($conn);
-        $ipdCond = $this->ipdConditionSqlForOpitemrece($conn);
-        $opdCond = $this->opdConditionSql($conn);
-        $ipdVisitKey = $this->ipdVisitKeySql($conn);
-        $pttypeCode = $this->pttypeCodeSql();
-        $pttypeName = $this->pttypeNameSql();
 
-        $base = $this->baseQuery($conn, $startDate, $endDate, includeDepartmentJoins: false);
-        $summary = $this->computeSummary($conn, $base, $startDate, $endDate, $opdCond, $ipdCond, $ipdVisitKey);
-        $byPttype = $this->computeByPttype($conn, $base, $summary, $startDate, $endDate, $opdCond, $ipdCond, $ipdVisitKey, $pttypeCode, $pttypeName);
+        [$summary, $byPttype] = $this->computeByPttypeAndSummary($conn, $startDate, $endDate);
 
         return [
             'summary' => $summary,
             'by_pttype' => $byPttype,
-        ];
-    }
-
-    /**
-     * @param  \Illuminate\Database\Query\Builder  $base
-     * @return array<string, mixed>
-     */
-    private function computeSummary(
-        $conn,
-        $base,
-        string $startDate,
-        string $endDate,
-        string $opdCond,
-        string $ipdCond,
-        string $ipdVisitKey,
-    ): array {
-        $summaryRow = (clone $base)
-            ->selectRaw("SUM(CASE WHEN {$opdCond} THEN oi.sum_price ELSE 0 END) as opd_amount")
-            ->selectRaw("COUNT(DISTINCT CASE WHEN {$opdCond} THEN oi.vn END) as opd_visits")
-            ->selectRaw("COUNT(CASE WHEN {$opdCond} THEN 1 END) as opd_items")
-            ->first();
-
-        $opdAmount = (float) ($summaryRow->opd_amount ?? 0);
-        $opdVisits = (int) ($summaryRow->opd_visits ?? 0);
-        $opdItems = (int) ($summaryRow->opd_items ?? 0);
-
-        if ($this->usesAnStatForIpd($conn)) {
-            $ipdRow = $this->ipdAnStatQuery($conn, $startDate, $endDate)
-                ->selectRaw('SUM(ast.income) as ipd_amount')
-                ->selectRaw('COUNT(DISTINCT ast.an) as ipd_visits')
-                ->selectRaw('COUNT(*) as ipd_items')
-                ->first();
-            $ipdAmount = (float) ($ipdRow->ipd_amount ?? 0);
-            $ipdVisits = (int) ($ipdRow->ipd_visits ?? 0);
-            $ipdItems = (int) ($ipdRow->ipd_items ?? 0);
-        } else {
-            $ipdRow = (clone $base)
-                ->selectRaw("SUM(CASE WHEN {$ipdCond} THEN oi.sum_price ELSE 0 END) as ipd_amount")
-                ->selectRaw("COUNT(DISTINCT CASE WHEN {$ipdCond} THEN {$ipdVisitKey} END) as ipd_visits")
-                ->selectRaw("COUNT(CASE WHEN {$ipdCond} THEN 1 END) as ipd_items")
-                ->first();
-            $ipdAmount = (float) ($ipdRow->ipd_amount ?? 0);
-            $ipdVisits = (int) ($ipdRow->ipd_visits ?? 0);
-            $ipdItems = (int) ($ipdRow->ipd_items ?? 0);
-        }
-
-        $totalAmount = $opdAmount + $ipdAmount;
-
-        return [
-            'total_amount' => $totalAmount,
-            'opd_amount' => $opdAmount,
-            'ipd_amount' => $ipdAmount,
-            'opd_visits' => $opdVisits,
-            'ipd_visits' => $ipdVisits,
-            'total_items' => $opdItems + $ipdItems,
-            'opd_share' => $totalAmount > 0 ? round($opdAmount / $totalAmount * 100, 1) : 0,
-            'ipd_share' => $totalAmount > 0 ? round($ipdAmount / $totalAmount * 100, 1) : 0,
         ];
     }
 
@@ -1046,175 +1065,231 @@ class FinanceRevenueController extends Controller
     }
 
     /**
-     * @param  \Illuminate\Database\Query\Builder  $base
-     * @param  array<string, mixed>  $summary
-     * @return list<array<string, mixed>>
+     * คำนวณสรุปรายได้ตามสิทธิ์ (by_pttype) พร้อมคำนวณสรุปรวม (summary) ในรอบเดียว
+     *
+     * @return array{0: array<string, mixed>, 1: list<array<string, mixed>>}
      */
-    private function computeByPttype(
-        $conn,
-        $base,
-        array $summary,
-        string $startDate,
-        string $endDate,
-        string $opdCond,
-        string $ipdCond,
-        string $ipdVisitKey,
-        string $pttypeCode,
-        string $pttypeName,
-    ): array {
-        if (! $this->usesAnStatForIpd($conn)) {
-            $byPttypeRaw = (clone $base)
-                ->selectRaw("{$pttypeCode} as pttype_code")
-                ->selectRaw("{$pttypeName} as pttype_name")
-                ->selectRaw("SUM(CASE WHEN {$opdCond} THEN oi.sum_price ELSE 0 END) as opd_amount")
-                ->selectRaw("SUM(CASE WHEN {$ipdCond} THEN oi.sum_price ELSE 0 END) as ipd_amount")
-                ->selectRaw('SUM(oi.sum_price) as total_amount')
-                ->selectRaw("COUNT(DISTINCT CASE WHEN {$opdCond} THEN oi.vn END) as opd_visits")
-                ->selectRaw("COUNT(DISTINCT CASE WHEN {$ipdCond} THEN {$ipdVisitKey} END) as ipd_visits")
-                ->selectRaw('COUNT(*) as items')
-                ->groupByRaw($pttypeCode)
-                ->groupByRaw($pttypeName)
-                ->orderByDesc('total_amount')
-                ->get();
-
-            return $byPttypeRaw->map(function ($row) use ($summary) {
-                return [
-                    'pttype_code' => $row->pttype_code,
-                    'pttype_name' => $row->pttype_name,
-                    'opd_amount' => (float) $row->opd_amount,
-                    'ipd_amount' => (float) $row->ipd_amount,
-                    'opd_visits' => (int) $row->opd_visits,
-                    'ipd_visits' => (int) $row->ipd_visits,
-                    'total_amount' => (float) $row->total_amount,
-                    'items' => (int) $row->items,
-                    'share_percent' => $summary['total_amount'] > 0
-                        ? round((float) $row->total_amount / $summary['total_amount'] * 100, 1)
-                        : 0,
-                ];
-            })->values()->all();
+    private function computeByPttypeAndSummary($conn, string $startDate, string $endDate): array
+    {
+        // 1. OPD rows: ใช้ vn_stat เมื่อมีคอลัมน์พร้อม (เร็วขึ้น 30-50 เท่า) หรือ fallback ไป opitemrece
+        if ($this->usesVnStatForOpd($conn)) {
+            $opdRows = $conn->table('vn_stat as v')
+                ->leftJoin('ovst as o', 'o.vn', '=', 'v.vn')
+                ->leftJoin('pttype as pt', 'pt.pttype', '=', 'v.pttype')
+                ->whereBetween('v.vstdate', [$startDate, $endDate])
+                ->where(function ($q) {
+                    $q->whereNull('o.an')->orWhere('o.an', '');
+                })
+                ->selectRaw("COALESCE(NULLIF(TRIM(v.pttype), ''), '-') as pttype_code")
+                ->selectRaw("COALESCE(pt.name, NULLIF(TRIM(v.pttype), ''), 'ไม่ระบุสิทธิ') as pttype_name")
+                ->selectRaw('SUM(v.income) as opd_amount')
+                ->selectRaw('COUNT(DISTINCT v.vn) as opd_visits')
+                ->selectRaw('COUNT(*) as opd_items')
+                ->groupByRaw("COALESCE(NULLIF(TRIM(v.pttype), ''), '-')")
+                ->groupByRaw("COALESCE(pt.name, NULLIF(TRIM(v.pttype), ''), 'ไม่ระบุสิทธิ')")
+                ->get()
+                ->keyBy('pttype_code');
+        } else {
+            $opdRows = $conn->table('opitemrece as oi')
+                ->join('ovst as o', 'o.vn', '=', 'oi.vn')
+                ->leftJoin('pttype as pt', 'pt.pttype', '=', 'o.pttype')
+                ->whereBetween('oi.vstdate', [$startDate, $endDate])
+                ->where(function ($q) {
+                    $q->whereNull('oi.an')->orWhere('oi.an', '');
+                })
+                ->where(function ($q) {
+                    $q->whereNull('o.an')->orWhere('o.an', '');
+                })
+                ->selectRaw("COALESCE(NULLIF(TRIM(o.pttype), ''), '-') as pttype_code")
+                ->selectRaw("COALESCE(pt.name, NULLIF(TRIM(o.pttype), ''), 'ไม่ระบุสิทธิ') as pttype_name")
+                ->selectRaw('SUM(oi.sum_price) as opd_amount')
+                ->selectRaw('COUNT(DISTINCT oi.vn) as opd_visits')
+                ->selectRaw('COUNT(*) as opd_items')
+                ->groupByRaw("COALESCE(NULLIF(TRIM(o.pttype), ''), '-')")
+                ->groupByRaw("COALESCE(pt.name, NULLIF(TRIM(o.pttype), ''), 'ไม่ระบุสิทธิ')")
+                ->get()
+                ->keyBy('pttype_code');
         }
 
-        $opdRows = (clone $base)
-            ->selectRaw("{$pttypeCode} as pttype_code")
-            ->selectRaw("{$pttypeName} as pttype_name")
-            ->selectRaw("SUM(CASE WHEN {$opdCond} THEN oi.sum_price ELSE 0 END) as opd_amount")
-            ->selectRaw("COUNT(DISTINCT CASE WHEN {$opdCond} THEN oi.vn END) as opd_visits")
-            ->selectRaw("COUNT(CASE WHEN {$opdCond} THEN 1 END) as opd_items")
-            ->groupByRaw($pttypeCode)
-            ->groupByRaw($pttypeName)
-            ->get()
-            ->keyBy('pttype_code');
+        // 2. IPD rows: ใช้ an_stat เมื่อพร้อม
+        if ($this->usesAnStatForIpd($conn)) {
+            $ipdRows = $this->ipdAnStatQuery($conn, $startDate, $endDate)
+                ->selectRaw("COALESCE(NULLIF(ast.pttype, ''), '-') as pttype_code")
+                ->selectRaw("COALESCE(pt.name, NULLIF(ast.pttype, ''), 'ไม่ระบุสิทธิ') as pttype_name")
+                ->selectRaw('SUM(ast.income) as ipd_amount')
+                ->selectRaw('COUNT(DISTINCT ast.an) as ipd_visits')
+                ->selectRaw('COUNT(*) as ipd_items')
+                ->groupByRaw("COALESCE(NULLIF(ast.pttype, ''), '-')")
+                ->groupByRaw("COALESCE(pt.name, NULLIF(ast.pttype, ''), 'ไม่ระบุสิทธิ')")
+                ->get()
+                ->keyBy('pttype_code');
+        } else {
+            $ipdCond = $this->ipdConditionSql($conn);
+            $ipdVisitKey = $this->ipdVisitKeySql($conn);
+            $pttypeCode = $this->pttypeCodeSql();
+            $pttypeName = $this->pttypeNameSql();
+            $base = $this->baseQuery($conn, $startDate, $endDate, false);
 
-        $ipdRows = $this->ipdAnStatQuery($conn, $startDate, $endDate)
-            ->selectRaw("COALESCE(NULLIF(ast.pttype, ''), '-') as pttype_code")
-            ->selectRaw("COALESCE(pt.name, NULLIF(ast.pttype, ''), 'ไม่ระบุสิทธิ') as pttype_name")
-            ->selectRaw('SUM(ast.income) as ipd_amount')
-            ->selectRaw('COUNT(DISTINCT ast.an) as ipd_visits')
-            ->selectRaw('COUNT(*) as ipd_items')
-            ->groupByRaw("COALESCE(NULLIF(ast.pttype, ''), '-')")
-            ->groupByRaw("COALESCE(pt.name, NULLIF(ast.pttype, ''), 'ไม่ระบุสิทธิ')")
-            ->get()
-            ->keyBy('pttype_code');
+            $ipdRows = (clone $base)
+                ->whereRaw($ipdCond)
+                ->selectRaw("{$pttypeCode} as pttype_code")
+                ->selectRaw("{$pttypeName} as pttype_name")
+                ->selectRaw('SUM(oi.sum_price) as ipd_amount')
+                ->selectRaw("COUNT(DISTINCT {$ipdVisitKey}) as ipd_visits")
+                ->selectRaw('COUNT(*) as ipd_items')
+                ->groupByRaw($pttypeCode)
+                ->groupByRaw($pttypeName)
+                ->get()
+                ->keyBy('pttype_code');
+        }
 
-        return $this->mergeKeyedRows($opdRows, $ipdRows, function ($code, $opd, $ipd) use ($summary) {
+        // 3. รวมยอด OPD + IPD และสรุปตัวเลขภาพรวม
+        $keys = $opdRows->keys()->merge($ipdRows->keys())->unique();
+        $mergedList = [];
+        $totalOpd = 0.0;
+        $totalIpd = 0.0;
+        $totalOpdVisits = 0;
+        $totalIpdVisits = 0;
+        $totalItems = 0;
+
+        foreach ($keys as $code) {
+            $opd = $opdRows->get($code);
+            $ipd = $ipdRows->get($code);
+
             $opdAmount = (float) ($opd->opd_amount ?? 0);
             $ipdAmount = (float) ($ipd->ipd_amount ?? 0);
+            $opdVisits = (int) ($opd->opd_visits ?? 0);
+            $ipdVisits = (int) ($ipd->ipd_visits ?? 0);
+            $items = (int) (($opd->opd_items ?? 0) + ($ipd->ipd_items ?? 0));
             $total = $opdAmount + $ipdAmount;
 
-            return [
+            $totalOpd += $opdAmount;
+            $totalIpd += $ipdAmount;
+            $totalOpdVisits += $opdVisits;
+            $totalIpdVisits += $ipdVisits;
+            $totalItems += $items;
+
+            $mergedList[] = [
                 'pttype_code' => $code,
                 'pttype_name' => $ipd->pttype_name ?? $opd->pttype_name ?? $code,
                 'opd_amount' => $opdAmount,
                 'ipd_amount' => $ipdAmount,
-                'opd_visits' => (int) ($opd->opd_visits ?? 0),
-                'ipd_visits' => (int) ($ipd->ipd_visits ?? 0),
+                'opd_visits' => $opdVisits,
+                'ipd_visits' => $ipdVisits,
                 'total_amount' => $total,
-                'items' => (int) (($opd->opd_items ?? 0) + ($ipd->ipd_items ?? 0)),
-                'share_percent' => $summary['total_amount'] > 0
-                    ? round($total / $summary['total_amount'] * 100, 1)
-                    : 0,
+                'items' => $items,
+                'share_percent' => 0.0,
             ];
-        });
+        }
+
+        $totalAll = $totalOpd + $totalIpd;
+
+        usort($mergedList, fn ($a, $b) => $b['total_amount'] <=> $a['total_amount']);
+
+        foreach ($mergedList as &$row) {
+            $row['share_percent'] = $totalAll > 0
+                ? round($row['total_amount'] / $totalAll * 100, 1)
+                : 0.0;
+        }
+        unset($row);
+
+        $summary = [
+            'total_amount' => $totalAll,
+            'opd_amount' => $totalOpd,
+            'ipd_amount' => $totalIpd,
+            'opd_visits' => $totalOpdVisits,
+            'ipd_visits' => $totalIpdVisits,
+            'total_items' => $totalItems,
+            'opd_share' => $totalAll > 0 ? round($totalOpd / $totalAll * 100, 1) : 0.0,
+            'ipd_share' => $totalAll > 0 ? round($totalIpd / $totalAll * 100, 1) : 0.0,
+        ];
+
+        return [$summary, $mergedList];
     }
 
     /**
-     * @param  \Illuminate\Database\Query\Builder  $base
      * @param  array<string, mixed>  $summary
      * @return list<array<string, mixed>>
      */
     private function computeByDepartment(
         $conn,
-        $base,
         array $summary,
         string $startDate,
         string $endDate,
-        string $opdCond,
-        string $ipdCond,
-        string $ipdVisitKey,
-        string $deptCode,
-        string $deptName,
     ): array {
-        if (! $this->usesAnStatForIpd($conn)) {
-            $byDepartmentRaw = (clone $base)
-                ->selectRaw("{$deptCode} as department_code")
-                ->selectRaw("{$deptName} as department_name")
-                ->selectRaw("SUM(CASE WHEN {$opdCond} THEN oi.sum_price ELSE 0 END) as opd_amount")
-                ->selectRaw("SUM(CASE WHEN {$ipdCond} THEN oi.sum_price ELSE 0 END) as ipd_amount")
-                ->selectRaw('SUM(oi.sum_price) as total_amount')
-                ->selectRaw("COUNT(DISTINCT CASE WHEN {$opdCond} THEN oi.vn END) as opd_visits")
-                ->selectRaw("COUNT(DISTINCT CASE WHEN {$ipdCond} THEN {$ipdVisitKey} END) as ipd_visits")
-                ->selectRaw('COUNT(*) as items')
-                ->groupByRaw($deptCode)
-                ->groupByRaw($deptName)
-                ->orderByDesc('total_amount')
-                ->get();
+        $opdDeptCode = "CONCAT('D:', COALESCE(NULLIF(TRIM(o.main_dep), ''), '-'))";
+        $opdDeptName = "COALESCE(ksk.department, NULLIF(TRIM(o.main_dep), ''), 'ไม่ระบุแผนก')";
 
-            return $byDepartmentRaw->map(function ($row) use ($summary) {
-                $isWard = str_starts_with((string) $row->department_code, 'W:');
-
-                return [
-                    'department_code' => $row->department_code,
-                    'department_name' => $row->department_name,
-                    'department_type' => $isWard ? 'ipd' : 'opd',
-                    'department_type_label' => $isWard ? 'ผู้ป่วยใน (หอ)' : 'ผู้ป่วยนอก (แผนก)',
-                    'opd_amount' => (float) $row->opd_amount,
-                    'ipd_amount' => (float) $row->ipd_amount,
-                    'opd_visits' => (int) $row->opd_visits,
-                    'ipd_visits' => (int) $row->ipd_visits,
-                    'total_amount' => (float) $row->total_amount,
-                    'items' => (int) $row->items,
-                    'share_percent' => $summary['total_amount'] > 0
-                        ? round((float) $row->total_amount / $summary['total_amount'] * 100, 1)
-                        : 0,
-                ];
-            })->values()->all();
+        if ($this->usesVnStatForOpd($conn)) {
+            $opdRows = $conn->table('vn_stat as v')
+                ->join('ovst as o', 'o.vn', '=', 'v.vn')
+                ->leftJoin('kskdepartment as ksk', 'ksk.depcode', '=', 'o.main_dep')
+                ->whereBetween('v.vstdate', [$startDate, $endDate])
+                ->where(function ($q) {
+                    $q->whereNull('o.an')->orWhere('o.an', '');
+                })
+                ->selectRaw("{$opdDeptCode} as department_code")
+                ->selectRaw("{$opdDeptName} as department_name")
+                ->selectRaw('SUM(v.income) as opd_amount')
+                ->selectRaw('COUNT(DISTINCT v.vn) as opd_visits')
+                ->selectRaw('COUNT(*) as opd_items')
+                ->groupByRaw($opdDeptCode)
+                ->groupByRaw($opdDeptName)
+                ->get()
+                ->keyBy('department_code');
+        } else {
+            $opdRows = $conn->table('opitemrece as oi')
+                ->join('ovst as o', 'o.vn', '=', 'oi.vn')
+                ->leftJoin('kskdepartment as ksk', 'ksk.depcode', '=', 'o.main_dep')
+                ->whereBetween('oi.vstdate', [$startDate, $endDate])
+                ->where(function ($q) {
+                    $q->whereNull('oi.an')->orWhere('oi.an', '');
+                })
+                ->where(function ($q) {
+                    $q->whereNull('o.an')->orWhere('o.an', '');
+                })
+                ->selectRaw("{$opdDeptCode} as department_code")
+                ->selectRaw("{$opdDeptName} as department_name")
+                ->selectRaw('SUM(oi.sum_price) as opd_amount')
+                ->selectRaw('COUNT(DISTINCT oi.vn) as opd_visits')
+                ->selectRaw('COUNT(*) as opd_items')
+                ->groupByRaw($opdDeptCode)
+                ->groupByRaw($opdDeptName)
+                ->get()
+                ->keyBy('department_code');
         }
 
-        $opdDeptCode = "CONCAT('D:', COALESCE(NULLIF(o.main_dep, ''), '-'))";
-        $opdDeptName = "COALESCE(ksk.department, NULLIF(o.main_dep, ''), 'ไม่ระบุแผนก')";
+        if ($this->usesAnStatForIpd($conn)) {
+            $ipdRows = $this->ipdAnStatQuery($conn, $startDate, $endDate)
+                ->leftJoin('ward as w', 'w.ward', '=', 'i.ward')
+                ->selectRaw("CONCAT('W:', COALESCE(NULLIF(i.ward, ''), '-')) as department_code")
+                ->selectRaw("COALESCE(w.name, NULLIF(i.ward, ''), 'ไม่ระบุหอผู้ป่วย') as department_name")
+                ->selectRaw('SUM(ast.income) as ipd_amount')
+                ->selectRaw('COUNT(DISTINCT ast.an) as ipd_visits')
+                ->selectRaw('COUNT(*) as ipd_items')
+                ->groupByRaw("CONCAT('W:', COALESCE(NULLIF(i.ward, ''), '-'))")
+                ->groupByRaw("COALESCE(w.name, NULLIF(i.ward, ''), 'ไม่ระบุหอผู้ป่วย')")
+                ->get()
+                ->keyBy('department_code');
+        } else {
+            $ipdCond = $this->ipdConditionSql($conn);
+            $ipdVisitKey = $this->ipdVisitKeySql($conn);
+            $deptCode = "CONCAT('W:', COALESCE(NULLIF(i.ward, ''), '-'))";
+            $deptName = "COALESCE(w.name, NULLIF(i.ward, ''), 'ไม่ระบุหอผู้ป่วย')";
+            $base = $this->baseQuery($conn, $startDate, $endDate, true);
 
-        $opdRows = (clone $base)
-            ->selectRaw("{$opdDeptCode} as department_code")
-            ->selectRaw("{$opdDeptName} as department_name")
-            ->selectRaw("SUM(CASE WHEN {$opdCond} THEN oi.sum_price ELSE 0 END) as opd_amount")
-            ->selectRaw("COUNT(DISTINCT CASE WHEN {$opdCond} THEN oi.vn END) as opd_visits")
-            ->selectRaw("COUNT(CASE WHEN {$opdCond} THEN 1 END) as opd_items")
-            ->groupByRaw($opdDeptCode)
-            ->groupByRaw($opdDeptName)
-            ->get()
-            ->keyBy('department_code');
-
-        $ipdRows = $this->ipdAnStatQuery($conn, $startDate, $endDate)
-            ->leftJoin('ward as w', 'w.ward', '=', 'i.ward')
-            ->selectRaw("CONCAT('W:', COALESCE(NULLIF(i.ward, ''), '-')) as department_code")
-            ->selectRaw("COALESCE(w.name, NULLIF(i.ward, ''), 'ไม่ระบุหอผู้ป่วย') as department_name")
-            ->selectRaw('SUM(ast.income) as ipd_amount')
-            ->selectRaw('COUNT(DISTINCT ast.an) as ipd_visits')
-            ->selectRaw('COUNT(*) as ipd_items')
-            ->groupByRaw("CONCAT('W:', COALESCE(NULLIF(i.ward, ''), '-'))")
-            ->groupByRaw("COALESCE(w.name, NULLIF(i.ward, ''), 'ไม่ระบุหอผู้ป่วย')")
-            ->get()
-            ->keyBy('department_code');
+            $ipdRows = (clone $base)
+                ->whereRaw($ipdCond)
+                ->selectRaw("{$deptCode} as department_code")
+                ->selectRaw("{$deptName} as department_name")
+                ->selectRaw('SUM(oi.sum_price) as ipd_amount')
+                ->selectRaw("COUNT(DISTINCT {$ipdVisitKey}) as ipd_visits")
+                ->selectRaw('COUNT(*) as ipd_items')
+                ->groupByRaw($deptCode)
+                ->groupByRaw($deptName)
+                ->get()
+                ->keyBy('department_code');
+        }
 
         return $this->mergeKeyedRows($opdRows, $ipdRows, function ($code, $opd, $ipd) use ($summary) {
             $isWard = str_starts_with((string) $code, 'W:');
@@ -1233,7 +1308,7 @@ class FinanceRevenueController extends Controller
                 'ipd_visits' => (int) ($ipd->ipd_visits ?? 0),
                 'total_amount' => $total,
                 'items' => (int) (($opd->opd_items ?? 0) + ($ipd->ipd_items ?? 0)),
-                'share_percent' => $summary['total_amount'] > 0
+                'share_percent' => ($summary['total_amount'] ?? 0) > 0
                     ? round($total / $summary['total_amount'] * 100, 1)
                     : 0,
             ];
@@ -1241,26 +1316,45 @@ class FinanceRevenueController extends Controller
     }
 
     /**
-     * @param  \Illuminate\Database\Query\Builder  $base
      * @return list<array<string, mixed>>
      */
     private function computeMonthlyTrend(
         $conn,
-        $base,
         string $startDate,
         string $endDate,
-        string $opdCond,
-        string $ipdCond,
     ): array {
         $thaiMonths = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
 
-        $opdMonthly = (clone $base)
-            ->selectRaw('YEAR(oi.vstdate) as y')
-            ->selectRaw('MONTH(oi.vstdate) as m')
-            ->selectRaw("SUM(CASE WHEN {$opdCond} THEN oi.sum_price ELSE 0 END) as opd")
-            ->groupByRaw('YEAR(oi.vstdate), MONTH(oi.vstdate)')
-            ->get()
-            ->keyBy(fn ($row) => sprintf('%04d-%02d', $row->y, $row->m));
+        if ($this->usesVnStatForOpd($conn)) {
+            $opdMonthly = $conn->table('vn_stat as v')
+                ->leftJoin('ovst as o', 'o.vn', '=', 'v.vn')
+                ->whereBetween('v.vstdate', [$startDate, $endDate])
+                ->where(function ($q) {
+                    $q->whereNull('o.an')->orWhere('o.an', '');
+                })
+                ->selectRaw('YEAR(v.vstdate) as y')
+                ->selectRaw('MONTH(v.vstdate) as m')
+                ->selectRaw('SUM(v.income) as opd')
+                ->groupByRaw('YEAR(v.vstdate), MONTH(v.vstdate)')
+                ->get()
+                ->keyBy(fn ($row) => sprintf('%04d-%02d', $row->y, $row->m));
+        } else {
+            $opdMonthly = $conn->table('opitemrece as oi')
+                ->leftJoin('ovst as o', 'o.vn', '=', 'oi.vn')
+                ->whereBetween('oi.vstdate', [$startDate, $endDate])
+                ->where(function ($q) {
+                    $q->whereNull('oi.an')->orWhere('oi.an', '');
+                })
+                ->where(function ($q) {
+                    $q->whereNull('o.an')->orWhere('o.an', '');
+                })
+                ->selectRaw('YEAR(oi.vstdate) as y')
+                ->selectRaw('MONTH(oi.vstdate) as m')
+                ->selectRaw('SUM(oi.sum_price) as opd')
+                ->groupByRaw('YEAR(oi.vstdate), MONTH(oi.vstdate)')
+                ->get()
+                ->keyBy(fn ($row) => sprintf('%04d-%02d', $row->y, $row->m));
+        }
 
         if ($this->usesAnStatForIpd($conn)) {
             $ipdMonthly = $this->ipdAnStatQuery($conn, $startDate, $endDate)
@@ -1271,10 +1365,14 @@ class FinanceRevenueController extends Controller
                 ->get()
                 ->keyBy(fn ($row) => sprintf('%04d-%02d', $row->y, $row->m));
         } else {
+            $ipdCond = $this->ipdConditionSql($conn);
+            $base = $this->baseQuery($conn, $startDate, $endDate, false);
+
             $ipdMonthly = (clone $base)
+                ->whereRaw($ipdCond)
                 ->selectRaw('YEAR(oi.vstdate) as y')
                 ->selectRaw('MONTH(oi.vstdate) as m')
-                ->selectRaw("SUM(CASE WHEN {$ipdCond} THEN oi.sum_price ELSE 0 END) as ipd")
+                ->selectRaw('SUM(oi.sum_price) as ipd')
                 ->groupByRaw('YEAR(oi.vstdate), MONTH(oi.vstdate)')
                 ->get()
                 ->keyBy(fn ($row) => sprintf('%04d-%02d', $row->y, $row->m));
@@ -1305,15 +1403,50 @@ class FinanceRevenueController extends Controller
         $conn,
         string $startDate,
         string $endDate,
-        string $opdCond,
-        string $ipdCond,
         float $totalAmount,
     ): array {
-        if ($this->usesAnStatForIpd($conn)) {
-            $opdIcdCode = "COALESCE(NULLIF(od.icd10, ''), '-')";
-            $opdIcdName = "COALESCE(NULLIF(icd_od.tname, ''), icd_od.name, NULLIF(od.icd10, ''), 'ไม่ระบุวินิจฉัย')";
+        if ($this->usesVnStatForOpd($conn)) {
+            $opdIcdCode = "COALESCE(NULLIF(TRIM(v.pdx), ''), '-')";
+            $opdIcdName = "COALESCE(NULLIF(TRIM(icd.tname), ''), icd.name, NULLIF(TRIM(v.pdx), ''), 'ไม่ระบุวินิจฉัย')";
 
-            $opdRows = $this->opdDiagnosisQuery($conn, $startDate, $endDate, $opdCond)
+            $opdRows = $conn->table('vn_stat as v')
+                ->leftJoin('ovst as o', 'o.vn', '=', 'v.vn')
+                ->leftJoin('icd101 as icd', 'icd.code', '=', 'v.pdx')
+                ->whereBetween('v.vstdate', [$startDate, $endDate])
+                ->where(function ($q) {
+                    $q->whereNull('o.an')->orWhere('o.an', '');
+                })
+                ->whereNotNull('v.pdx')
+                ->where('v.pdx', '<>', '')
+                ->where('v.pdx', '<>', '-')
+                ->selectRaw("{$opdIcdCode} as icd10_code")
+                ->selectRaw("{$opdIcdName} as disease_name")
+                ->selectRaw('SUM(v.income) as opd_amount')
+                ->selectRaw('COUNT(DISTINCT v.hn) as opd_patients')
+                ->selectRaw('COUNT(*) as opd_items')
+                ->groupByRaw($opdIcdCode)
+                ->groupByRaw($opdIcdName)
+                ->orderByDesc('opd_amount')
+                ->limit(20)
+                ->get()
+                ->keyBy('icd10_code');
+        } else {
+            $opdIcdCode = "COALESCE(NULLIF(TRIM(od.icd10), ''), '-')";
+            $opdIcdName = "COALESCE(NULLIF(TRIM(icd_od.tname), ''), icd_od.name, NULLIF(TRIM(od.icd10), ''), 'ไม่ระบุวินิจฉัย')";
+
+            $opdRows = $conn->table('opitemrece as oi')
+                ->join('ovst as o', 'o.vn', '=', 'oi.vn')
+                ->join('ovstdiag as od', function ($join) {
+                    $join->on('od.vn', '=', 'oi.vn')->where('od.diagtype', '=', '1');
+                })
+                ->leftJoin('icd101 as icd_od', 'icd_od.code', '=', 'od.icd10')
+                ->whereBetween('oi.vstdate', [$startDate, $endDate])
+                ->where(function ($q) {
+                    $q->whereNull('oi.an')->orWhere('oi.an', '');
+                })
+                ->where(function ($q) {
+                    $q->whereNull('o.an')->orWhere('o.an', '');
+                })
                 ->selectRaw("{$opdIcdCode} as icd10_code")
                 ->selectRaw("{$opdIcdName} as disease_name")
                 ->selectRaw('SUM(oi.sum_price) as opd_amount')
@@ -1322,14 +1455,21 @@ class FinanceRevenueController extends Controller
                 ->groupByRaw($opdIcdCode)
                 ->groupByRaw($opdIcdName)
                 ->havingRaw('icd10_code <> ?', ['-'])
+                ->orderByDesc('opd_amount')
+                ->limit(20)
                 ->get()
                 ->keyBy('icd10_code');
+        }
 
-            $ipdIcdCode = "COALESCE(NULLIF(ast.pdx, ''), '-')";
-            $ipdIcdName = "COALESCE(NULLIF(icd.tname, ''), icd.name, NULLIF(ast.pdx, ''), 'ไม่ระบุวินิจฉัย')";
+        if ($this->usesAnStatForIpd($conn)) {
+            $ipdIcdCode = "COALESCE(NULLIF(TRIM(ast.pdx), ''), '-')";
+            $ipdIcdName = "COALESCE(NULLIF(TRIM(icd.tname), ''), icd.name, NULLIF(TRIM(ast.pdx), ''), 'ไม่ระบุวินิจฉัย')";
 
             $ipdRows = $this->ipdAnStatQuery($conn, $startDate, $endDate)
                 ->leftJoin('icd101 as icd', 'icd.code', '=', 'ast.pdx')
+                ->whereNotNull('ast.pdx')
+                ->where('ast.pdx', '<>', '')
+                ->where('ast.pdx', '<>', '-')
                 ->selectRaw("{$ipdIcdCode} as icd10_code")
                 ->selectRaw("{$ipdIcdName} as disease_name")
                 ->selectRaw('SUM(ast.income) as ipd_amount')
@@ -1337,101 +1477,67 @@ class FinanceRevenueController extends Controller
                 ->selectRaw('COUNT(*) as ipd_items')
                 ->groupByRaw($ipdIcdCode)
                 ->groupByRaw($ipdIcdName)
-                ->havingRaw('icd10_code <> ?', ['-'])
+                ->orderByDesc('ipd_amount')
+                ->limit(20)
                 ->get()
                 ->keyBy('icd10_code');
-
-            $merged = $this->mergeKeyedRows($opdRows, $ipdRows, function ($code, $opd, $ipd) {
-                $opdAmount = (float) ($opd->opd_amount ?? 0);
-                $ipdAmount = (float) ($ipd->ipd_amount ?? 0);
-
-                return [
-                    'icd10_code' => $code,
-                    'disease_name' => $ipd->disease_name ?? $opd->disease_name ?? $code,
-                    'opd_amount' => $opdAmount,
-                    'ipd_amount' => $ipdAmount,
-                    'total_amount' => $opdAmount + $ipdAmount,
-                    'patients' => (int) (($opd->opd_patients ?? 0) + ($ipd->ipd_patients ?? 0)),
-                    'items' => (int) (($opd->opd_items ?? 0) + ($ipd->ipd_items ?? 0)),
-                ];
-            });
-
-            return collect($merged)->take(10)->values()->map(function ($row, $index) use ($totalAmount) {
-                $row['rank'] = $index + 1;
-                $row['share_percent'] = $totalAmount > 0
-                    ? round($row['total_amount'] / $totalAmount * 100, 1)
-                    : 0;
-
-                return $row;
-            })->all();
+        } else {
+            $ipdRows = collect();
         }
 
-        $hasIptDiag = $this->hasIptDiag($conn);
-        $icdCode = $this->icd10CodeSql($ipdCond, $hasIptDiag);
-        $icdName = $this->icd10NameSql($ipdCond, $hasIptDiag);
-        $diseaseBase = $this->diagnosisQuery($conn, $startDate, $endDate);
+        $merged = $this->mergeKeyedRows($opdRows, $ipdRows, function ($code, $opd, $ipd) {
+            $opdAmount = (float) ($opd->opd_amount ?? 0);
+            $ipdAmount = (float) ($ipd->ipd_amount ?? 0);
 
-        $topDiseasesRaw = (clone $diseaseBase)
-            ->selectRaw("{$icdCode} as icd10_code")
-            ->selectRaw("{$icdName} as disease_name")
-            ->selectRaw('SUM(oi.sum_price) as total_amount')
-            ->selectRaw("SUM(CASE WHEN {$opdCond} THEN oi.sum_price ELSE 0 END) as opd_amount")
-            ->selectRaw("SUM(CASE WHEN {$ipdCond} THEN oi.sum_price ELSE 0 END) as ipd_amount")
-            ->selectRaw('COUNT(DISTINCT oi.hn) as patients')
-            ->selectRaw('COUNT(*) as items')
-            ->groupByRaw($icdCode)
-            ->groupByRaw($icdName)
-            ->havingRaw('icd10_code <> ?', ['-'])
-            ->orderByDesc('total_amount')
-            ->limit(10)
-            ->get();
+            return [
+                'icd10_code' => $code,
+                'disease_name' => $ipd->disease_name ?? $opd->disease_name ?? $code,
+                'opd_amount' => $opdAmount,
+                'ipd_amount' => $ipdAmount,
+                'total_amount' => $opdAmount + $ipdAmount,
+                'patients' => (int) (($opd->opd_patients ?? 0) + ($ipd->ipd_patients ?? 0)),
+                'items' => (int) (($opd->opd_items ?? 0) + ($ipd->ipd_items ?? 0)),
+            ];
+        });
 
-        return $this->mapRankedRows($topDiseasesRaw, $totalAmount, 'icd10_code', 'disease_name');
+        return collect($merged)->take(10)->values()->map(function ($row, $index) use ($totalAmount) {
+            $row['rank'] = $index + 1;
+            $row['share_percent'] = $totalAmount > 0
+                ? round($row['total_amount'] / $totalAmount * 100, 1)
+                : 0;
+
+            return $row;
+        })->all();
     }
 
     private function buildReport(string $startDate, string $endDate): array
     {
         $conn = DB::connection('hosxp');
         $this->initHosxpSchema($conn);
-        $ipdCond = $this->ipdConditionSqlForOpitemrece($conn);
-        $opdCond = $this->opdConditionSql($conn);
-        $ipdVisitKey = $this->ipdVisitKeySql($conn);
-        $pttypeCode = $this->pttypeCodeSql();
-        $pttypeName = $this->pttypeNameSql();
-        $deptCode = $this->departmentCodeSql($ipdCond);
-        $deptName = $this->departmentNameSql($ipdCond);
 
-        $base = $this->baseQuery($conn, $startDate, $endDate);
-
-        $summary = $this->computeSummary($conn, $base, $startDate, $endDate, $opdCond, $ipdCond, $ipdVisitKey);
+        [$summary, $byPttype] = $this->computeByPttypeAndSummary($conn, $startDate, $endDate);
         $totalAmount = (float) $summary['total_amount'];
         $opdAmount = (float) $summary['opd_amount'];
         $ipdAmount = (float) $summary['ipd_amount'];
 
-        $byPttype = $this->computeByPttype($conn, $base, $summary, $startDate, $endDate, $opdCond, $ipdCond, $ipdVisitKey, $pttypeCode, $pttypeName);
-
         $byDepartment = $this->computeByDepartment(
             $conn,
-            $base,
             $summary,
             $startDate,
             $endDate,
-            $opdCond,
-            $ipdCond,
-            $ipdVisitKey,
-            $deptCode,
-            $deptName,
         );
 
-        $topDiseases = $this->computeTopDiseases($conn, $startDate, $endDate, $opdCond, $ipdCond, $totalAmount);
+        $topDiseases = $this->computeTopDiseases($conn, $startDate, $endDate, $totalAmount);
 
-        // Top 10 ยา ตามรายได้
-        $topDrugsRaw = $this->drugQuery($conn, $startDate, $endDate)
+        // Top 10 ยา ตามรายได้ (ตัด LEFT JOIN ovst ที่ไม่จำเป็นออก ใช้ oi.an ใน opitemrece โดยตรง)
+        $topDrugsRaw = $conn->table('opitemrece as oi')
+            ->join('drugitems as d', 'd.icode', '=', 'oi.icode')
+            ->whereBetween('oi.vstdate', [$startDate, $endDate])
             ->selectRaw('oi.icode as drug_code')
             ->selectRaw('d.name as drug_name')
             ->selectRaw('SUM(oi.sum_price) as total_amount')
-            ->selectRaw("SUM(CASE WHEN {$opdCond} THEN oi.sum_price ELSE 0 END) as opd_amount")
-            ->selectRaw("SUM(CASE WHEN {$ipdCond} THEN oi.sum_price ELSE 0 END) as ipd_amount")
+            ->selectRaw("SUM(CASE WHEN oi.an IS NULL OR TRIM(oi.an) = '' THEN oi.sum_price ELSE 0 END) as opd_amount")
+            ->selectRaw("SUM(CASE WHEN oi.an IS NOT NULL AND TRIM(oi.an) <> '' THEN oi.sum_price ELSE 0 END) as ipd_amount")
             ->selectRaw('SUM(oi.qty) as total_qty')
             ->selectRaw('COUNT(DISTINCT oi.hn) as patients')
             ->selectRaw('COUNT(*) as items')
@@ -1447,7 +1553,7 @@ class FinanceRevenueController extends Controller
             ['name' => 'ผู้ป่วยใน (IPD)', 'value' => $ipdAmount, 'color' => '#8B5CF6'],
         ];
 
-        $monthly = $this->computeMonthlyTrend($conn, $base, $startDate, $endDate, $opdCond, $ipdCond);
+        $monthly = $this->computeMonthlyTrend($conn, $startDate, $endDate);
 
         return [
             'summary' => $summary,

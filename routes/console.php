@@ -22,6 +22,17 @@ Schedule::command('fortigate:prune')->dailyAt('03:20')->timezone('Asia/Bangkok')
 Schedule::command('threat-intel:sync --prune')->dailyAt('04:10')->timezone('Asia/Bangkok');
 Schedule::command('fshh-chat:sync-ai')->everyTenMinutes();
 Schedule::command('im:sync-timesheets')->hourly();
+
+// ซิงค์สถิติการติด C จากระบบ RCM เข้าสู่ตัวชี้วัดคุณภาพ IM-11 อัตโนมัติทุกวันที่ 30 ของเดือน
+Schedule::command('rcm:sync-im11-indicator')
+    ->monthlyOn(30, '23:00')
+    ->timezone('Asia/Bangkok');
+
+// รองรับเดือนกุมภาพันธ์ (ไม่มีวันที่ 30) ให้รันในวันสุดท้ายของเดือน
+Schedule::command('rcm:sync-im11-indicator')
+    ->lastDayOfMonth('23:00')
+    ->when(fn () => now()->month === 2)
+    ->timezone('Asia/Bangkok');
 Schedule::command('queue-portal:notify')
     ->everyFifteenSeconds()
     ->timezone('Asia/Bangkok')
@@ -44,6 +55,13 @@ Schedule::command('pharmacy:send-stock-telegram-alerts')
     ->hourly()
     ->timezone('Asia/Bangkok')
     ->withoutOverlapping(30)
+    ->runInBackground();
+
+// ตรวจสอบและดาวน์โหลด REP, STM ทุกกองทุน และข้อมูลเว็บงาน SMT อัตโนมัติทุกวัน เวลา 12:00 น.
+Schedule::command('finance:auto-sync-all')
+    ->dailyAt('12:00')
+    ->timezone('Asia/Bangkok')
+    ->withoutOverlapping(60)
     ->runInBackground();
 
 // เปิดคนละโปรเซสผ่าน wscript เพื่อไม่ให้ dump ที่ใช้เวลาหลายชั่วโมงถือ handle ของ scheduler log

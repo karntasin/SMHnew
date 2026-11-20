@@ -22,6 +22,17 @@ Route::get('auth/line/qr/claim', [LineAuthController::class, 'qrClaim'])->name('
 Route::get('auth/line/transfer', [LineAuthController::class, 'transfer'])->name('auth.line.transfer');
 Route::post('line/webhook', LineWebhookController::class)->name('line.webhook');
 
+// Voice Authentication Routes (Public / Guest - 1:1 Verification)
+Route::get('auth/voice/challenge', [\App\Http\Controllers\Auth\VoiceAuthController::class, 'challenge'])->name('auth.voice.challenge');
+Route::get('auth/voice/search-users', [\App\Http\Controllers\Auth\VoiceAuthController::class, 'searchUsers'])->name('auth.voice.search-users');
+Route::post('auth/voice/login', [\App\Http\Controllers\Auth\VoiceAuthController::class, 'login'])->middleware('throttle:10,1')->name('auth.voice.login');
+
+// Face & Biometrics Authentication Routes (Public / Guest - Hybrid 1:1 Verification)
+Route::get('auth/face/challenge', [\App\Http\Controllers\Auth\FaceAuthController::class, 'challenge'])->name('auth.face.challenge');
+Route::get('auth/face/search-users', [\App\Http\Controllers\Auth\FaceAuthController::class, 'searchUsers'])->name('auth.face.search-users');
+Route::post('auth/face/camera-login', [\App\Http\Controllers\Auth\FaceAuthController::class, 'cameraLogin'])->middleware('throttle:10,1')->name('auth.face.camera-login');
+Route::post('auth/face/passkey-login', [\App\Http\Controllers\Auth\FaceAuthController::class, 'passkeyLogin'])->middleware('throttle:10,1')->name('auth.face.passkey-login');
+
 Route::middleware('guest')->group(function () {
     Route::get('register', [RegisteredUserController::class, 'create'])
         ->name('register');

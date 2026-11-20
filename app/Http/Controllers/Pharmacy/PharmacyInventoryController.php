@@ -15,6 +15,7 @@ use App\Models\Pharmacy\PharmacyStockBalance;
 use App\Models\Pharmacy\PharmacyStockMovement;
 use App\Services\Pharmacy\PharmacyDispenseSyncService;
 use App\Services\Pharmacy\PharmacyInventoryService;
+use App\Support\PiiMask;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -688,6 +689,10 @@ class PharmacyInventoryController extends Controller
 
     public function syncDispense(Request $request)
     {
+        if (! $request->user()?->hasAnyRole(['admin', 'superUser'])) {
+            abort(403, 'เฉพาะผู้ดูแลระบบ (Admin) เท่านั้นที่สามารถสั่งซิงก์ตัดจ่ายได้');
+        }
+
         $date = $request->input('date') ?: now('Asia/Bangkok')->toDateString();
         $result = $this->dispenseSync->sync(is_string($date) ? $date : null, null, $this->catalog());
 
@@ -1103,10 +1108,11 @@ class PharmacyInventoryController extends Controller
         $startDate = $request->query('start_date') ?: now('Asia/Bangkok')->subDays(7)->toDateString();
         $endDate = $request->query('end_date') ?: now('Asia/Bangkok')->toDateString();
         $status = $request->query('status');
+        $tab = $request->query('tab', 'preview');
 
         $catalogIcodes = PharmacyItem::query()->ofCatalog($this->catalog())->select('icode');
         $query = PharmacyDispenseSync::query()
-            ->with(['item'])
+            ->with(['item', 'cancelledByUser', 'fulfilledByUser', 'reversedByUser'])
             ->whereIn('icode', $catalogIcodes)
             ->where('vstdate', '>=', $startDate)
             ->where('vstdate', '<=', $endDate);
@@ -1120,21 +1126,241 @@ class PharmacyInventoryController extends Controller
         $statsBase = PharmacyDispenseSync::query()
             ->whereIn('icode', PharmacyItem::query()->ofCatalog($this->catalog())->select('icode'))
             ->whereBetween('vstdate', [$startDate, $endDate]);
+
         $stats = [
             'total' => (clone $statsBase)->count(),
             'synced' => (clone $statsBase)->where('status', 'deducted')->count(),
             'insufficient' => (clone $statsBase)->where('status', 'insufficient')->count(),
+            'cancelled' => (clone $statsBase)->where('status', 'cancelled')->count(),
+            'reversed' => (clone $statsBase)->where('status', 'reversed')->count(),
             'failed' => (clone $statsBase)->where('status', 'failed')->count(),
         ];
+
+        $pharmacyLocation = $this->inventory->defaultDispenseLocation($this->catalog());
+
+        // 1. ประวัติการตัดจ่าย ($syncs) - เติมชื่อผู้ป่วยที่ Mask แล้วหากยังไม่มี
+        $syncHns = $syncs->getCollection()->whereNull('patient_name')->pluck('hn')->filter()->unique()->all();
+        $syncPatients = $syncHns !== [] ? DB::connection('hosxp')->table('patient')
+            ->whereIn('hn', $syncHns)
+            ->select('hn', 'pname', 'fname', 'lname')
+            ->get()
+            ->keyBy('hn') : collect();
+
+        $syncs->getCollection()->transform(function ($row) use ($syncPatients) {
+            if (empty($row->patient_name)) {
+                $pt = $syncPatients->get($row->hn);
+                $row->patient_name = $pt ? PiiMask::name($pt->pname, $pt->fname, $pt->lname) : 'ผู้ป่วย';
+            } else {
+                $row->patient_name = PiiMask::patientName($row->patient_name);
+            }
+            return $row;
+        });
+
+        // 2. รายการยาค้างจ่าย ($owedItems)
+        $owedItems = PharmacyDispenseSync::query()
+            ->with(['item'])
+            ->whereIn('status', ['insufficient', 'failed'])
+            ->whereIn('icode', PharmacyItem::query()->ofCatalog($this->catalog())->select('icode'))
+            ->orderBy('vstdate')
+            ->orderBy('id')
+            ->limit(200)
+            ->get();
+
+        $owedItemIds = $owedItems->pluck('item.id')->filter()->unique()->all();
+        $owedStocks = $pharmacyLocation && $owedItemIds !== [] ? PharmacyStockBalance::query()
+            ->where('location_id', $pharmacyLocation->id)
+            ->whereIn('item_id', $owedItemIds)
+            ->pluck('qty_on_hand', 'item_id')
+            ->all() : [];
+
+        // ดึงชื่อ-สกุลผู้ป่วยจาก HOSxP patient แบบกลุ่มเพื่อทำ Masking ตาม PDPA
+        $owedHns = $owedItems->pluck('hn')->filter()->unique()->all();
+        $owedPatients = $owedHns !== [] ? DB::connection('hosxp')->table('patient')
+            ->whereIn('hn', $owedHns)
+            ->select('hn', 'pname', 'fname', 'lname')
+            ->get()
+            ->keyBy('hn') : collect();
+
+        $owedList = $owedItems->map(function ($row) use ($owedStocks, $owedPatients) {
+            $currentStock = (float) ($owedStocks[$row->item?->id] ?? 0);
+            $pt = $owedPatients->get($row->hn);
+            $patientName = $pt
+                ? PiiMask::name($pt->pname, $pt->fname, $pt->lname)
+                : ($row->patient_name ? PiiMask::patientName($row->patient_name) : 'ผู้ป่วย');
+
+            return [
+                'id' => $row->id,
+                'hosxp_key' => $row->hosxp_key,
+                'hn' => $row->hn,
+                'vn' => $row->vn,
+                'an' => $row->an,
+                'visit_type' => ! empty($row->an) ? 'IPD' : 'OPD',
+                'patient_name' => $patientName,
+                'icode' => $row->icode,
+                'item_name' => $row->item?->name ?: $row->icode,
+                'strength' => $row->item?->strength,
+                'unit' => $row->item?->unit ?: 'หน่วย',
+                'qty' => (float) $row->qty,
+                'vstdate' => $row->vstdate?->toDateString(),
+                'status' => $row->status,
+                'current_stock' => $currentStock,
+                'can_fulfill' => $currentStock >= (float) $row->qty,
+                'message' => $row->message,
+                'created_at' => $row->created_at?->format('Y-m-d H:i'),
+            ];
+        });
 
         return Inertia::render('Pharmacy/Inventory/DispenseSync', [
             'syncs' => $syncs,
             'stats' => $stats,
+            'owedList' => $owedList,
+            'pharmacyLocation' => $pharmacyLocation ? ['id' => $pharmacyLocation->id, 'name' => $pharmacyLocation->name] : null,
             'filters' => [
                 'start_date' => $startDate,
                 'end_date' => $endDate,
                 'status' => $status ?: 'all',
+                'tab' => $tab,
             ],
+        ]);
+    }
+
+    public function previewDispense(Request $request)
+    {
+        $startDate = $request->input('start_date') ?: now('Asia/Bangkok')->toDateString();
+        $endDate = $request->input('end_date') ?: now('Asia/Bangkok')->toDateString();
+
+        $result = $this->dispenseSync->preview($startDate, $endDate, null, $this->catalog());
+
+        return response()->json($result);
+    }
+
+    public function commitDispense(Request $request)
+    {
+        $startDate = $request->input('start_date') ?: now('Asia/Bangkok')->toDateString();
+        $endDate = $request->input('end_date') ?: now('Asia/Bangkok')->toDateString();
+        $mode = $request->input('mode', 'all');
+        $selectedKeys = (array) $request->input('selected_keys', []);
+
+        $result = $this->dispenseSync->commitPreview($startDate, $endDate, $mode, $selectedKeys, null, $this->catalog());
+
+        return back()->with($result['ok'] ? 'success' : 'error', $result['message']);
+    }
+
+    public function fulfillPendingDispense(Request $request, int $id)
+    {
+        $result = $this->dispenseSync->fulfillOwed($id, null);
+
+        return back()->with($result['ok'] ? 'success' : 'error', $result['message']);
+    }
+
+    public function fulfillReadyPendingDispense(Request $request)
+    {
+        $result = $this->dispenseSync->fulfillAllReady(null, $this->catalog());
+
+        return back()->with($result['ok'] ? 'success' : 'error', $result['message']);
+    }
+
+    public function cancelPendingDispense(Request $request, int $id)
+    {
+        $reason = trim((string) $request->input('reason', 'ผู้ป่วยไม่มารับยา / ยกเลิกคำสั่ง'));
+        $result = $this->dispenseSync->cancelOwed($id, $reason);
+
+        return back()->with($result['ok'] ? 'success' : 'error', $result['message']);
+    }
+
+    public function rollbackDispense(Request $request, int $id)
+    {
+        $reason = trim((string) $request->input('reason', 'ตัดจ่ายผิดพลาด / ขอย้อนคืนสต็อก'));
+        $result = $this->dispenseSync->rollbackDispense($id, $reason);
+
+        return back()->with($result['ok'] ? 'success' : 'error', $result['message']);
+    }
+
+    public function rollbackAllDispense(Request $request)
+    {
+        $startDate = $request->input('start_date') ?: null;
+        $endDate = $request->input('end_date') ?: null;
+
+        $result = $this->dispenseSync->rollbackAllHosxpDispenses($startDate, $endDate);
+
+        return back()->with($result['ok'] ? 'success' : 'error', $result['message']);
+    }
+
+    public function stockSummaryReport(Request $request): Response
+    {
+        $startDate = $request->query('start_date') ?: now('Asia/Bangkok')->subDays(90)->toDateString();
+        $endDate = $request->query('end_date') ?: now('Asia/Bangkok')->toDateString();
+        $search = $request->query('search');
+
+        $report = $this->inventory->stockSummaryReport($startDate, $endDate, $this->catalog(), $search);
+
+        return Inertia::render('Pharmacy/Inventory/StockSummaryReport', [
+            'report' => $report,
+            'filters' => [
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'search' => $search ?: '',
+            ],
+        ]);
+    }
+
+    public function exportStockSummaryReport(Request $request)
+    {
+        $startDate = $request->query('start_date') ?: now('Asia/Bangkok')->subDays(90)->toDateString();
+        $endDate = $request->query('end_date') ?: now('Asia/Bangkok')->toDateString();
+        $search = $request->query('search');
+
+        $report = $this->inventory->stockSummaryReport($startDate, $endDate, $this->catalog(), $search);
+        $filename = 'stock-summary-'.$startDate.'-to-'.$endDate.'.csv';
+
+        return response()->streamDownload(function () use ($report, $startDate, $endDate) {
+            $handle = fopen('php://output', 'w');
+            fputs($handle, "\xEF\xBB\xBF");
+            fputcsv($handle, ['รายงานสรุปความเคลื่อนไหวสต็อกยา/เวชภัณฑ์']);
+            fputcsv($handle, ['ช่วงวันที่', $startDate, 'ถึง', $endDate]);
+            fputcsv($handle, []);
+            fputcsv($handle, [
+                'รหัส icode',
+                'ชื่อยา / เวชภัณฑ์',
+                'ความแรง',
+                'หน่วย',
+                'ยอดเหลือคลังหลัก (WH)',
+                'ยอดเบิกมาห้องยา',
+                'ยอดคงเหลือห้องยา (OPD)',
+                'ยอด HOSxP ตัดจ่าย',
+                'ยอดตัดออกหน่วย',
+            ]);
+
+            foreach ($report['items'] as $row) {
+                fputcsv($handle, [
+                    $row['icode'],
+                    $row['name'],
+                    $row['strength'] ?? '',
+                    $row['unit'],
+                    $row['wh_qty'],
+                    $row['transferred_to_opd'],
+                    $row['opd_qty'],
+                    $row['hosxp_dispensed'],
+                    $row['unit_issued'],
+                ]);
+            }
+
+            fputcsv($handle, []);
+            fputcsv($handle, [
+                'รวมทั้งสิ้น',
+                count($report['items']).' รายการ',
+                '',
+                '',
+                $report['totals']['total_wh_qty'] ?? 0,
+                $report['totals']['total_transferred'] ?? 0,
+                $report['totals']['total_opd_qty'] ?? 0,
+                $report['totals']['total_hosxp_dispensed'] ?? 0,
+                $report['totals']['total_unit_issued'] ?? 0,
+            ]);
+
+            fclose($handle);
+        }, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
         ]);
     }
 

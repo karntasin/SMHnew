@@ -6,6 +6,8 @@
 param (
     [string]$ServerUrl = "http://localhost",
     [string]$Token = "smh_agent_secret",
+    [string]$Department = "",
+    [string]$AssignedUser = "",
     [switch]$Install,
     [switch]$Uninstall,
     [switch]$RunOnce,
@@ -48,9 +50,15 @@ if ($Install) {
     $config = @{
         ServerUrl = $ServerUrl.TrimEnd('/')
         Token = $Token
+        Department = $Department
+        AssignedUser = $AssignedUser
         InstalledAt = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
     }
     $config | ConvertTo-Json | Set-Content -Path $ConfigTarget -Encoding UTF8 -Force
+
+    if (-not $Silent -and ($Department -or $AssignedUser)) {
+        Write-Host "[OK] Registered: Department '$Department' | User '$AssignedUser'" -ForegroundColor Green
+    }
 
     # Self-copy script
     if ($MyInvocation.MyCommand.Path -and (Test-Path $MyInvocation.MyCommand.Path)) {
@@ -86,7 +94,9 @@ if ($Install) {
     }
 
     # Run immediate scan
-    Write-Host "[SMH Agent] Collecting hardware specifications..." -ForegroundColor Cyan
+    if (-not $Silent) {
+        Write-Host "[SMH Agent] Collecting hardware specifications..." -ForegroundColor Cyan
+    }
 }
 
 # Load config if present (only if not explicitly provided via command line)
@@ -98,6 +108,12 @@ if (Test-Path $ConfigTarget) {
         }
         if (-not $PSBoundParameters.ContainsKey('Token') -and $loadedConfig.Token) {
             $Token = $loadedConfig.Token
+        }
+        if (-not $PSBoundParameters.ContainsKey('Department') -and $loadedConfig.Department) {
+            $Department = $loadedConfig.Department
+        }
+        if (-not $PSBoundParameters.ContainsKey('AssignedUser') -and $loadedConfig.AssignedUser) {
+            $AssignedUser = $loadedConfig.AssignedUser
         }
     } catch {}
 }
@@ -372,20 +388,348 @@ function Get-RealtimeStats {
 }
 
 # ------------------------------------------------------------------------------
-# 4. Payload Transmission & Live Mode Loop
+# 4. Security, Antivirus, Hacker & VPN Detection Engine
+# (Inspired by SANS DeepBlueCLI, Wazuh Agent, Tactical RMM, and Wintun Inspection)
+# ------------------------------------------------------------------------------
+function Test-VpnConnection {
+    $vpnDrivers = @("*WireGuard*", "*TAP-Windows*", "*Wintun*", "*Tailscale*", "*ZeroTier*", "*AnyConnect*", "*Fortinet*", "*Cloudflare*", "*WARP*", "*NordLynx*", "*Proton*", "*Surfshark*", "*Windscribe*", "*Check Point*", "*GlobalProtect*", "*SoftEther*", "*Hamachi*", "*OpenVPN*")
+    $detectedAdapters = @()
+    try {
+        $adapters = Get-NetAdapter -ErrorAction SilentlyContinue
+        foreach ($a in $adapters) {
+            $desc = [string]$a.InterfaceDescription
+            $name = [string]$a.Name
+            $matched = $false
+            foreach ($p in $vpnDrivers) {
+                if ($desc -like $p -or $name -like $p) {
+                    $matched = $true
+                    break
+                }
+            }
+            if ($matched) {
+                $tunnelIp = ""
+                try {
+                    $ipObj = Get-NetIPAddress -InterfaceIndex $a.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
+                    if ($ipObj) { $tunnelIp = $ipObj.IPAddress }
+                } catch {}
+                $detectedAdapters += @{
+                    name = $name
+                    description = $desc
+                    status = [string]$a.Status
+                    ip = $tunnelIp
+                    is_active = ($a.Status -eq "Up")
+                }
+            }
+        }
+    } catch {}
+
+    $vpnProcessNames = @("wireguard", "openvpn", "warp-svc", "Cloudflare WARP", "tailscale", "tailscaled", "vpnagent", "zerotier-one", "nordvpn", "protonvpn", "clash", "clash-verge", "v2ray", "xray", "sing-box", "FortiClient", "PanGPA", "vpnui", "Hamachi")
+    $detectedProcesses = @()
+    try {
+        $allProc = Get-Process -ErrorAction SilentlyContinue
+        foreach ($p in $allProc) {
+            $pName = [string]$p.ProcessName
+            foreach ($vpnName in $vpnProcessNames) {
+                if ($pName -like "*$vpnName*") {
+                    $detectedProcesses += @{
+                        process_name = $pName
+                        id = $p.Id
+                    }
+                    break
+                }
+            }
+        }
+    } catch {}
+
+    $hasActiveAdapter = ($detectedAdapters | Where-Object { $_.is_active -eq $true })
+    $isVpnActive = ($hasActiveAdapter.Count -gt 0) -or ($detectedProcesses.Count -gt 0)
+
+    return @{
+        vpn_detected = [bool]$isVpnActive
+        active_adapters = $detectedAdapters
+        active_processes = $detectedProcesses
+    }
+}
+
+function Test-AntivirusHealth {
+    $defender = @{
+        available = $false
+        realtime_enabled = $false
+        signature_age_days = -1
+        signature_version = ""
+        engine_version = ""
+        antispyware_enabled = $false
+        behavior_monitor_enabled = $false
+        ioav_protection_enabled = $false
+        tamper_protection = $false
+    }
+    try {
+        if (Get-Command Get-MpComputerStatus -ErrorAction SilentlyContinue) {
+            $mp = Get-MpComputerStatus -ErrorAction SilentlyContinue
+            if ($mp) {
+                $defender.available = $true
+                $defender.realtime_enabled = [bool]$mp.RealTimeProtectionEnabled
+                $defender.signature_age_days = [int]$mp.AntivirusSignatureAge
+                $defender.signature_version = [string]$mp.AntivirusSignatureVersion
+                $defender.engine_version = [string]$mp.AMEngineVersion
+                $defender.antispyware_enabled = [bool]$mp.AntispywareEnabled
+                $defender.behavior_monitor_enabled = [bool]$mp.BehaviorMonitorEnabled
+                $defender.ioav_protection_enabled = [bool]$mp.IoavProtectionEnabled
+                $defender.tamper_protection = [bool]$mp.IsTamperProtected
+            }
+        }
+    } catch {}
+    return $defender
+}
+
+function Test-ActiveMalwareAndThreats {
+    $threats = @()
+    $since = (Get-Date).AddHours(-24)
+    # Self-exclusion keywords: ignore events caused by our own installer, agent or remote support tool
+    $selfSignatures = @("smh-agent", "install-fshh-agent", "install.ps1", "rustdesk", "fshh", "ar25b4kv5ysi", "smh_agent")
+
+    # 1. Inspect Defender Operational Events (Past 24 Hours only)
+    try {
+        $events = Get-WinEvent -FilterHashtable @{LogName='Microsoft-Windows-Windows Defender/Operational'; Id=@(1116, 1117); StartTime=$since} -MaxEvents 25 -ErrorAction SilentlyContinue
+        foreach ($evt in $events) {
+            $msgLines = ($evt.Message -split "`r?`n") | Where-Object { $_.Trim() -ne "" }
+            $threatName = ""
+            $threatPath = ""
+            $severity = "Warning"
+            foreach ($line in $msgLines) {
+                if ($line -match "(?:Threat Name|Threat):\s*(.+)") { $threatName = $matches[1].Trim() }
+                if ($line -match "(?:Path):\s*(.+)") { $threatPath = $matches[1].Trim() }
+                if ($line -match "(?:Severity):\s*(.+)") { $severity = $matches[1].Trim() }
+            }
+            if (-not $threatName -or $threatName -like "*Microsoft Defender Antivirus has detected*") {
+                # Skip generic event header messages that do not contain an actual specific malware name
+                continue
+            }
+
+            # Filter out errors caused by our own agent, batch installer or remote tool
+            $allText = ("$($evt.Message) $threatName $threatPath").ToLower()
+            $isSelf = $false
+            foreach ($sig in $selfSignatures) {
+                if ($allText -like "*$sig*") {
+                    $isSelf = $true
+                    break
+                }
+            }
+            # Also ignore generic powershell.exe AMSI script alerts caused by agent installer execution
+            if ($threatPath.ToLower() -like "*powershell.exe" -and ($allText -like "*agent*" -or $allText -like "*fshh*" -or $allText -like "*encodedcommand*")) {
+                $isSelf = $true
+            }
+            if ($isSelf) {
+                continue
+            }
+
+            $threats += @{
+                event_id = $evt.Id
+                time = $evt.TimeCreated.ToString("yyyy-MM-dd HH:mm:ss")
+                name = $threatName
+                path = $threatPath
+                severity = $severity
+                action_taken = if ($evt.Id -eq 1117) { "Remediated/Quarantined" } else { "Detected" }
+            }
+        }
+    } catch {}
+
+    # 2. Inspect Defender Current / Recent Threat Detections (Filter to past 24 hours)
+    try {
+        if (Get-Command Get-MpThreatDetection -ErrorAction SilentlyContinue) {
+            $mpThreats = Get-MpThreatDetection -ErrorAction SilentlyContinue | Where-Object {
+                -not $_.InitialDetectionTime -or $_.InitialDetectionTime -ge $since
+            }
+            foreach ($t in $mpThreats) {
+                $tName = [string]$t.ThreatName
+                $tPath = [string]($t.Resources -join "; ")
+                $allText = ("$tName $tPath").ToLower()
+
+                if (-not $tName -or $tName -like "*Microsoft Defender Antivirus has detected*") {
+                    continue
+                }
+
+                $isSelf = $false
+                foreach ($sig in $selfSignatures) {
+                    if ($allText -like "*$sig*") {
+                        $isSelf = $true
+                        break
+                    }
+                }
+                if ($tPath.ToLower() -like "*powershell.exe" -and ($allText -like "*agent*" -or $allText -like "*fshh*")) {
+                    $isSelf = $true
+                }
+                if ($isSelf) {
+                    continue
+                }
+
+                $statusStr = switch ($t.ThreatStatusID) {
+                    1 { "Active" }
+                    2 { "Action Failed" }
+                    3 { "Quarantined" }
+                    4 { "Removed" }
+                    5 { "Cleaned" }
+                    default { "Detected" }
+                }
+                $threats += @{
+                    time = if ($t.InitialDetectionTime) { $t.InitialDetectionTime.ToString("yyyy-MM-dd HH:mm:ss") } else { "" }
+                    name = $tName
+                    path = $tPath
+                    severity = switch ($t.ThreatSeverityID) { 1 { "Low" } 2 { "Medium" } 3 { "High" } 4 { "Severe" } default { "Unknown" } }
+                    action_taken = $statusStr
+                }
+            }
+        }
+    } catch {}
+
+    return $threats
+}
+
+function Test-HackerToolsAndAnomalies {
+    $detectedTools = @()
+    $hackerSignatures = @("mimikatz", "pwdump", "procdump", "cobaltstrike", "meterpreter", "ngrok", "frpc", "frps", "chisel", "xmrig", "minerd", "masscan")
+    try {
+        $processes = Get-Process -ErrorAction SilentlyContinue
+        foreach ($proc in $processes) {
+            $procName = [string]$proc.ProcessName
+            foreach ($sig in $hackerSignatures) {
+                if ($procName -like "*$sig*") {
+                    $detectedTools += @{
+                        tool = $sig
+                        process_name = $procName
+                        id = $proc.Id
+                    }
+                    break
+                }
+            }
+        }
+    } catch {}
+
+    $failedLogonCount = 0
+    try {
+        $oneHourAgo = (Get-Date).AddHours(-1)
+        $failedEvents = Get-WinEvent -FilterHashtable @{LogName='Security'; Id=4625; StartTime=$oneHourAgo} -MaxEvents 50 -ErrorAction SilentlyContinue
+        $failedLogonCount = ($failedEvents | Measure-Object).Count
+    } catch {}
+
+    return @{
+        hacker_tools = $detectedTools
+        failed_logons_1h = $failedLogonCount
+        is_brute_force = ($failedLogonCount -ge 15)
+    }
+}
+
+function Get-SecurityAndThreatStatus {
+    $vpn = Test-VpnConnection
+    $av = Test-AntivirusHealth
+    $threats = Test-ActiveMalwareAndThreats
+    $anomalies = Test-HackerToolsAndAnomalies
+
+    $threatScore = 0
+    $alerts = @()
+
+    # 1. VPN Check
+    if ($vpn.vpn_detected) {
+        $threatScore += 25
+        $adapterNames = ($vpn.active_adapters | ForEach-Object { $_.description }) -join ", "
+        $procNames = ($vpn.active_processes | ForEach-Object { $_.process_name }) -join ", "
+        $desc = "VPN Connection detected: "
+        if ($adapterNames) { $desc += "$adapterNames " }
+        if ($procNames) { $desc += "(Process: $procNames)" }
+        $alerts += $desc.Trim()
+    }
+
+    # 2. Antivirus Signature Check (Real-time protection alert omitted per user preference)
+    if ($av.available) {
+        if ($av.signature_age_days -gt 14) {
+            $threatScore += 15
+            $alerts += "Antivirus signature is outdated ($($av.signature_age_days) days old)"
+        }
+    }
+
+    # 3. Active Threats Check (Alert ONLY on truly active/un-quarantined threats)
+    $remediatedNames = @($threats | Where-Object { $_.action_taken -in @("Quarantined", "Removed", "Cleaned", "Remediated/Quarantined") } | ForEach-Object { $_.name })
+    $trulyActive = @()
+    foreach ($t in $threats) {
+        # Ignore anything that is already Quarantined, Removed, Cleaned, or Remediated
+        if ($t.action_taken -in @("Quarantined", "Removed", "Cleaned", "Remediated/Quarantined")) {
+            continue
+        }
+        # Ignore generic Defender event message headers
+        if ($t.name -like "*Microsoft Defender Antivirus has detected*" -or $t.name -like "*Defender Antivirus has detected*") {
+            continue
+        }
+        if ($t.action_taken -in @("Active", "Action Failed")) {
+            $trulyActive += $t
+        } elseif ($t.action_taken -eq "Detected" -and $t.name -and ($remediatedNames -notcontains $t.name)) {
+            $trulyActive += $t
+        }
+    }
+
+    if ($trulyActive.Count -gt 0) {
+        $threatScore += 60
+        $uniqueThreats = $trulyActive | Select-Object -Property name, severity -Unique
+        foreach ($m in $uniqueThreats) {
+            $displayName = if ($m.name) { $m.name } else { "Unidentified Threat" }
+            $alerts += "Active malware/threat detected: $displayName (Severity: $($m.severity))"
+        }
+    }
+    # Note: Quarantined / Remediated threats do NOT generate alert or threat score penalty per user policy
+
+    # Deduplicate alerts
+    $alerts = @($alerts | Select-Object -Unique)
+
+    # 4. Hacker Tools / Brute Force
+    if ($anomalies.hacker_tools.Count -gt 0) {
+        $threatScore += 65
+        $toolNames = ($anomalies.hacker_tools | ForEach-Object { $_.tool }) -join ", "
+        $alerts += "Suspicious hacktool or reverse tunnel process detected: $toolNames"
+    }
+    if ($anomalies.is_brute_force) {
+        $threatScore += 30
+        $alerts += "High rate of failed logons ($($anomalies.failed_logons_1h) in last hour) - potential brute force"
+    }
+
+    $threatLevel = "normal"
+    if ($threatScore -ge 60) {
+        $threatLevel = "critical"
+    } elseif ($threatScore -ge 21) {
+        $threatLevel = "warning"
+    }
+
+    return @{
+        threat_level = $threatLevel
+        threat_score = [math]::Min(100, $threatScore)
+        vpn_detected = [bool]$vpn.vpn_detected
+        vpn_details = $vpn
+        antivirus = $av
+        active_threats = $threats
+        anomalies = $anomalies
+        alerts = $alerts
+        evaluated_at = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+    }
+}
+
+# ------------------------------------------------------------------------------
+# 5. Payload Transmission & Live Mode Loop
 # ------------------------------------------------------------------------------
 function Send-Report {
     param (
         [switch]$IncludeSpecs
     )
 
+    $securityStatus = Get-SecurityAndThreatStatus
+
     $payload = @{
         token = $Token
         machine_guid = $GlobalMachineGuid
         hostname = $env:COMPUTERNAME
         mac_address = $GlobalPrimaryMac
+        department = $Department
+        assigned_user = $AssignedUser
         remote_id = (Get-RustDeskId)
         live_stats = (Get-RealtimeStats)
+        security = $securityStatus
     }
 
     if ($IncludeSpecs) {
@@ -426,7 +770,19 @@ function Send-Report {
 $response = Send-Report -IncludeSpecs
 if ($response -and $response.success) {
     if (-not $Silent) {
-        Write-Host "[OK] SMH Agent reported successfully! Asset ID: $($response.asset_id)" -ForegroundColor Green
+        Write-Host "[OK] FSHH Agent reported successfully! Asset ID: $($response.asset_id)" -ForegroundColor Green
+
+        # Display Security & Threat Audit Summary
+        $secStatus = Get-SecurityAndThreatStatus
+        if ($secStatus.threat_level -eq "critical") {
+            Write-Host "[CRITICAL ALERT] Found severe security threats on this computer!" -ForegroundColor Red
+            foreach ($a in $secStatus.alerts) { Write-Host "  ! $a" -ForegroundColor Red }
+        } elseif ($secStatus.threat_level -eq "warning") {
+            Write-Host "[SECURITY NOTICE] Security risk or VPN detected:" -ForegroundColor Yellow
+            foreach ($a in $secStatus.alerts) { Write-Host "  * $a" -ForegroundColor Yellow }
+        } else {
+            Write-Host "[SECURITY OK] Antivirus active, no malware or unauthorized VPN detected." -ForegroundColor Green
+        }
     }
     
     # Check if Server requested Live Stream Mode (Admin viewing in web browser)

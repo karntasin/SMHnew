@@ -29,6 +29,10 @@ class PharmacyInventoryAdminController extends Controller
 
     public function settings(): Response
     {
+        if (! request()->user()?->hasAnyRole(['admin', 'superUser'])) {
+            abort(403, 'เฉพาะผู้ดูแลระบบ (Admin) เท่านั้นที่สามารถเข้าถึงการตั้งค่าได้');
+        }
+
         $this->ensureDefaultSettings();
 
         $locations = PharmacyLocation::query()
@@ -190,6 +194,10 @@ class PharmacyInventoryAdminController extends Controller
 
     public function saveBatchSettings(Request $request)
     {
+        if (! $request->user()?->hasAnyRole(['admin', 'superUser'])) {
+            abort(403, 'เฉพาะผู้ดูแลระบบ (Admin) เท่านั้น');
+        }
+
         $settingsData = $request->input('settings', []);
         foreach ($settingsData as $key => $val) {
             $valStr = is_bool($val) ? ($val ? '1' : '0') : (is_null($val) ? '' : (string) $val);

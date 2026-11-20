@@ -23,6 +23,17 @@ const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
 const appElement = document.getElementById('app');
 if (appElement) {
+    if (typeof window !== 'undefined' && (!window.history.state || !window.history.state.page)) {
+        try {
+            const rawPage = appElement.dataset.page;
+            if (rawPage) {
+                window.history.replaceState({ page: JSON.parse(rawPage) }, '', window.location.href);
+            }
+        } catch {
+            // Ignore parse errors on boot
+        }
+    }
+
     createInertiaApp({
         title: (title) => `${title} - ${appName}`,
         resolve: (name) => resolvePageComponent(`./pages/${name}.tsx`, import.meta.glob('./pages/**/*.tsx')),
